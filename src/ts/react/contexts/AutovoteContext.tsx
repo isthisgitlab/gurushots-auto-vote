@@ -41,7 +41,8 @@ function createRendererDeadlineNotifier(): CycleNotifier | null {
     const deliver = isNativePlatform() ? null : deliverElectronNotification;
     if (!deliver) return null;
     const shared = {
-        getSetting: (key: string) => ipc.getGlobalDefault(key),
+        // The installation's effective value (the saved one, or the published phase over it), not the saved default.
+        getSetting: (key: string) => ipc.getEffectiveSetting(key, null),
         // The core uses closures, no `this`, so the method passes unbound.
         translate: rendererTranslator.t,
         deliver,

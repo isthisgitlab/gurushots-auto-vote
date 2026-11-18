@@ -11,14 +11,23 @@
  * (last-minute), and reverts to the random cadence once the window clears.
  */
 
-jest.mock('../../src/ts/core/settings', () => ({
-    scenarioSubjectAvailable: jest.fn(() => true),
-    scenarioSubjectReason: jest.fn(() => null),
-    loadSettings: jest.fn(),
-    getSetting: jest.fn(),
-    getEffectiveSetting: jest.fn(),
-    consumeChosenPhotos: jest.fn(() => false),
-}));
+jest.mock('../../src/ts/core/settings', () => {
+    const loadSettings = jest.fn();
+    return {
+        scenarioSubjectAvailable: jest.fn(() => true),
+        scenarioSubjectReason: jest.fn(() => null),
+        loadSettings,
+        // The cadence settings of a decision are captured through the installation read: with no installation scenario the
+        // saved app block the test gives `loadSettings`.
+        captureInstallationSettings: jest.fn((keys: string[]) => {
+            const app: Record<string, unknown> = (loadSettings() as { app?: Record<string, unknown> })?.app ?? {};
+            return { ok: true, values: Object.fromEntries(keys.map((key) => [key, app[key]])) };
+        }),
+        getSetting: jest.fn(),
+        getEffectiveSetting: jest.fn(),
+        consumeChosenPhotos: jest.fn(() => false),
+    };
+});
 
 import { invalid } from '../helpers/invalid';
 

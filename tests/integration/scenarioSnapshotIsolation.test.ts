@@ -6,6 +6,10 @@
  *   - a phase whose bindings cannot be resolved exposes no inherited value: the getter throws, the typed read is
  *     unknown, and the voting pass skips that challenge without abandoning the others.
  * The Android WebView store adapters are the headless transport the helpers install (the same store the service writes).
+ *
+ * The installation scenario's publication is covered at the end: only the owner executor publishes, a former owner's write
+ * is refused, another runtime reads the owner's publication, a withdrawal or an expiry reads as it must, the saved
+ * configuration is never rewritten, and the transport of an actual request runs under the published policy.
  */
 
 const mockLogs: Array<{ level: string; msg: string }> = [];
@@ -34,21 +38,34 @@ jest.mock('../../src/ts/core/logger', () => {
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import type { MemoryStore } from '../helpers/headlessStore';
 import { installHeadlessTestPlatform } from '../helpers/platform';
+import { createHeadlessPlatform } from '../../src/ts/platforms/headless';
+import axiosModule = require('axios');
 import { invalid } from '../helpers/invalid';
+import { parseJsonAs, parseJsonObject } from '../helpers/parseJson';
+import { isPlainObject } from '../../src/ts/core/plainObject';
 import { buildChallenge } from '../helpers/challengeFixtures';
 import settings = require('../../src/ts/core/settings');
 import type * as scenarioStateStoreModule from '../../src/ts/core/scenarioStateStore';
 import type * as votingOrchestratorModule from '../../src/ts/core/services/votingOrchestrator';
 import type * as expressionsModule from '../../src/ts/core/scenarios/expressions';
+import type * as installationModule from '../../src/ts/core/services/scenarioRunner/installation';
+import type * as joinApiModule from '../../src/ts/core/api/join';
+import type { AxiosRequestConfig } from 'axios';
 import type { Challenge } from '../../src/ts/core/types/gurushots';
 import type { ScenarioExpr } from '../../src/ts/core/types/scenario';
 import type { ScenarioState } from '../../src/ts/core/types/stores';
 import type { VotingPassDeps } from '../../src/ts/core/types/votingPass';
 import type { ScenarioDocument } from '../../src/ts/core/settings/scenarioSchema';
 
-const { scenarioStateLedger } = require('../../src/ts/core/scenarioStateStore') as typeof scenarioStateStoreModule;
+const { scenarioStateLedger, refreshScenarioStateAsync } =
+    require('../../src/ts/core/scenarioStateStore') as typeof scenarioStateStoreModule;
 const { runVotingPass } = require('../../src/ts/core/services/votingOrchestrator') as typeof votingOrchestratorModule;
 const { known } = require('../../src/ts/core/scenarios/expressions') as typeof expressionsModule;
+const { publishInstallationOverlay } =
+    require('../../src/ts/core/services/scenarioRunner/installation') as typeof installationModule;
+const { getBankroll } = require('../../src/ts/core/api/join') as typeof joinApiModule;
+// tests/setup.ts replaces axios with a bare jest.fn(), called with one config.
+const axios: jest.Mock<Promise<unknown>, [config: AxiosRequestConfig]> = invalid(axiosModule);
 
 const NOW = Math.floor(Date.now() / 1000);
 const OWNED = 7;
@@ -503,5 +520,608 @@ describe('published scenario settings', () => {
         expect(settings.scenarioSubjectAvailable(OWNED)).toBe(true);
         expect(settings.getEffectiveSetting('boostTime', OWNED)).toBe(120);
         expect(state().published).toMatchObject({ profile: 'Tactic' });
+    });
+});
+
+describe('the installation scenario publication', () => {
+    const INSTALLATION = '@installation';
+    let store: MemoryStore;
+
+    const keysOf = (count: number) => ({ keys: count, swaps: 0, fills: 0, coins: 0 });
+    const bankrollOf = (count: number) => async () => keysOf(count);
+    const ownerReads = (count = 7) => ({ getBankroll: bankrollOf(count) });
+
+    /** One phase: a literal API timeout, and a reserve bound to the balance of keys. */
+    const accountPlan = (phase: Record<string, unknown> = {}) => ({
+        name: 'Account plan',
+        version: 1,
+        scope: 'installation',
+        start: 'tune',
+        phases: {
+            tune: {
+                settings: { apiTimeout: 12 },
+                bindings: { currencyReserveKeys: { kind: 'fact', name: 'balance.keys' } },
+                ...phase,
+            },
+        },
+    });
+
+    const save = (doc: unknown = accountPlan()) =>
+        expect(
+            settings.saveScenario(doc, {
+                expectedDefinitionRevision: settings.getScenarioLibrary().revision as number,
+            }),
+        ).toEqual({ ok: true, name: 'Account plan' });
+
+    /** Selects the plan for `executor` (the runtime these tests run as is the Android service). */
+    const select = (
+        executor: 'android-service' | 'electron' | 'cli' = 'android-service',
+        doc: unknown = accountPlan(),
+    ) => {
+        save(doc);
+        expect(settings.setInstallationScenario('Account plan', executor, 0)).toMatchObject({
+            ok: true,
+            generation: 1,
+        });
+    };
+
+    const record = () => scenarioStateLedger.get(INSTALLATION).state as ScenarioState;
+    const publishAs = (count = 7) =>
+        publishInstallationOverlay({ token: 'tok', ledger: scenarioStateLedger, reads: ownerReads(count) });
+
+    beforeEach(async () => {
+        mockLogs.length = 0;
+        store = installHeadlessStore();
+        actAs('android-service');
+        await scenarioStateLedger.removeAll();
+        axios.mockReset();
+    });
+
+    afterEach(() => {
+        removeHeadlessStore();
+    });
+
+    /** The platform of the runtime that acts next: the port is one slot, whichever runtime's modules read it. */
+    const actAs = (executor: 'android-service' | 'electron') =>
+        installHeadlessTestPlatform({
+            capabilities: {
+                ...createHeadlessPlatform({ broadcastSettingsChanged: () => undefined, afterWipe: () => undefined })
+                    .capabilities,
+                executor,
+            },
+        });
+
+    /** A settings runtime of its own over the same storage (its modules, caches and ledger), for the electron executor. */
+    const electronRuntime = () => {
+        let runtime!: {
+            settings: typeof settings;
+            publish: typeof publishInstallationOverlay;
+            ledger: typeof scenarioStateLedger;
+        };
+        jest.isolateModules(() => {
+            actAs('electron');
+            runtime = {
+                settings: require('../../src/ts/core/settings') as typeof settings,
+                publish: (
+                    require('../../src/ts/core/services/scenarioRunner/installation') as typeof installationModule
+                ).publishInstallationOverlay,
+                ledger: (require('../../src/ts/core/scenarioStateStore') as typeof scenarioStateStoreModule)
+                    .scenarioStateLedger,
+            };
+        });
+        return runtime;
+    };
+
+    test('with no installation scenario every read is the saved value, and no progress record is read', async () => {
+        const reads = jest.spyOn(scenarioStateLedger, 'get');
+        expect(settings.getInstallationSetting('apiTimeout')).toBe(30);
+        expect(settings.getEffectiveSetting('currencyReserveKeys')).toBe(0);
+        expect(settings.captureInstallationSettings(['apiTimeout', 'apiMaxRetries'])).toEqual({
+            ok: true,
+            values: { apiTimeout: 30, apiMaxRetries: 3 },
+        });
+        expect(settings.readInstallationSetting('apiTimeout')).toMatchObject({ state: 'known' });
+        await expect(publishAs()).resolves.toBe('none');
+        expect(reads).not.toHaveBeenCalled();
+        reads.mockRestore();
+    });
+
+    test('only the owner publishes: another runtime reads the publication and never writes it; the saved configuration is never rewritten', async () => {
+        select('android-service');
+        const config = store.value;
+        await expect(publishAs(7)).resolves.toBe('published');
+
+        expect(record().published).toMatchObject({
+            generation: 1,
+            phase: 'tune',
+            revision: 1,
+            bindings: { currencyReserveKeys: 7 },
+        });
+        // the published phase is what an installation consumer reads; the saved value is still the saved value
+        expect(settings.getInstallationSetting('apiTimeout')).toBe(12);
+        expect(settings.getInstallationSetting('currencyReserveKeys')).toBe(7);
+        expect(settings.getEffectiveSetting('currencyReserveKeys')).toBe(7);
+        expect(settings.getSetting('apiTimeout')).toBe(30);
+        expect(settings.getGlobalDefault('currencyReserveKeys')).toBe(0);
+        // a setting the phase does not set is the saved one
+        expect(settings.getInstallationSetting('apiMaxRetries')).toBe(3);
+        expect(store.value).toBe(config);
+
+        const owned = store.keys.get('gs_scenario_state');
+        const other = electronRuntime();
+        actAs('electron');
+        expect(other.settings.getInstallationSetting('apiTimeout')).toBe(12);
+        expect(other.settings.getInstallationSetting('currencyReserveKeys')).toBe(7);
+        expect(other.settings.readInstallationSetting('currencyReserveKeys')).toMatchObject({
+            state: 'known',
+            value: { value: 7 },
+        });
+        // not its assignment's executor: it neither evaluates nor writes
+        const askedFor = jest.fn(bankrollOf(1));
+        await expect(
+            other.publish({ token: 'tok', ledger: other.ledger, reads: { getBankroll: askedFor } }),
+        ).resolves.toBe('not-owner');
+        expect(askedFor).not.toHaveBeenCalled();
+        expect(store.keys.get('gs_scenario_state')).toBe(owned);
+        expect(store.value).toBe(config);
+    });
+
+    test('a former owner whose generation moved while it was reading fails its write and stops', async () => {
+        select('android-service');
+        const release = deferred<ReturnType<typeof keysOf>>();
+        const reading = jest.fn(() => release.promise);
+        // no step lock in this pass: the generation fence of the write is what stops it
+        const pass = publishInstallationOverlay({
+            token: 'tok',
+            ledger: scenarioStateLedger,
+            reads: { getBankroll: reading },
+        });
+        await until(() => reading.mock.calls.length === 1);
+        // the owner hands the installation to the electron executor: generation 2
+        expect(settings.transferInstallationOwner('electron', 1)).toMatchObject({ ok: true, generation: 2 });
+        release.resolve(keysOf(7));
+
+        await expect(pass).resolves.toBe('stale');
+        expect(record().published).toBeUndefined();
+        expect(record().generation).toBe(2);
+
+        // the new owner publishes under generation 2; the former one now finds itself not the owner
+        const next = electronRuntime();
+        actAs('electron');
+        await expect(next.publish({ token: 'tok', ledger: next.ledger, reads: ownerReads(9) })).resolves.toBe(
+            'published',
+        );
+        expect(record().published).toMatchObject({ generation: 2, bindings: { currencyReserveKeys: 9 } });
+        actAs('android-service');
+        await expect(publishAs(1)).resolves.toBe('not-owner');
+        expect(record().published).toMatchObject({ bindings: { currencyReserveKeys: 9 } });
+    });
+
+    test('a publication of an earlier owner generation is unavailable until the new owner publishes', async () => {
+        select('android-service');
+        await publishAs(7);
+        expect(settings.getInstallationSetting('apiTimeout')).toBe(12);
+        expect(settings.transferInstallationOwner('electron', 1)).toMatchObject({ ok: true, generation: 2 });
+        expect(() => settings.getInstallationSetting('apiTimeout')).toThrow(settings.ScenarioSettingUnavailableError);
+        expect(settings.readInstallationSetting('apiTimeout')).toMatchObject({
+            state: 'unknown',
+            reason: expect.stringContaining('another owner'),
+        });
+        expect(settings.captureInstallationSettings(['apiMaxRetries', 'apiTimeout'])).toMatchObject({
+            ok: false,
+            key: 'apiTimeout',
+        });
+        // a key the phase does not set is not waiting for anyone
+        expect(settings.getInstallationSetting('apiMaxRetries')).toBe(3);
+    });
+
+    test('a pause or a cleared assignment gives the saved values at once, with nothing written to the configuration', async () => {
+        select('android-service');
+        await publishAs(7);
+        const config = store.value;
+        expect(settings.getInstallationSetting('apiTimeout')).toBe(12);
+
+        expect(
+            scenarioStateLedger.change(INSTALLATION, (current) => ({
+                ...(current as ScenarioState),
+                paused: { at: NOW, reason: 'test' },
+            })),
+        ).toMatchObject({ ok: true });
+        expect(settings.getInstallationSetting('apiTimeout')).toBe(30);
+        expect(settings.getInstallationSetting('currencyReserveKeys')).toBe(0);
+        expect(settings.getEffectiveSetting('currencyReserveKeys')).toBe(0);
+        // the paused installation publishes nothing
+        await expect(publishAs(9)).resolves.toBe('held');
+
+        expect(
+            scenarioStateLedger.change(INSTALLATION, (current) => ({ ...(current as ScenarioState), paused: null })),
+        ).toMatchObject({ ok: true });
+        expect(settings.getInstallationSetting('apiTimeout')).toBe(12);
+
+        expect(settings.setInstallationScenario(null, 'android-service', 1)).toMatchObject({ ok: true });
+        expect(settings.getInstallationSetting('apiTimeout')).toBe(30);
+        expect(settings.getInstallationSetting('currencyReserveKeys')).toBe(0);
+        // only the assignment changed: no installation value was ever written into the settings
+        expect(JSON.parse(store.value as string)).toMatchObject({ app: { apiTimeout: 30 }, defaults: {} });
+        expect(config).not.toContain('"installationScenario": undefined');
+    });
+
+    test('an expired publication is unavailable, never the saved value', async () => {
+        select('android-service');
+        await publishAs(7);
+        expect(
+            scenarioStateLedger.change(INSTALLATION, (current) => {
+                const held = current as ScenarioState;
+                return {
+                    ...held,
+                    published: { ...(held.published as NonNullable<ScenarioState['published']>), validUntil: NOW - 1 },
+                };
+            }),
+        ).toMatchObject({ ok: true });
+
+        expect(() => settings.getInstallationSetting('apiTimeout')).toThrow(settings.ScenarioSettingUnavailableError);
+        expect(() => settings.getEffectiveSetting('currencyReserveKeys')).toThrow(
+            settings.ScenarioSettingUnavailableError,
+        );
+        expect(settings.readInstallationSetting('apiTimeout')).toMatchObject({
+            state: 'unknown',
+            reason: expect.stringContaining('expired'),
+        });
+        expect(settings.captureInstallationSettings(['apiTimeout'])).toMatchObject({ ok: false, key: 'apiTimeout' });
+    });
+
+    test('an edit of the scenario makes the publication unavailable until the owner publishes again', async () => {
+        select('android-service');
+        await publishAs(7);
+        save(accountPlan({ settings: { apiTimeout: 15 } }));
+        expect(() => settings.getInstallationSetting('apiTimeout')).toThrow(settings.ScenarioSettingUnavailableError);
+        await expect(publishAs(7)).resolves.toBe('published');
+        expect(settings.getInstallationSetting('apiTimeout')).toBe(15);
+    });
+
+    test('a phase that cannot be prepared clears the publication, records why, and leaves its keys unavailable', async () => {
+        select('android-service');
+        await publishAs(7);
+        // 2000 keys is over the reserve a setting may hold
+        await expect(publishAs(2000)).resolves.toBe('blocked');
+        expect(record().published).toBeUndefined();
+        expect(record().lastError?.message).toContain('currencyReserveKeys');
+        expect(record().outbox?.some((notice) => notice.message.includes('currencyReserveKeys'))).toBe(true);
+        expect(() => settings.getInstallationSetting('currencyReserveKeys')).toThrow(
+            settings.ScenarioSettingUnavailableError,
+        );
+        expect(() => settings.getInstallationSetting('apiTimeout')).toThrow(settings.ScenarioSettingUnavailableError);
+        // the same cause is recorded once
+        await publishAs(2000);
+        expect(record().outbox?.filter((notice) => notice.message.includes('currencyReserveKeys'))).toHaveLength(1);
+        // once it is gone the next publication stands
+        await expect(publishAs(5)).resolves.toBe('published');
+        expect(settings.getInstallationSetting('currencyReserveKeys')).toBe(5);
+    });
+
+    test('an app setting out of its range is refused, however the document spelled it', async () => {
+        select('android-service', accountPlan({ settings: { apiTimeout: 9999 }, bindings: {} }));
+        await expect(publishAs()).resolves.toBe('blocked');
+        expect(record().lastError?.message).toBe('phase tune: apiTimeout: apiTimeout is out of range');
+        expect(() => settings.getInstallationSetting('apiTimeout')).toThrow(settings.ScenarioSettingUnavailableError);
+    });
+
+    test('values that are valid alone but not together are refused as a whole', async () => {
+        select('android-service', accountPlan({ settings: { checkFrequencyMax: 2 }, bindings: {} }));
+        // the saved minimum (3) is above the phase's maximum (2)
+        await expect(publishAs()).resolves.toBe('blocked');
+        expect(record().lastError?.message).toContain('checkFrequencyMin and checkFrequencyMax');
+        expect(() => settings.getInstallationSetting('checkFrequencyMax')).toThrow(
+            settings.ScenarioSettingUnavailableError,
+        );
+    });
+
+    test('a phase that sets nothing publishes nothing and withdraws what an earlier phase published', async () => {
+        select('android-service');
+        await publishAs(7);
+        save(accountPlan({ settings: {}, bindings: {} }));
+        await expect(publishAs(7)).resolves.toBe('cleared');
+        expect(record().published).toBeUndefined();
+        expect(settings.getInstallationSetting('apiTimeout')).toBe(30);
+    });
+
+    test('a request runs under the published transport policy while the saved settings stay as they are', async () => {
+        select('android-service');
+        axios.mockResolvedValue({ status: 200, headers: {}, data: { success: true, bankroll: { challenges: [] } } });
+        // nothing published yet for a phase that overlays the timeout: a business request is not sent
+        await expect(getBankroll('tok')).resolves.toBeNull();
+        expect(axios).not.toHaveBeenCalled();
+
+        await publishAs(7);
+        await expect(getBankroll('tok')).resolves.toMatchObject({ keys: 0 });
+        expect(axios.mock.calls.map(([config]) => config.timeout)).toEqual([12000]);
+        expect(settings.getSetting('apiTimeout')).toBe(30);
+    });
+
+    test('a bankroll-derived phase that overlays the transport loads its evidence once, under the saved policy, without recursion', async () => {
+        select('android-service');
+        axios.mockResolvedValue({
+            status: 200,
+            headers: {},
+            data: { success: true, bankroll: { challenges: [{ type: 'KEYS', amount: 6 }] } },
+        });
+        // the owner's own evidence read, through the real endpoint, while the phase overlaying the timeout is unpublished
+        const status = await publishInstallationOverlay({
+            token: 'tok',
+            ledger: scenarioStateLedger,
+            reads: { getBankroll },
+        });
+        expect(status).toBe('published');
+        expect(axios).toHaveBeenCalledTimes(1);
+        expect(axios.mock.calls[0][0].timeout).toBe(30000);
+        expect(record().published).toMatchObject({ bindings: { currencyReserveKeys: 6 } });
+        // and the next business request runs under the published 12 s
+        await getBankroll('tok');
+        expect(axios.mock.calls[1][0].timeout).toBe(12000);
+    });
+
+    test('a spend keeps its single send under a published policy with retries', async () => {
+        select('android-service', accountPlan({ settings: { apiMaxRetries: 4, apiTimeout: 12 }, bindings: {} }));
+        await publishAs();
+        const { postOnce, createCommonHeaders } =
+            require('../../src/ts/core/api/api-client') as typeof import('../../src/ts/core/api/api-client');
+        const failure = Object.assign(new Error('Request failed with status code 503'), {
+            response: { status: 503, data: {}, headers: {} },
+        });
+        axios.mockRejectedValue(failure);
+        await expect(postOnce('https://example.test/spend', createCommonHeaders('tok'), '')).resolves.toEqual({
+            kind: 'unclear',
+        });
+        expect(axios).toHaveBeenCalledTimes(1);
+        expect(axios.mock.calls[0][0].timeout).toBe(12000);
+    });
+
+    describe('what a read finds in a record that is not as the owner left it', () => {
+        const literalsOnly = () => accountPlan({ bindings: undefined });
+        const bindingsOnly = () => accountPlan({ settings: undefined });
+        const edit = (change: (record: ScenarioState) => ScenarioState) =>
+            expect(
+                scenarioStateLedger.change(INSTALLATION, (current) => change(current as ScenarioState)),
+            ).toMatchObject({
+                ok: true,
+            });
+        // The record is not one a ledger can read: written under it, then read in again as another process's write would be.
+        const corrupt = async () => {
+            // (the count of resets stays, or the reset asked for in beforeEach would be applied over the whole file)
+            const file = parseJsonObject(store.keys.get('gs_scenario_state') as string);
+            store.keys.set('gs_scenario_state', JSON.stringify({ ...file, [INSTALLATION]: { scenario: 5 } }));
+            await refreshScenarioStateAsync();
+        };
+        const unavailable = (key: string, reason: string) => {
+            expect(() => settings.getInstallationSetting(key)).toThrow(settings.ScenarioSettingUnavailableError);
+            expect(settings.readInstallationSetting(key)).toMatchObject({
+                state: 'unknown',
+                reason: expect.stringContaining(reason),
+            });
+        };
+
+        test('a phase of literals alone, and one of bindings alone, are published and read', async () => {
+            select('android-service', literalsOnly());
+            await expect(publishAs()).resolves.toBe('published');
+            expect(record().published?.bindings).toEqual({});
+            expect(settings.getInstallationSetting('apiTimeout')).toBe(12);
+            expect(settings.getInstallationSetting('currencyReserveKeys')).toBe(0);
+
+            save(bindingsOnly());
+            await expect(publishAs(4)).resolves.toBe('published');
+            expect(settings.getInstallationSetting('currencyReserveKeys')).toBe(4);
+            expect(settings.getInstallationSetting('apiTimeout')).toBe(30);
+        });
+
+        test('a malformed publication is unavailable, and the rest of the record is intact', async () => {
+            select();
+            await publishAs();
+            edit((held) => ({ ...held, published: invalid<ScenarioState['published']>({ unexpected: true }) }));
+            unavailable('apiTimeout', 'malformed');
+            expect(record().publicationUnreadable).toBe(true);
+            expect(record().scenario).toBe('Account plan');
+        });
+
+        test('a publication from another visit to the phase is unavailable', async () => {
+            select();
+            await publishAs();
+            edit((held) => ({ ...held, phaseEnteredAt: held.phaseEnteredAt + 10 }));
+            unavailable('apiTimeout', 'earlier visit');
+        });
+
+        test.each([
+            [
+                'a binding is missing from it',
+                (bindings: Record<string, unknown>) => ({ ...bindings, currencyReserveKeys: undefined }),
+            ],
+            ['another binding stands in its place', () => ({ other: 1 })],
+            ['an extra binding is in it', (bindings: Record<string, unknown>) => ({ ...bindings, extra: 1 })],
+        ])("a publication whose bindings do not match the phase's: %s", async (_name, rewrite) => {
+            select();
+            await publishAs();
+            edit((held) => {
+                const published = held.published as NonNullable<ScenarioState['published']>;
+                const bindings = Object.fromEntries(
+                    Object.entries(rewrite(published.bindings)).filter(([, value]) => value !== undefined),
+                );
+                return { ...held, published: { ...published, bindings } };
+            });
+            unavailable('apiTimeout', 'do not match');
+        });
+
+        test("a publication that names no generation is not the owner's of this one", async () => {
+            select();
+            await publishAs();
+            edit((held) => {
+                const published = { ...(held.published as NonNullable<ScenarioState['published']>) };
+                delete published.generation;
+                return { ...held, published };
+            });
+            unavailable('apiTimeout', 'another owner');
+        });
+
+        test("a record without a generation is read at the assignment's own (the later of the two is current)", async () => {
+            select();
+            await publishAs();
+            edit((held) => {
+                const rest = { ...held };
+                delete rest.generation;
+                return rest;
+            });
+            expect(settings.getInstallationSetting('apiTimeout')).toBe(12);
+        });
+
+        test("a record of another scenario, or none, expects the start phase's settings: unavailable until published", async () => {
+            select();
+            await publishAs();
+            edit((held) => ({ ...held, scenario: 'Another plan' }));
+            unavailable('apiTimeout', 'nothing is published');
+            await scenarioStateLedger.removeAll();
+            unavailable('apiTimeout', 'nothing is published');
+        });
+
+        test('a phase the scenario no longer has overlays nothing', async () => {
+            select();
+            await publishAs();
+            edit((held) => ({ ...held, phase: 'gone' }));
+            expect(settings.getInstallationSetting('apiTimeout')).toBe(30);
+        });
+
+        test('a record that cannot be read leaves the keys any phase sets unavailable, and the others as saved', async () => {
+            select();
+            await corrupt();
+            unavailable('apiTimeout', 'cannot be read');
+            unavailable('currencyReserveKeys', 'cannot be read');
+            expect(settings.getInstallationSetting('apiMaxRetries')).toBe(3);
+        });
+
+        test('a record that cannot be read costs nothing when no phase sets a key', async () => {
+            select('android-service', accountPlan({ settings: undefined, bindings: undefined }));
+            await corrupt();
+            expect(settings.getInstallationSetting('apiTimeout')).toBe(30);
+        });
+
+        test('an assignment to a scenario that is gone, or is a challenge scenario, overlays nothing', async () => {
+            select();
+            await publishAs();
+            const name = (scenario: string) => {
+                const next = parseJsonObject(store.value as string);
+                store.value = JSON.stringify({
+                    ...next,
+                    installationScenario: {
+                        ...parseJsonAs(JSON.stringify(next.installationScenario), isPlainObject),
+                        scenario,
+                    },
+                });
+            };
+            name('Gone');
+            expect(settings.getInstallationSetting('apiTimeout')).toBe(30);
+            expect(
+                settings.saveScenario(
+                    { name: 'Challenge plan', version: 1, start: 'a', phases: { a: {} } },
+                    { expectedDefinitionRevision: settings.getScenarioLibrary().revision as number },
+                ),
+            ).toEqual({ ok: true, name: 'Challenge plan' });
+            name('Challenge plan');
+            expect(settings.getInstallationSetting('apiTimeout')).toBe(30);
+            await expect(publishAs()).resolves.toBe('none');
+        });
+    });
+
+    describe('what the facade prepares for the owner', () => {
+        const plan = () => {
+            const found = settings.getScenario('Account plan') as ScenarioDocument;
+            return found;
+        };
+        const state = { phase: 'tune', phaseEnteredAt: NOW, published: undefined };
+        const prepare = (
+            bound: Record<string, ReturnType<typeof known>>,
+            read?: (key: string, view: 'base' | 'effective') => unknown,
+        ) =>
+            settings.prepareInstallationSnapshot(
+                plan(),
+                state,
+                (readBase) => {
+                    read?.('', 'base');
+                    void readBase;
+                    return { bound: invalid(bound), validUntil: null };
+                },
+                1,
+                NOW,
+            );
+
+        test('a binding that is absent or unknown refuses the whole phase, with the key and why', () => {
+            select();
+            expect(prepare({ currencyReserveKeys: invalid({ state: 'absent', reason: 'not-present' }) })).toEqual({
+                ok: false,
+                key: 'currencyReserveKeys',
+                reason: 'absent: not-present',
+            });
+            expect(
+                prepare({
+                    currencyReserveKeys: invalid({ state: 'unknown', reason: 'balance-unreadable', dependencies: [] }),
+                }),
+            ).toEqual({
+                ok: false,
+                key: 'currencyReserveKeys',
+                reason: 'balance-unreadable',
+            });
+        });
+
+        test('a binding reads the saved value of a setting, and nothing of the overlay it is being made for', () => {
+            select();
+            const seen: unknown[] = [];
+            settings.prepareInstallationSnapshot(
+                plan(),
+                state,
+                (readBase) => {
+                    seen.push(
+                        readBase('apiTimeout', 'base'),
+                        readBase('apiTimeout', 'effective'),
+                        readBase('noSuchSetting', 'base'),
+                    );
+                    return {
+                        bound: { currencyReserveKeys: known({ kind: 'number', value: 1, quantity: 'keys' }) },
+                        validUntil: null,
+                    };
+                },
+                1,
+                NOW,
+            );
+            expect(seen).toMatchObject([
+                { state: 'known', value: { value: 30 } },
+                { state: 'unknown', reason: 'binding-reads-base-only' },
+                { state: 'unknown', reason: 'setting-unknown' },
+            ]);
+        });
+
+        test('a binding whose value does not fit its setting refuses the phase, with the key and why', () => {
+            select();
+            expect(prepare({ currencyReserveKeys: known({ kind: 'string', value: 'many' }) })).toEqual({
+                ok: false,
+                key: 'currencyReserveKeys',
+                reason: 'type-mismatch',
+            });
+        });
+
+        test('a setting no installation phase owns is read as saved', () => {
+            expect(settings.getInstallationSetting('exposure')).toBe(settings.getGlobalDefault('exposure'));
+        });
+    });
+
+    test('mock mode reads and publishes only the in-memory ledger', async () => {
+        select('android-service');
+        const { mockScenarioStateLedger } =
+            require('../../src/ts/core/scenarioStateStore') as typeof scenarioStateStoreModule;
+        expect(settings.setSetting('mock', true)).toBe(true);
+        const real = store.keys.get('gs_scenario_state');
+        // nothing is published in the mock ledger yet: the phase's settings are unavailable there
+        expect(() => settings.getInstallationSetting('apiTimeout')).toThrow(settings.ScenarioSettingUnavailableError);
+        await expect(
+            publishInstallationOverlay({ token: 'tok', ledger: mockScenarioStateLedger, reads: ownerReads(4) }),
+        ).resolves.toBe('published');
+        expect(settings.getInstallationSetting('currencyReserveKeys')).toBe(4);
+        expect(store.keys.get('gs_scenario_state')).toBe(real);
+        await mockScenarioStateLedger.removeAll();
     });
 });

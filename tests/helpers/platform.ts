@@ -62,7 +62,7 @@ const testWindows: PlatformWindows = {
  * into the test file's temporary directory.
  */
 const buildNodeTestPlatform = (): Platform => {
-    const base = createNodePlatform(testWindows);
+    const base = createNodePlatform(testWindows, 'electron');
     // The paths member is replaced in place: spreading the whole platform
     // would read the logCleanup getter and load the logger's module graph,
     // which building the platform must not do (see platforms/node/index.ts).

@@ -17,6 +17,9 @@ jest.mock('../../src/ts/core/services/joinChallenges', () => ({
     joinChallengeSingle: jest.fn(async () => ({ status: 'joined' })),
     forgetUnconfirmedPayment: jest.fn(async () => ({ status: 'nothing-to-forget', challengeId: 1 })),
 }));
+jest.mock('../../src/ts/core/services/scenarioRunner/installation', () => ({
+    publishInstallationOverlay: jest.fn(async () => 'none'),
+}));
 jest.mock('../../src/ts/core/services/missions', () => ({
     loadMissionNeeds: jest.fn(async () => null),
     registerMissionNeeds: jest.fn((_token: string, needs: missionsModule.MissionNeeds | null) =>
@@ -38,6 +41,8 @@ import settingsModule = require('../../src/ts/core/settings');
 import type * as votingOrchestratorModule from '../../src/ts/core/services/votingOrchestrator';
 import type * as joinChallengesModule from '../../src/ts/core/services/joinChallenges';
 import type * as missionsModule from '../../src/ts/core/services/missions';
+import type * as installationModule from '../../src/ts/core/services/scenarioRunner/installation';
+import { mockScenarioStateLedger } from '../../src/ts/core/scenarioStateStore';
 import type * as indexModule from '../../src/ts/core/mock/index';
 import type * as photoLibraryModule from '../../src/ts/core/mock/photoLibrary';
 import type * as sessionCacheModule from '../../src/ts/core/mock/sessionCache';
@@ -58,6 +63,9 @@ const { runJoinPass, joinChallengeSingle, forgetUnconfirmedPayment } = jest.mock
 );
 const { loadMissionNeeds, registerMissionNeeds } = jest.mocked(
     require('../../src/ts/core/services/missions') as typeof missionsModule,
+);
+const { publishInstallationOverlay } = jest.mocked(
+    require('../../src/ts/core/services/scenarioRunner/installation') as typeof installationModule,
 );
 const { mockApiClient, clearSessionCache } = require('../../src/ts/core/mock/index') as typeof indexModule;
 const { getSessionCache } = require('../../src/ts/core/mock/sessionCache') as typeof sessionCacheModule;
@@ -821,6 +829,25 @@ describe('fetchChallengesAndVote — join pre-step', () => {
         runJoinPass.mockRejectedValueOnce(new Error('boom'));
         await mockApiClient.fetchChallengesAndVote('tok');
         expect(cat.warning).toHaveBeenCalledWith('Mock join pass errored: boom', null);
+    });
+
+    test('the installation scenario settings are published first, over the in-memory ledger only and the mock endpoints', async () => {
+        await mockApiClient.fetchChallengesAndVote('tok');
+
+        expect(publishInstallationOverlay).toHaveBeenCalledTimes(1);
+        // the mock ledger and no cross-process lock: a mock run never touches the real progress file
+        expect(publishInstallationOverlay).toHaveBeenCalledWith({
+            token: 'tok',
+            ledger: mockScenarioStateLedger,
+            reads: {
+                getBankroll: mockApiClient.getBankroll,
+                getMyMissions: mockApiClient.getMyMissions,
+                getMyCompletedChallenges: mockApiClient.getMyCompletedChallenges,
+            },
+        });
+        const published = publishInstallationOverlay.mock.invocationCallOrder[0]!;
+        expect(published).toBeLessThan(loadMissionNeeds.mock.invocationCallOrder[0]!);
+        expect(published).toBeLessThan(runJoinPass.mock.invocationCallOrder[0]!);
     });
 
     test('reads the missions over the mock endpoint and hands the same needs to the join pass and the vote', async () => {

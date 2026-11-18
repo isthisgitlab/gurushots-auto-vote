@@ -151,7 +151,7 @@ const hasTitleOptIn = (challenge: Challenge) => settings.hasRuleJoinOptIn?.(chal
 /**
  * Per-candidate scope/coin/timing config, resolved by rule (inline → profile → global).
  */
-const resolveCandidateConfig = (challenge: Challenge) => {
+const resolveCandidateConfig = (challenge: Challenge, shortChallengesImmediately: boolean) => {
     // The timing keys go through the one-group read: the first source that sets
     // any of them supplies all three, a key its source does not set counts as 0,
     // and the global read is NOT consulted for it. Null (no source sets any
@@ -165,7 +165,7 @@ const resolveCandidateConfig = (challenge: Challenge) => {
     const runtime = closeTime - startTime;
     return {
         joinImmediately:
-            settings.getEffectiveSetting('autoJoinShortChallengesImmediately', null) === true &&
+            shortChallengesImmediately &&
             Number.isFinite(startTime) &&
             Number.isFinite(closeTime) &&
             startTime > 0 &&

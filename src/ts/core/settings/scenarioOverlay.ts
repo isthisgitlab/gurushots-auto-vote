@@ -21,12 +21,19 @@
  * scenario no longer has — the engine restarts or halts such a challenge, and the settings stay normal. A scenario
  * state that cannot be read applies none either, unless the scenario has a phase with bindings or a profile: then the
  * challenge is unavailable, because which phase it is in cannot be known.
+ *
+ * The installation scenario's current phase overlays installation settings from one publication in the `@installation`
+ * record (installationLayer). There the phase's literals are published too (a publication is the proof that the values
+ * were checked together, atomic pairs included), and any key the phase sets or binds is read through it: no installation
+ * scenario, a paused one, or a phase that does not set the key leaves the saved value; a missing, mismatched, expired
+ * or unreadable publication of a key the phase sets is unavailable, never the saved value.
  */
 
-import { scenarioStateLedger, mockScenarioStateLedger } from '../scenarioStateStore';
+import { INSTALLATION_KEY, scenarioStateLedger, mockScenarioStateLedger } from '../scenarioStateStore';
 import { isPlainObject } from '../plainObject';
 import { storedSettingValue } from '../scenarios/expressions';
 import { challengeValueSetIsValid, globalChallengeValues } from './defaults';
+import { appValueAllowed } from './loadValidation';
 import { findProfileKey, normalizeProfileName, sanitizeProfileValues } from './profileStore';
 import { findStoredScenario, hasStoredScenarios } from './scenarios';
 import { scenarioCapability } from './scenarioCapabilities';
@@ -59,11 +66,16 @@ const OVERLAY_GROUPS: ReadonlyArray<readonly string[]> = [
  */
 class ScenarioSettingUnavailableError extends Error {
     readonly settingKey: string;
+    /** The challenge id, or `@installation` for an installation setting. */
     readonly challengeId: string;
     readonly reason: string;
 
     constructor(settingKey: string, challengeId: string, reason: string) {
-        super(`${settingKey} is unavailable for challenge ${challengeId}: ${reason}`);
+        super(
+            challengeId === INSTALLATION_KEY
+                ? `${settingKey} is unavailable for the installation: ${reason}`
+                : `${settingKey} is unavailable for challenge ${challengeId}: ${reason}`,
+        );
         this.name = 'ScenarioSettingUnavailableError';
         this.settingKey = settingKey;
         this.challengeId = challengeId;
@@ -379,6 +391,223 @@ const prepareOverlay = (
     };
 };
 
+// --- the installation scenario's overlay -------------------------------------------------------------------------------
+
+/** What an installation publication stands for: the phase's own literals and the resolved binding values. */
+type InstallationOverlayValues = { literals: Record<string, unknown>; bindings: Record<string, unknown> };
+
+/** What the installation scenario overlays: nothing, or the keys of its current phase and the overlay to read them from. */
+type InstallationLayer =
+    | { kind: 'none' }
+    | {
+          kind: 'phase';
+          /** The keys the phase sets or binds. */
+          keys: ReadonlySet<string>;
+          overlay: { ok: true; value: InstallationOverlayValues } | { ok: false; reason: string };
+      }
+    | { kind: 'unreadable'; reason: string; keys: ReadonlySet<string> };
+
+/** The keys one phase of an installation scenario sets or binds: what its overlay reaches. */
+const installationPhaseKeys = (phase: ScenarioPhase): string[] => [
+    ...new Set([...Object.keys(phase.settings ?? {}), ...Object.keys(phase.bindings ?? {})]),
+];
+
+/** Whether a phase of an installation scenario overlays anything: it is then read through a publication. */
+const overlaysInstallation = (phase: ScenarioPhase): boolean => installationPhaseKeys(phase).length > 0;
+
+/**
+ * Reads the installation's published overlay if it is valid now: the owner generation it was made under, the phase entry,
+ * the document it was made from, and its clock. Pure over the loaded configuration and the record.
+ *
+ * @param assignedGeneration - the generation the configuration's assignment is at
+ * @param state - the installation's record when it is the assigned scenario's, else null (nothing was started)
+ * @param now - unix seconds
+ */
+const readInstallationPublication = (
+    settings: ConfigV2,
+    scenario: ScenarioDocument,
+    assignedGeneration: number,
+    phaseName: string,
+    state: ScenarioState | null,
+    now: number,
+): { ok: true; value: InstallationOverlayValues } | { ok: false; reason: string } => {
+    const phase = scenario.phases[phaseName];
+    if (state?.publicationUnreadable)
+        return { ok: false, reason: 'the published settings of this phase are malformed' };
+    const published = state?.published;
+    if (!state || !published) return { ok: false, reason: 'nothing is published for this phase yet' };
+    // The record is advanced before the configuration at every change of owner, so the later of the two is current.
+    const generation = Math.max(state.generation ?? 0, assignedGeneration);
+    if (published.generation !== generation) {
+        return { ok: false, reason: 'the published settings were made under another owner of the installation' };
+    }
+    if (published.phase !== state.phase || published.phaseEnteredAt !== state.phaseEnteredAt) {
+        return { ok: false, reason: 'the published settings are from an earlier visit to a phase' };
+    }
+    if (published.documentFingerprint !== phaseFingerprint(settings, scenario, phaseName)) {
+        return { ok: false, reason: 'the scenario changed after its settings were published' };
+    }
+    if (published.validUntil !== null && published.validUntil <= now) {
+        return { ok: false, reason: 'the published settings of this phase have expired' };
+    }
+    const boundKeys = Object.keys(phase.bindings ?? {});
+    if (
+        boundKeys.length !== Object.keys(published.bindings).length ||
+        boundKeys.some((key) => !hasOwn(published.bindings, key))
+    ) {
+        return { ok: false, reason: 'the published settings do not match the bindings of this phase' };
+    }
+    return { ok: true, value: { literals: phase.settings ?? {}, bindings: { ...published.bindings } } };
+};
+
+/**
+ * What the installation scenario overlays now. No overlay is expected without an assignment, for a scenario that does not
+ * run (unknown, or not an installation one), while the installation is paused (a known withdrawal: the saved values
+ * apply at once), or when the current phase sets nothing. With no record of the assigned scenario (a scenario never
+ * started) its start phase is the one whose settings are expected. The assignment is checked first: an installation
+ * with none never reads the progress record.
+ *
+ * @param now - unix seconds
+ */
+const installationLayer = (settings: ConfigV2, now: number): InstallationLayer => {
+    const assignment = settings.installationScenario;
+    if (!assignment) return { kind: 'none' };
+    const scenario = findStoredScenario(settings, assignment.scenario);
+    if (!scenario || scenario.scope !== 'installation') return { kind: 'none' };
+    const { corrupt, state } = ledgerFor(settings).get(INSTALLATION_KEY);
+    if (corrupt) {
+        const keys = new Set(Object.values(scenario.phases).flatMap(installationPhaseKeys));
+        return keys.size === 0
+            ? { kind: 'none' }
+            : { kind: 'unreadable', reason: 'the saved progress of the installation scenario cannot be read', keys };
+    }
+    if (state?.paused) return { kind: 'none' };
+    const recorded = state !== null && normalizeProfileName(state.scenario) === normalizeProfileName(scenario.name);
+    const phaseName = recorded ? state.phase : scenario.start;
+    const phase = scenario.phases[phaseName];
+    if (!phase) return { kind: 'none' };
+    const keys = new Set(installationPhaseKeys(phase));
+    if (keys.size === 0) return { kind: 'none' };
+    return {
+        kind: 'phase',
+        keys,
+        overlay: readInstallationPublication(
+            settings,
+            scenario,
+            assignment.generation,
+            phaseName,
+            recorded ? state : null,
+            now,
+        ),
+    };
+};
+
+/** What a read of one installation setting finds in the overlay. */
+type InstallationFinding =
+    | { kind: 'saved' }
+    | { kind: 'overlay'; value: unknown }
+    | { kind: 'unavailable'; reason: string };
+
+const readInstallationLayer = (layer: InstallationLayer, key: string): InstallationFinding => {
+    if (layer.kind === 'none' || !layer.keys.has(key)) return { kind: 'saved' };
+    if (layer.kind === 'unreadable') return { kind: 'unavailable', reason: layer.reason };
+    if (!layer.overlay.ok) return { kind: 'unavailable', reason: layer.overlay.reason };
+    const { literals, bindings } = layer.overlay.value;
+    return { kind: 'overlay', value: hasOwn(literals, key) ? literals[key] : bindings[key] };
+};
+
+/**
+ * Settings that are valid only as a whole: the check frequency's two ends, and the three API transport values (a request
+ * runs under all of them at once).
+ */
+const INSTALLATION_ATOMIC_GROUPS: ReadonlyArray<{
+    keys: readonly string[];
+    holds: (values: Record<string, unknown>) => boolean;
+}> = [
+    {
+        keys: ['checkFrequencyMin', 'checkFrequencyMax'],
+        holds: (values) => Number(values.checkFrequencyMin) <= Number(values.checkFrequencyMax),
+    },
+    {
+        keys: ['apiTimeout', 'apiMaxRetries', 'apiRetryBaseDelayMs'],
+        holds: (values) =>
+            ['apiTimeout', 'apiMaxRetries', 'apiRetryBaseDelayMs'].every((key) => appValueAllowed(key, values[key])),
+    },
+];
+
+/**
+ * Prepares the installation overlay of the current phase from the binding values its owner resolved: converts each to the
+ * setting's stored form, validates every value (a schema setting by its validation against the values it combines with, an
+ * app setting by its range), and the atomic groups as a whole. Nothing partial: one binding that is not known or does not
+ * fit, or one value or group that is invalid, refuses the whole phase.
+ *
+ * @param base - the raw saved value of every setting (what the overlay sits on)
+ * @param bound - the resolved value of each binding of the phase
+ * @param generation - the installation generation the owner prepares this under
+ * @param now - unix seconds
+ */
+const prepareInstallationOverlay = (
+    settings: ConfigV2,
+    scenario: ScenarioDocument,
+    state: Pick<ScenarioState, 'phase' | 'phaseEnteredAt' | 'published'>,
+    base: Record<string, unknown>,
+    bound: Record<string, ValueState<ExprValue>>,
+    generation: number,
+    validUntil: number | null,
+    now: number,
+):
+    | { ok: true; overlay: InstallationOverlayValues; publication: ScenarioPublication }
+    | { ok: false; key: string | null; reason: string } => {
+    const phase = scenario.phases[state.phase];
+    const refuse = (key: string | null, reason: string) => ({ ok: false as const, key, reason });
+    const bindings: Record<string, unknown> = {};
+    for (const key of Object.keys(phase.bindings ?? {})) {
+        const result = bound[key];
+        if (result.state !== 'known') {
+            return refuse(key, result.state === 'absent' ? `absent: ${result.reason}` : result.reason);
+        }
+        // A bound key is one a phase may write, so its capability has a value descriptor.
+        const stored = storedSettingValue(
+            (scenarioCapability(key) as NonNullable<ReturnType<typeof scenarioCapability>>).value,
+            result.value,
+        );
+        if (!stored.ok) return refuse(key, stored.reason);
+        bindings[key] = stored.value;
+    }
+    const literals = phase.settings ?? {};
+    const candidates: Record<string, unknown> = { ...literals, ...bindings };
+    const context = { ...base, ...candidates };
+    for (const key of Object.keys(candidates)) {
+        const allowed = schemaEntry(key)
+            ? validateSetting(key, candidates[key], context)
+            : appValueAllowed(key, candidates[key]);
+        if (!allowed) {
+            return refuse(key, String(getValidationError(key, candidates[key], context) ?? `${key} is out of range`));
+        }
+    }
+    for (const group of INSTALLATION_ATOMIC_GROUPS) {
+        const touched = group.keys.find((key) => hasOwn(candidates, key));
+        if (touched !== undefined && !group.holds(context)) {
+            return refuse(touched, `${group.keys.join(' and ')} do not hold together`);
+        }
+    }
+    return {
+        ok: true,
+        overlay: { literals, bindings },
+        publication: {
+            revision: (state.published?.revision ?? 0) + 1,
+            documentFingerprint: phaseFingerprint(settings, scenario, state.phase),
+            phase: state.phase,
+            phaseEnteredAt: state.phaseEnteredAt,
+            observedAt: now,
+            validUntil,
+            bindings,
+            profile: null,
+            generation,
+        },
+    };
+};
+
 /**
  * A key a phase overlay can reach: a per-challenge key other than the assignment itself.
  */
@@ -388,14 +617,19 @@ export {
     ScenarioSettingUnavailableError,
     OVERLAY_GROUPS,
     hasOwn,
+    installationLayer,
+    installationPhaseKeys,
     isBoundPhase,
     isOverlayKey,
+    overlaysInstallation,
     phaseFingerprint,
+    prepareInstallationOverlay,
     prepareOverlay,
     overlaySources,
+    readInstallationLayer,
     readLayer,
     readOverlay,
     readPublication,
     subjectLayer,
 };
-export type { ResolvedOverlay, SubjectLayer };
+export type { InstallationLayer, ResolvedOverlay, SubjectLayer };

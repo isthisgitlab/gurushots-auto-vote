@@ -50,9 +50,11 @@ const NOTIFY_SETTING_KEYS: Record<string, string> = {
 
 /**
  * Every settings key readNotificationConfig reads, for a host that has to
- * fetch them up front (the renderer, over IPC). They are global-only keys held
- * in the challenge-settings global defaults, so read them with getGlobalDefault
- * — not the top-level getSetting, which never sees them.
+ * fetch them up front (the renderer, over IPC). They are installation settings
+ * held in the challenge-settings global defaults: a host reads their EFFECTIVE
+ * value (the saved one, or the installation scenario's published phase over it
+ * — getEffectiveSetting) — not the top-level getSetting, which never sees them,
+ * and not getGlobalDefault, which is only the saved value.
  */
 const NOTIFY_CONFIG_KEYS = [...Object.values(NOTIFY_SETTING_KEYS), 'notifyLeadTime'];
 
@@ -233,6 +235,16 @@ const formatNotification = (
 };
 
 /**
+ * Keeps the notifications whose action switch is still on in `enabled`: the host reads the switches again immediately
+ * before it delivers, so that turning a notice off (or the installation scenario's phase ending) takes effect at once
+ * for a notice that was due when the cycle began.
+ */
+const filterStillEnabled = <T extends { action: string }>(
+    due: readonly T[],
+    enabled: Partial<Record<string, boolean>>,
+): T[] => due.filter((item) => enabled[item.action] === true);
+
+/**
  * Read the notification config from a settings accessor. Returns the enabled
  * map and lead window in seconds. `anyEnabled` lets a host early-exit before any
  * per-challenge work when the whole feature is off (the default).
@@ -259,6 +271,7 @@ export {
     sanitizeNotificationText,
     computeDueNotifications,
     createDedupe,
+    filterStillEnabled,
     formatNotification,
     readNotificationConfig,
 };

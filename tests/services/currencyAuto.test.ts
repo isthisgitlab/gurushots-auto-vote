@@ -153,6 +153,13 @@ beforeEach(() => {
     };
     settings.getEntryPins.mockReturnValue({ boost: null, turbo: null });
     settings.getEffectiveSetting = invalid(jest.fn((key: string) => values[key]));
+    // The reserve is the installation's effective value, read again at each spend (the saved one with no installation scenario).
+    settings.captureInstallationSettings = invalid(
+        jest.fn((keys: string[]) => ({
+            ok: true,
+            values: Object.fromEntries(keys.map((key) => [key, values[key]])),
+        })),
+    );
     currencyActions.unlockBoostWithKey.mockResolvedValue(OK);
     currencyActions.previewSwap.mockResolvedValue({ ...OK, candidate: { id: 'new1', member_id: 'm' } });
     currencyActions.swapEntry.mockResolvedValue(OK);
@@ -206,6 +213,43 @@ describe('shared gates', () => {
         expect(await run(makeCtx({ bankroll: { [field]: 3 } }), spentPool())).toBe(false);
         set({ [reserveKey]: 2 });
         expect(await run(makeCtx({ bankroll: { [field]: 3 } }), spentPool())).toBe(true);
+    });
+
+    test.each([
+        ['key', runAutoKey, 'currencyReserveKeys', 'unlockBoostWithKey'],
+        ['swap', runAutoSwap, 'currencyReserveSwaps', 'swapEntry'],
+        ['fill', runAutoExposureFill, 'currencyReserveFills', 'fillExposure'],
+    ] as const)(
+        '%s: a reserve the installation cannot read refuses the spend, said so, and the saved reserve never stands in for it',
+        async (_, run, reserveKey, spendFn) => {
+            settings.captureInstallationSettings = invalid(
+                jest.fn(() => ({
+                    ok: false,
+                    key: reserveKey,
+                    reason: 'the published settings of this phase have expired',
+                })),
+            );
+            expect(await run(makeCtx({ bankroll: { keys: 9, swaps: 9, fills: 9 } }), spentPool())).toBe(false);
+            expect(currencyActions[spendFn]).not.toHaveBeenCalled();
+            expect(
+                warningLines().some((line) => line.includes(`${reserveKey} is unavailable (the published settings`)),
+            ).toBe(true);
+        },
+    );
+
+    test('the reserve is read again at every spend, so a publication between two spends is honoured by the second', async () => {
+        const reads: number[] = [];
+        let reserve = 0;
+        settings.captureInstallationSettings = invalid(
+            jest.fn(() => {
+                reads.push(reserve);
+                return { ok: true, values: { currencyReserveKeys: reserve } };
+            }),
+        );
+        expect(await runAutoKey(makeCtx({ bankroll: { keys: 3 } }))).toBe(true);
+        reserve = 3;
+        expect(await runAutoKey(makeCtx({ bankroll: { keys: 3 } }))).toBe(false);
+        expect(reads).toEqual([0, 3]);
     });
 
     test('an unreadable balance refuses', async () => {

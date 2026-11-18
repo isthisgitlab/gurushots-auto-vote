@@ -8,7 +8,7 @@ jest.mock('../../src/ts/core/logger', () => {
     const level = { info: jest.fn(), warning: jest.fn() };
     return { withCategory: jest.fn(() => level), __level: level };
 });
-jest.mock('../../src/ts/core/settings', () => ({ getEffectiveSetting: jest.fn() }));
+jest.mock('../../src/ts/core/settings', () => ({ captureInstallationSettings: jest.fn() }));
 
 import type { Challenge, Mission } from '../../src/ts/core/types/gurushots';
 import type { CategoryLogger } from '../../src/ts/core/logger';
@@ -51,8 +51,12 @@ const mission = (name: string, current: number, required: number, over: Partial<
     ...over,
 });
 
+// The installation's mission switches as the cycle captures them: on for the named ones, off for the rest.
 const enable = (...keys: string[]) =>
-    settings.getEffectiveSetting.mockImplementation((key) => (keys.includes(key) ? true : undefined));
+    settings.captureInstallationSettings.mockImplementation((captured) => ({
+        ok: true,
+        values: Object.fromEntries(captured.map((key) => [key, keys.includes(key)])),
+    }));
 const ALL = ['missionJoinEarly', 'missionUseFills', 'missionSaveTurbos', 'missionUseBoosts', 'missionVote'];
 const infoMessages = () => logger.__level.info.mock.calls.map((c) => c[0]);
 
@@ -201,6 +205,35 @@ describe('loadMissionNeeds', () => {
             fillMissions: [{ id: 'Use Fill 3 times', required: 3, current: 1, remaining: 2, spentThisPass: 0 }],
         });
         expect(d.getMyMissions).toHaveBeenCalledWith('tok');
+    });
+
+    test('the switches are captured together as the cycle starts, from the installation read', async () => {
+        const d = deps([mission('Join 7 challenges', 2, 7)]);
+        await loadMissionNeeds('tok', NOW_MS, d);
+        expect(settings.captureInstallationSettings).toHaveBeenCalledTimes(1);
+        expect(settings.captureInstallationSettings).toHaveBeenCalledWith(ALL);
+    });
+
+    test('a switch the installation cannot read means no mission is read this cycle, said so, never the saved switch', async () => {
+        settings.captureInstallationSettings.mockReturnValue({
+            ok: false,
+            key: 'missionVote',
+            reason: 'the published settings of this phase have expired',
+        });
+        const d = deps([mission('Join 7 challenges', 2, 7)]);
+        await expect(loadMissionNeeds('tok', NOW_MS, d)).resolves.toBeNull();
+        expect(d.getMyMissions).not.toHaveBeenCalled();
+        expect(logger.__level.warning).toHaveBeenCalledWith(
+            expect.stringContaining('missionVote is unavailable (the published settings of this phase have expired)'),
+            null,
+        );
+    });
+
+    test('no token reads no switch and no mission', async () => {
+        const d = deps([]);
+        await expect(loadMissionNeeds('', NOW_MS, d)).resolves.toBeNull();
+        expect(settings.captureInstallationSettings).not.toHaveBeenCalled();
+        expect(d.getMyMissions).not.toHaveBeenCalled();
     });
 
     test('complete, claimable, expired and malformed missions need nothing', async () => {

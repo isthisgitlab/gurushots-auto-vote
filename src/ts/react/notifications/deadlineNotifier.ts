@@ -31,6 +31,7 @@ import {
     NOTIFY_CONFIG_KEYS,
     computeDueNotifications,
     createDedupe,
+    filterStillEnabled,
     formatNotification,
     readNotificationConfig,
 } from '../../core/services/deadlineNotifications';
@@ -86,7 +87,8 @@ function logCycleFailure(log: ((message: string) => void) | undefined, error: un
  * it also keeps overlapping cycles from double-firing, and a duplicate lost to
  * such a race is a harmless missing toast).
  *
- * @param deps.getSetting - the getGlobalDefault IPC
+ * @param deps.getSetting - the getEffectiveSetting IPC for a global key: the installation's effective value, which
+ *   is null while the installation scenario's phase overlays it and no valid publication stands (read as off)
  * @param deps.getDeadlineActions -
  *   the getDeadlineActions IPC (returns the {success, actions} wrapper — never throws)
  * @param deps.translate - returns a raw i18n template
@@ -109,18 +111,25 @@ export function createDeadlineNotifier({
 }): (challenges: readonly Challenge[], now: number) => Promise<void> {
     const dedupe = createDedupe();
 
+    // The effective switches and lead time as they read now.
+    const readConfig = async () => {
+        const values = await Promise.all(NOTIFY_CONFIG_KEYS.map((key) => getSetting(key)));
+        const byKey = Object.fromEntries(NOTIFY_CONFIG_KEYS.map((key, i) => [key, values[i]]));
+        return readNotificationConfig((key) => byKey[key]);
+    };
+
     return async function onCycleChallenges(challenges, now) {
         try {
-            const values = await Promise.all(NOTIFY_CONFIG_KEYS.map((key) => getSetting(key)));
-            const byKey = Object.fromEntries(NOTIFY_CONFIG_KEYS.map((key, i) => [key, values[i]]));
-            const config = readNotificationConfig((key) => byKey[key]);
+            const config = await readConfig();
             // Feature off (the default) → zero per-challenge work.
             if (!config.anyEnabled) return;
 
             const perChallengeActions = await collectDeadlineActions(challenges, getDeadlineActions);
 
             const due = computeDueNotifications(perChallengeActions, now, config);
-            const fresh = dedupe.filterNew(due);
+            // The switches again, immediately before delivery: a notice turned off since the cycle began is not sent.
+            const sendable = filterStillEnabled(due, (await readConfig()).enabled);
+            const fresh = dedupe.filterNew(sendable);
             const notification = formatNotification(fresh, translate);
             if (notification) deliver(notification);
         } catch (error) {

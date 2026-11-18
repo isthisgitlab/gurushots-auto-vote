@@ -168,6 +168,7 @@ describe('the CLI shell platform module', () => {
         process.argv = ['node', 'cli.ts', 'status'];
         try {
             const capabilities = installed.capabilities;
+            expect(capabilities.executor).toBe('cli');
             expect(capabilities.refreshMissionNeeds).toBe(false);
             expect(capabilities.snapAllowed).toBe(true);
             expect(capabilities.backgroundServiceOwnsScenarios()).toBe(false);

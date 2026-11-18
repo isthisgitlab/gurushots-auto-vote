@@ -14,9 +14,17 @@ import type * as loggerModule from '../../src/ts/core/logger';
 
 type AxiosMock = jest.Mock<Promise<unknown>, [config: AxiosRequestConfig]>;
 
-jest.mock('../../src/ts/core/settings', () => ({
-    getSetting: (key: string) => ({ apiTimeout: 30, apiMaxRetries: 0, apiRetryBaseDelayMs: 0 })[key],
-}));
+jest.mock('../../src/ts/core/settings', () => {
+    const saved: Record<string, unknown> = { apiTimeout: 30, apiMaxRetries: 0, apiRetryBaseDelayMs: 0 };
+    return {
+        getSetting: (key: string) => saved[key],
+        // No installation scenario: the captured policy is the saved values.
+        captureInstallationSettings: (keys: string[]) => ({
+            ok: true,
+            values: Object.fromEntries(keys.map((key) => [key, saved[key]])),
+        }),
+    };
+});
 jest.mock('../../src/ts/core/timing', () => ({ sleep: jest.fn(() => Promise.resolve()) }));
 jest.mock('../../src/ts/core/api/randomizer', () => ({
     generateRandomHeaders: jest.fn((token: string) => ({ 'x-token': token })),
@@ -59,6 +67,7 @@ describe('with the real logger', () => {
             installTestPlatform({
                 paths,
                 capabilities: {
+                    executor: 'cli',
                     refreshMissionNeeds: false,
                     snapAllowed: true,
                     backgroundServiceOwnsScenarios: () => false,

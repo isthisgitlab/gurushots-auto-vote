@@ -21,6 +21,7 @@ import * as logger from '../../core/logger';
 import * as settings from '../../core/settings';
 import { createCadenceChain, DECISION_ERROR_MESSAGE, formatOversleptMessage } from '../../core/scheduling/cadenceChain';
 import {
+    loadCadenceSettings,
     resolveThreshold,
     resolveScheduledFill,
     resolveAutoSubmitClock,
@@ -64,7 +65,7 @@ const createScheduler = ({
         setTimer: (handle) => {
             timer = handle;
         },
-        loadSettings: () => settings.loadSettings().app,
+        loadSettings: loadCadenceSettings,
         fetchChallenges: () => getActiveChallenges(),
         resolveLastMinuteCheckMinutes: () => settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global'),
         resolveThreshold,

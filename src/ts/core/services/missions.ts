@@ -11,7 +11,7 @@
  * progress, never from the text.
  *
  * Read at the start of a voting cycle — only while one of the mission settings
- * is on — and handed to the join pre-step and the voting pass as a mutable
+ * is on (the installation's effective switches, captured then) — and handed to the join pre-step and the voting pass as a mutable
  * MissionNeeds. Each step that lands a join, a fill, a turbo win or a boost counts it
  * down (consumeMission), so the rest of the cycle doesn't overshoot on the
  * progress the server reported at its start. The headless Android pass also
@@ -82,6 +82,15 @@ const MISSION_SETTINGS: Readonly<
     boost: ['missionUseBoosts'],
     vote: ['missionVote'],
 });
+
+// The installation settings that turn the mission automation on, captured together at the start of a cycle.
+const MISSION_SETTING_KEYS = [
+    'missionJoinEarly',
+    'missionUseFills',
+    'missionSaveTurbos',
+    'missionUseBoosts',
+    'missionVote',
+] as const;
 
 const CLAIMABLE = 'CLAIM';
 
@@ -178,11 +187,20 @@ const readMissionNeeds = async (
     nowMs: number,
     getMyMissions: (token: string) => Promise<Mission[] | null>,
 ): Promise<MissionNeeds | null> => {
+    if (!token) return null;
+    // The mission switches as this cycle starts, from the installation's published phase over the saved settings: the whole
+    // cycle follows them. One that cannot be read means no mission is read or acted on this cycle, never the saved switch.
+    const switches = settings.captureInstallationSettings(MISSION_SETTING_KEYS);
+    if (!switches.ok) {
+        cat().warning(
+            `missions are not followed this cycle: ${switches.key} is unavailable (${switches.reason})`,
+            null,
+        );
+        return null;
+    }
     const kinds = Object.keys(MISSION_SETTINGS) as MissionKind[];
-    const enabled = kinds.filter((kind) =>
-        MISSION_SETTINGS[kind].some((key) => settings.getEffectiveSetting(key, null) === true),
-    );
-    if (!token || enabled.length === 0) return null;
+    const enabled = kinds.filter((kind) => MISSION_SETTINGS[kind].some((key) => switches.values[key] === true));
+    if (enabled.length === 0) return null;
     const missions = await getMyMissions(token);
     const nowSec = Math.floor(nowMs / 1000);
     // A list that was not read is not a list with nothing to do: no needs, said so, and not logged as "none active".

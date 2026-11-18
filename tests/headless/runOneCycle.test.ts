@@ -8,14 +8,23 @@
 jest.mock('../../src/ts/core/apiFactory', () => ({ getApiStrategy: jest.fn() }));
 // Partial factory: the shell's four reads stay mocked, the rest of the facade
 // (the chosen-photos consumption above all) rides along real.
-jest.mock('../../src/ts/core/settings', () => ({
-    __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/core/settings')>('../../src/ts/core/settings'),
-    getSetting: jest.fn(),
-    setSetting: jest.fn(),
-    loadSettings: jest.fn(() => ({ checkFrequencyMin: 2, checkFrequencyMax: 2 })),
-    getEffectiveSetting: jest.fn(),
-}));
+jest.mock('../../src/ts/core/settings', () => {
+    const loadSettings = jest.fn(() => ({ checkFrequencyMin: 2, checkFrequencyMax: 2 }));
+    return {
+        __esModule: true,
+        ...jest.requireActual<typeof import('../../src/ts/core/settings')>('../../src/ts/core/settings'),
+        getSetting: jest.fn(),
+        setSetting: jest.fn(),
+        loadSettings,
+        // The cadence settings of a tick are captured through the installation read: with no installation scenario the
+        // saved app block the test gives `loadSettings`.
+        captureInstallationSettings: jest.fn((keys: string[]) => {
+            const app: Record<string, unknown> = (loadSettings() as { app?: Record<string, unknown> }).app ?? {};
+            return { ok: true, values: Object.fromEntries(keys.map((key) => [key, app[key]])) };
+        }),
+        getEffectiveSetting: jest.fn(),
+    };
+});
 
 import apiFactoryModule = require('../../src/ts/core/apiFactory');
 const apiFactory = jest.mocked(apiFactoryModule);
@@ -514,6 +523,26 @@ describe('headless runOneCycle', () => {
             expect(info).toHaveBeenCalledWith(
                 '[headless] next-delay computation failed; using normal cadence',
                 'offline',
+            );
+        });
+
+        test('cadence settings the installation cannot read give a plain retry beat, logged, never the saved cadence', async () => {
+            const getActiveChallenges = jest.fn();
+            apiFactory.getApiStrategy.mockReturnValue(invalid({ getActiveChallenges }));
+            // the saved cadence is 2 minutes; the installation phase overlays it and nothing valid is published
+            settings.captureInstallationSettings.mockReturnValueOnce({
+                ok: false,
+                key: 'checkFrequencyMin',
+                reason: 'the published settings of this phase have expired',
+            });
+
+            await expect(computeNextDelayMs('tok', null)).resolves.toBe(180_000);
+
+            // nothing was fetched or decided on the saved settings
+            expect(getActiveChallenges).not.toHaveBeenCalled();
+            expect(info).toHaveBeenCalledWith(
+                '[headless] cadence settings unavailable; using a plain retry beat',
+                'checkFrequencyMin is unavailable (the published settings of this phase have expired)',
             );
         });
 

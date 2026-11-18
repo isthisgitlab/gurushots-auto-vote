@@ -126,6 +126,7 @@ describe('the Electron shell platform module', () => {
 
     test('the capabilities answer the Electron values', () => {
         const capabilities = installed.capabilities;
+        expect(capabilities.executor).toBe('electron');
         expect(capabilities.refreshMissionNeeds).toBe(false);
         expect(capabilities.snapAllowed).toBe(true);
         expect(capabilities.backgroundServiceOwnsScenarios()).toBe(false);

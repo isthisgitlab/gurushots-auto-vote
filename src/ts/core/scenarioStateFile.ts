@@ -130,6 +130,7 @@ const PUBLICATION_KEYS: ReadonlySet<string> = new Set([
     'validUntil',
     'bindings',
     'profile',
+    'generation',
 ]);
 
 /**
@@ -148,7 +149,8 @@ const isPublication = (value: unknown): value is NonNullable<ScenarioState['publ
     Number.isFinite(value.observedAt) &&
     (value.validUntil === null || Number.isFinite(value.validUntil)) &&
     isPlainObject(value.bindings) &&
-    (value.profile === null || typeof value.profile === 'string');
+    (value.profile === null || typeof value.profile === 'string') &&
+    (value.generation === undefined || isCount(value.generation));
 
 /**
  * @param r - an untrusted parsed-JSON value

@@ -69,6 +69,9 @@ jest.mock('../../src/ts/core/services/autoClaim', () => ({
     ),
     runClaimPass: jest.fn(),
 }));
+jest.mock('../../src/ts/core/services/scenarioRunner/installation', () => ({
+    publishInstallationOverlay: jest.fn(async () => 'none'),
+}));
 jest.mock('../../src/ts/core/services/missions', () => ({
     loadMissionNeeds: jest.fn(async () => null),
     registerMissionNeeds: jest.fn((_token: string, needs: missionsModule.MissionNeeds | null) =>
@@ -117,9 +120,13 @@ const { runClaimPass } = jest.mocked(require('../../src/ts/core/services/autoCla
 const { loadMissionNeeds, registerMissionNeeds } = jest.mocked(
     require('../../src/ts/core/services/missions') as typeof missionsModule,
 );
+const { publishInstallationOverlay } = jest.mocked(
+    require('../../src/ts/core/services/scenarioRunner/installation') as typeof installationModule,
+);
 import rewardsModule = require('../../src/ts/core/api/rewards');
 const rewards = jest.mocked(rewardsModule);
 import main = require('../../src/ts/core/strategies/real');
+import { scenarioStateLedger, scenarioStepLock } from '../../src/ts/core/scenarioStateStore';
 import entryAgeStoreModule = require('../../src/ts/core/entryAgeStore');
 import type * as joinStateStoreModule from '../../src/ts/core/joinStateStore';
 import type * as votingOrchestratorModule from '../../src/ts/core/services/votingOrchestrator';
@@ -127,6 +134,7 @@ import type * as boostModule from '../../src/ts/core/services/votingOrchestrator
 import type * as joinChallengesModule from '../../src/ts/core/services/joinChallenges';
 import type * as autoClaimModule from '../../src/ts/core/services/autoClaim';
 import type * as missionsModule from '../../src/ts/core/services/missions';
+import type * as installationModule from '../../src/ts/core/services/scenarioRunner/installation';
 import type * as snapGameModule from '../../src/ts/core/strategies/real/snapGame';
 import type { Challenge } from '../../src/ts/core/types/gurushots';
 import type { CategoryLogger } from '../../src/ts/core/logger';
@@ -543,6 +551,35 @@ describe('fetchChallengesAndVote', () => {
             expect.objectContaining({ joinStateStore }),
             null,
         );
+    });
+
+    test('the installation scenario settings are published first: before the mission read, the pre-steps and the pass', async () => {
+        runVotingPass.mockResolvedValue({ success: true });
+
+        await fetchChallengesAndVote('tok');
+
+        // the persisted ledger and the cross-process step lock: this is the real run, not the mock one
+        expect(publishInstallationOverlay).toHaveBeenCalledTimes(1);
+        expect(publishInstallationOverlay).toHaveBeenCalledWith({
+            token: 'tok',
+            ledger: scenarioStateLedger,
+            lock: scenarioStepLock,
+            reads: {
+                getBankroll: join.getBankroll,
+                getMyMissions: rewards.getMyMissions,
+                getMyCompletedChallenges: rewards.getMyCompletedChallenges,
+            },
+        });
+        const published = publishInstallationOverlay.mock.invocationCallOrder[0]!;
+        expect(published).toBeLessThan(loadMissionNeeds.mock.invocationCallOrder[0]!);
+        expect(published).toBeLessThan(runJoinPass.mock.invocationCallOrder[0]!);
+        expect(published).toBeLessThan(runVotingPass.mock.invocationCallOrder[0]!);
+    });
+
+    test("a single-challenge run publishes too: its reads need the owner's current settings", async () => {
+        runVotingPass.mockResolvedValue({ success: true });
+        await fetchChallengesAndVote('tok', 9);
+        expect(publishInstallationOverlay).toHaveBeenCalledTimes(1);
     });
 
     test('reads the missions once and hands the same needs to the join pre-step and the pass', async () => {

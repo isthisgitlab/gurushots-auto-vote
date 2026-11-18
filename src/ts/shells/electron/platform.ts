@@ -57,7 +57,7 @@ const afterWipe = () => {
 /** The Electron windows: every live window's settings broadcast, and the relaunch. */
 const windows: PlatformWindows = { broadcastSettingsChanged, afterWipe };
 
-const electronPlatform = createNodePlatform(windows);
+const electronPlatform = createNodePlatform(windows, 'electron');
 // The Electron wipe also clears the app's browser session; ElectronPlatform requires it.
 const installed: ElectronPlatform = Object.assign(electronPlatform, {
     wipe: {

@@ -10,8 +10,11 @@ import { createNodePlatform } from '../../src/ts/platforms/node';
 
 // No windows: a script runs no UI to broadcast to or relaunch.
 installPlatform(
-    createNodePlatform({
-        broadcastSettingsChanged: () => undefined,
-        afterWipe: () => undefined,
-    }),
+    createNodePlatform(
+        {
+            broadcastSettingsChanged: () => undefined,
+            afterWipe: () => undefined,
+        },
+        'cli',
+    ),
 );

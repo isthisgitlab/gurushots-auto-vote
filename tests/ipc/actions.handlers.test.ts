@@ -139,6 +139,11 @@ beforeEach(() => {
     jest.clearAllMocks();
     // Implementations and property replacements some tests make must not leak into the next one.
     jest.mocked(settings.getEffectiveSetting).mockReset();
+    // No installation scenario by default: a Discover horizon of 0 (no upcoming challenge listed) is the saved one.
+    jest.mocked(settings.captureInstallationSettings).mockReset();
+    jest.mocked(settings.captureInstallationSettings).mockReturnValue(
+        invalid({ ok: true, values: { discoverUpcomingHours: 0, autoClaimPrizes: false } }),
+    );
     jest.mocked(settings.getChallengeOverride).mockReset();
     jest.mocked(settings.resolveRuleSetting).mockReset();
     // The upcoming list is cached for a minute; every test starts without it.
@@ -1938,7 +1943,9 @@ describe('join-challenge', () => {
 
 describe('get-auto-claim-status', () => {
     test('exposes the shared claim clock without running a claim', async () => {
-        settings.getEffectiveSetting = invalid(jest.fn(() => true));
+        jest.mocked(settings.captureInstallationSettings).mockReturnValue(
+            invalid({ ok: true, values: { autoClaimPrizes: true } }),
+        );
         const { resetClaimThrottle } = require('../../src/ts/core/services/autoClaim') as typeof autoClaimModule;
         resetClaimThrottle();
         await expect(
@@ -1951,11 +1958,9 @@ describe('get-auto-claim-status', () => {
     });
 
     test('returns an error envelope when settings cannot be read', async () => {
-        settings.getEffectiveSetting = invalid(
-            jest.fn(() => {
-                throw new Error('unavailable');
-            }),
-        );
+        jest.mocked(settings.captureInstallationSettings).mockImplementation(() => {
+            throw new Error('unavailable');
+        });
         await expect(
             invalid<WithEvent<Handlers['get-auto-claim-status']>>(buildHandlers()['get-auto-claim-status'])({}),
         ).resolves.toEqual({
@@ -1965,11 +1970,9 @@ describe('get-auto-claim-status', () => {
     });
 
     test('falls back to a generic message when the error has none', async () => {
-        settings.getEffectiveSetting = invalid(
-            jest.fn(() => {
-                throw new Error('');
-            }),
-        );
+        jest.mocked(settings.captureInstallationSettings).mockImplementation(() => {
+            throw new Error('');
+        });
         await expect(
             invalid<WithEvent<Handlers['get-auto-claim-status']>>(buildHandlers()['get-auto-claim-status'])({}),
         ).resolves.toEqual({
@@ -2489,8 +2492,8 @@ describe('get-member-challenges — upcoming challenges', () => {
     };
     const withWindow = (hours: unknown) =>
         jest
-            .mocked(settings.getEffectiveSetting)
-            .mockImplementation(invalid((key: string) => (key === 'discoverUpcomingHours' ? hours : [])));
+            .mocked(settings.captureInstallationSettings)
+            .mockReturnValue(invalid({ ok: true, values: { discoverUpcomingHours: hours } }));
     const shown = async () => {
         const result = await listChallenges();
         return result.success ? result.items.map((c) => [c.id, c.status]) : [];
@@ -2546,6 +2549,30 @@ describe('get-member-challenges — upcoming challenges', () => {
         clearUpcomingCache();
         withWindow(0);
         expect(await shown()).toEqual([]);
+    });
+
+    test('a horizon the installation cannot read lists no upcoming challenge, said so, and still records their ids', async () => {
+        stubStrategy({ getMemberChallenges: lists([{ id: 1 }], [up(2, HOUR)]) });
+        jest.mocked(settings.captureInstallationSettings).mockReturnValue({
+            ok: false,
+            key: 'discoverUpcomingHours',
+            reason: 'the published settings of this phase have expired',
+        });
+        expect(await shown()).toEqual([[1, undefined]]);
+        expect(settings.rememberUpcomingChallenges).toHaveBeenLastCalledWith([expect.objectContaining({ id: 2 })]);
+        expect(
+            jest
+                .mocked(logger.withCategory)
+                .mock.results.some(({ value }) =>
+                    jest
+                        .mocked((value as { warning: jest.Mock<void, [message: unknown, data?: unknown]> }).warning)
+                        .mock.calls.some(
+                            ([message]) =>
+                                message ===
+                                'upcoming challenges are not listed: discoverUpcomingHours is unavailable (the published settings of this phase have expired)',
+                        ),
+                ),
+        ).toBe(true);
     });
 
     test('shows at most the 100 soonest upcoming rows', async () => {

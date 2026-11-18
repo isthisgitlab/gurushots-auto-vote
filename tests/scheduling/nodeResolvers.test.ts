@@ -7,6 +7,8 @@
 
 jest.mock('../../src/ts/core/settings', () => ({
     getEffectiveSetting: jest.fn(),
+    captureInstallationSettings: jest.fn(),
+    loadSettings: jest.fn(),
     scenarioSubjectAvailable: jest.fn(() => true),
 }));
 
@@ -16,6 +18,7 @@ import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
 import type * as nodeResolversModule from '../../src/ts/core/scheduling/nodeResolvers';
 const {
+    loadCadenceSettings,
     resolveThreshold,
     resolveScheduledFill,
     resolveAutoSubmitClock,
@@ -143,5 +146,43 @@ describe('resolveCurrencyAuto', () => {
         expect(settings.getEffectiveSetting).toHaveBeenCalledWith('manualPhotosOnly', 'c1');
         withSettings({ ...values, manualPhotosOnly: false });
         expect(resolveCurrencyAuto('c1')).toEqual({ key: timing, swap: timing, fill: timing });
+    });
+});
+
+describe('loadCadenceSettings', () => {
+    test('the saved app block with the installation cadence settings over it, captured once', () => {
+        settings.loadSettings.mockReturnValue(
+            invalid({ app: { checkFrequencyMin: 3, checkFrequencyMax: 5, timezone: 'Europe/Riga', mock: false } }),
+        );
+        settings.captureInstallationSettings.mockReturnValue({
+            ok: true,
+            values: { timezone: 'UTC', checkFrequencyMin: 10, checkFrequencyMax: 20 },
+        });
+
+        expect(loadCadenceSettings()).toMatchObject({
+            checkFrequencyMin: 10,
+            checkFrequencyMax: 20,
+            timezone: 'UTC',
+            mock: false,
+        });
+        expect(settings.captureInstallationSettings).toHaveBeenCalledTimes(1);
+        expect(settings.captureInstallationSettings).toHaveBeenCalledWith([
+            'timezone',
+            'checkFrequencyMin',
+            'checkFrequencyMax',
+        ]);
+    });
+
+    test('one that cannot be read throws with its reason: the saved cadence never takes its place', () => {
+        settings.loadSettings.mockReturnValue(invalid({ app: { checkFrequencyMin: 3, checkFrequencyMax: 5 } }));
+        settings.captureInstallationSettings.mockReturnValue({
+            ok: false,
+            key: 'timezone',
+            reason: 'the published settings of this phase have expired',
+        });
+
+        expect(() => loadCadenceSettings()).toThrow(
+            'timezone is unavailable (the published settings of this phase have expired)',
+        );
     });
 });

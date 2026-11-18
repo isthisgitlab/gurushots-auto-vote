@@ -56,6 +56,10 @@ jest.mock('../../src/ts/core/services/visionVerifier', () => ({
 }));
 jest.mock('../../src/ts/core/settings', () => ({
     getEffectiveSetting: jest.fn(() => undefined),
+    captureInstallationSettings: jest.fn((keys: string[]) => ({
+        ok: true,
+        values: Object.fromEntries(keys.map((key) => [key, undefined])),
+    })),
     getEffectiveTagSetting: jest.fn(() => []),
     getEffectiveIgnoreTitleWords: jest.fn(() => null),
     getChallengeOverride: jest.fn(() => null),

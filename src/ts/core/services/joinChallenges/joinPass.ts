@@ -91,10 +91,14 @@ const earlyJoinsFor = async (
     deps: JoinDeps,
     missions: MissionNeeds | null,
     nowSec: number,
+    missionJoinEarly: boolean,
 ): Promise<number> => {
-    if (settings.getEffectiveSetting('missionJoinEarly', null) !== true) return 0;
+    if (!missionJoinEarly) return 0;
     return turboJoinsNeeded(token, deps, missions, nowSec);
 };
+
+// The installation settings the join pass follows, captured together as it starts: the whole pass runs on them.
+const JOIN_POLICY_KEYS = ['autoJoinCycleCoinBudget', 'missionJoinEarly', 'autoJoinShortChallengesImmediately'] as const;
 
 /**
  * close_time is epoch SECONDS everywhere in this codebase; `now` arrives as
@@ -220,7 +224,7 @@ const joinCandidate = async (
     }
     if (gateRefusal !== null) return gateRefusal;
     const alreadyPaid = await paidAlready(challenge, deps);
-    const cfg = resolveCandidateConfig(challenge);
+    const cfg = resolveCandidateConfig(challenge, pass.shortChallengesImmediately);
     const decision = decideCandidateJoin(challenge, cfg, pass, alreadyPaid);
     noteAfterStartClamp(challenge, cfg, decision, pass);
     let submitOnly = alreadyPaid;
@@ -323,6 +327,16 @@ const runJoinPass = async (
         return empty;
     }
 
+    // The pass follows the installation's effective settings as they are now (the saved ones, or the published phase over
+    // them). One that cannot be read means no join this cycle, said so: the saved value never takes its place.
+    const policy = settings.captureInstallationSettings(JOIN_POLICY_KEYS);
+    if (!policy.ok) {
+        cat().warning(`no joins this cycle: ${policy.key} is unavailable (${policy.reason})`, null);
+        return empty;
+    }
+    const { autoJoinCycleCoinBudget, autoJoinShortChallengesImmediately } = policy.values;
+    const missionJoinEarly = policy.values.missionJoinEarly === true;
+
     let candidates;
     try {
         candidates = await deps.getMemberChallenges(token, 'open');
@@ -344,19 +358,27 @@ const runJoinPass = async (
     const nowSec = toPassNowSec(now);
     const pass: JoinPassState = {
         bankroll,
-        remainingBudget: settings.getEffectiveSetting('autoJoinCycleCoinBudget', null),
+        remainingBudget: autoJoinCycleCoinBudget,
+        shortChallengesImmediately: autoJoinShortChallengesImmediately === true,
         nowSec,
         // One diagnostic per pass, not per candidate (see warnMissingCloseTime).
         missingCloseTimeLogged: false,
         // One clamp note per pass, not per candidate (see noteAfterStartClamp).
         afterStartClampLogged: false,
-        earlyJoins: await earlyJoinsFor(token, deps, missions, nowSec),
+        earlyJoins: await earlyJoinsFor(token, deps, missions, nowSec, missionJoinEarly),
     };
     // A join mission lifts the window only while the currently open challenges
     // are enough to complete it.
     const joinNeed = missions?.join ?? 0;
-    if (settings.getEffectiveSetting('missionJoinEarly', null) === true && joinNeed > 0) {
-        const result = joinMissionLift(candidates, joinNeed, bankroll, pass.remainingBudget, nowSec);
+    if (missionJoinEarly && joinNeed > 0) {
+        const result = joinMissionLift(
+            candidates,
+            joinNeed,
+            bankroll,
+            pass.remainingBudget,
+            nowSec,
+            pass.shortChallengesImmediately,
+        );
         pass.earlyJoins = Math.max(pass.earlyJoins, result.lift);
         if (result.wouldJoin < joinNeed && pass.earlyJoins === 0) {
             // One per pass, beside the early-join notice: the mission cannot

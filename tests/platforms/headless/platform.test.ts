@@ -58,6 +58,7 @@ describe('the headless platform', () => {
 
     test('the capabilities name the service answers', () => {
         const c = createHeadlessPlatform(windows).capabilities;
+        expect(c.executor).toBe('android-service');
         expect(c.refreshMissionNeeds).toBe(true);
         expect(c.snapAllowed).toBe(false);
         expect(c.backgroundServiceOwnsScenarios()).toBe(false);

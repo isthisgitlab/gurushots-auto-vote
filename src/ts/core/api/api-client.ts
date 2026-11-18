@@ -25,6 +25,37 @@ import {
     responseDataOf,
 } from './postOutcome';
 import type { PostOutcome } from './postOutcome';
+import { baselineTransportPolicy } from './transportPolicy';
+import type { TransportPolicy } from './transportPolicy';
+
+const TRANSPORT_KEYS = ['apiTimeout', 'apiMaxRetries', 'apiRetryBaseDelayMs'] as const;
+
+// The reason a request was last refused for, so that a policy that stays unavailable is said once, not on every request.
+let reportedUnavailable: string | null = null;
+
+/**
+ * The policy a business request runs under: the saved values, with the installation scenario's published phase over them
+ * (settings/challengeOverrides.ts captureInstallationSettings). Null, with the reason said once, when the phase overlays
+ * a transport setting and no valid publication stands: the request is then not sent, and no saved value takes its place.
+ */
+const captureTransportPolicy = (): TransportPolicy | null => {
+    const captured = settings.captureInstallationSettings(TRANSPORT_KEYS);
+    if (!captured.ok) {
+        if (reportedUnavailable !== captured.reason) {
+            reportedUnavailable = captured.reason;
+            logger
+                .withCategory('api')
+                .warning(`Requests are not sent: the transport settings are unavailable (${captured.reason})`, null);
+        }
+        return null;
+    }
+    reportedUnavailable = null;
+    return Object.freeze({
+        timeoutSec: captured.values.apiTimeout,
+        maxRetries: captured.values.apiMaxRetries,
+        retryBaseDelayMs: captured.values.apiRetryBaseDelayMs,
+    });
+};
 
 /**
  * Request headers as the api/ modules build them. A value may be undefined
@@ -91,13 +122,13 @@ const responseObject = <T extends object>(url: string, body: unknown): T | null 
 /**
  * The axios request of one POST attempt, on the adapter of the platform it runs on.
  */
-const postConfig = (url: string, headers: RequestHeaders, data: string): AxiosRequestConfig => {
+const postConfig = (url: string, headers: RequestHeaders, data: string, timeoutSec: number): AxiosRequestConfig => {
     const requestConfig: AxiosRequestConfig = {
         method: 'post',
         url,
         headers,
         data,
-        timeout: settings.getSetting('apiTimeout') * 1000, // Convert seconds to milliseconds
+        timeout: timeoutSec * 1000, // Convert seconds to milliseconds
         // The API never redirects; following one would replay the x-token header at the target.
         maxRedirects: 0,
     };
@@ -177,10 +208,14 @@ const sendPost = async <T extends object>(
     headers: RequestHeaders,
     data: string,
     repeatable: boolean,
-    retainRefusedResponse = false,
+    retainRefusedResponse: boolean,
+    explicitPolicy?: TransportPolicy,
 ): Promise<PostOutcome<T>> => {
-    const maxRetries = settings.getSetting('apiMaxRetries');
-    const baseDelayMs = settings.getSetting('apiRetryBaseDelayMs');
+    // Captured here, once, before the first attempt: every attempt of this call runs under it.
+    const policy = explicitPolicy ?? captureTransportPolicy();
+    // Nothing is sent without a policy: the failure the caller already handles (`refused` for a spend, which is never sent).
+    if (policy === null) return { kind: 'refused' };
+    const { timeoutSec, maxRetries, retryBaseDelayMs: baseDelayMs } = policy;
 
     for (let attempt = 0; ; attempt++) {
         const startTime = Date.now();
@@ -191,7 +226,7 @@ const sendPost = async <T extends object>(
         logger.writeDebug('api-out', `POST ${url}`, { url, headers, body: data });
 
         try {
-            const response = await axios(postConfig(url, headers, data));
+            const response = await axios(postConfig(url, headers, data, timeoutSec));
 
             const duration = Date.now() - startTime;
 
@@ -268,6 +303,8 @@ const sendPost = async <T extends object>(
  * @param url - The API endpoint URL
  * @param headers - Request headers including authentication token
  * @param data - URL-encoded form data (default: empty string)
+ * @param policy - the transport policy to run under, for a read-only evidence request (see baselineTransportPolicy);
+ *   without it the request captures the effective policy itself, and is not sent while that is unavailable
  * @returns The response body as `T` (the shape the endpoint wrapper reads, all
  *   fields optional), or null if the request failed or the body was not a JSON
  *   object. Only the object check is enforced: the wrapper guards every read.
@@ -276,8 +313,9 @@ const makePostRequest = async <T extends object>(
     url: string,
     headers: RequestHeaders,
     data: string = '',
+    policy?: TransportPolicy,
 ): Promise<T | null> => {
-    const outcome = await sendPost<T>(url, headers, data, true);
+    const outcome = await sendPost<T>(url, headers, data, true, false, policy);
     return outcome.kind === 'body' ? outcome.body : null;
 };
 
@@ -287,7 +325,8 @@ const makePostRequest = async <T extends object>(
  * (ECONNREFUSED, ENOTFOUND, EAI_AGAIN) are retried; any other failure is one attempt and says which kind it was.
  *
  * @returns `body` with the response; `refused` when the server did not process it (3xx, 4xx, a 429 that ran out of
- *   retries, a request that never left); `unclear` when it was sent and no usable answer came (a timeout, a reset,
+ *   retries, a request that never left, or one not sent because the effective transport policy is unavailable);
+ *   `unclear` when it was sent and no usable answer came (a timeout, a reset,
  *   a 5xx, a 2xx whose body is not a JSON object), so it may or may not have been processed.
  */
 const postOnce = <T extends object>(
@@ -310,4 +349,12 @@ const createCommonHeaders = (token: string | undefined): RequestHeaders => {
     return generateRandomHeaders(token);
 };
 
-export { makePostRequest, postOnce, createCommonHeaders, FORM_CONTENT_TYPE, finalizeAdapterResponse };
+export {
+    makePostRequest,
+    postOnce,
+    createCommonHeaders,
+    FORM_CONTENT_TYPE,
+    finalizeAdapterResponse,
+    baselineTransportPolicy,
+};
+export type { TransportPolicy };

@@ -38,6 +38,7 @@ import {
     resolveBoostPrefill,
     resolveCurrencyAuto,
     resolveScenarioWake,
+    loadCadenceSettings,
 } from '../../core/scheduling/nodeResolvers';
 import { effectiveTimezone } from '../../core/settings/uiDefaults';
 
@@ -76,7 +77,15 @@ const __resetMarkedReadCapForTests = (): void => {
  * must recover on the same beat.
  */
 const computeNextDelayMs = async (token: string, prefetched: Challenge[] | null = null): Promise<number> => {
-    const userSettings = settings.loadSettings().app;
+    // Captured once for this tick: the installation's cadence settings over the saved ones. Unavailable (its phase
+    // overlays them and no valid publication stands): a plain retry beat, never the saved cadence.
+    let userSettings;
+    try {
+        userSettings = loadCadenceSettings();
+    } catch (err) {
+        log('cadence settings unavailable; using a plain retry beat', errorMessage(err));
+        return getRandomCheckFrequencyMs({});
+    }
     try {
         let list: Challenge[];
         let fetchFailedNow = false;

@@ -12,21 +12,33 @@ jest.mock('../../src/ts/core/logger', () => {
         __category: category,
     };
 });
-jest.mock('../../src/ts/core/settings', () => ({
-    getEffectiveSetting: jest.fn(),
-    getScenario: jest.fn(),
-    getSetting: jest.fn(() => 'UTC'),
-    // The lifecycle reads of the runner (settings/scenarioLifecycle.ts): what a handoff intent and an unresolved step
-    // mean are tested in tests/settings/scenario-lifecycle.test.ts.
-    unresolvedScenarioWork: jest.fn(() => false),
-    settleHandoff: jest.fn(() => 'finished'),
-    // A phase without bindings or a profile prepares nothing to publish; the settings themselves are tested in
-    // tests/settings/scenario-overlay.test.ts and tests/integration/scenarioSnapshotIsolation.test.ts.
-    prepareScenarioSnapshot: jest.fn(() => ({
-        ok: true,
-        snapshot: { publication: null, readSetting: () => ({ state: 'unknown', reason: 'test', dependencies: [] }) },
-    })),
-}));
+jest.mock('../../src/ts/core/settings', () => {
+    const getEffectiveSetting = jest.fn();
+    return {
+        getEffectiveSetting,
+        // The currency reserve is read again at each spend through the installation read: with no installation scenario it is
+        // the value a test gives the effective read.
+        captureInstallationSettings: jest.fn((keys: string[]) => ({
+            ok: true,
+            values: Object.fromEntries(keys.map((key) => [key, getEffectiveSetting(key, null)])),
+        })),
+        getScenario: jest.fn(),
+        getSetting: jest.fn(() => 'UTC'),
+        // The lifecycle reads of the runner (settings/scenarioLifecycle.ts): what a handoff intent and an unresolved step
+        // mean are tested in tests/settings/scenario-lifecycle.test.ts.
+        unresolvedScenarioWork: jest.fn(() => false),
+        settleHandoff: jest.fn(() => 'finished'),
+        // A phase without bindings or a profile prepares nothing to publish; the settings themselves are tested in
+        // tests/settings/scenario-overlay.test.ts and tests/integration/scenarioSnapshotIsolation.test.ts.
+        prepareScenarioSnapshot: jest.fn(() => ({
+            ok: true,
+            snapshot: {
+                publication: null,
+                readSetting: () => ({ state: 'unknown', reason: 'test', dependencies: [] }),
+            },
+        })),
+    };
+});
 jest.mock('../../src/ts/core/services/currencyActions', () => ({
     withSpendLock: jest.fn(async (spend: () => Promise<unknown>) => ({ busy: false, value: await spend() })),
     previewSwap: jest.fn(),
@@ -2093,7 +2105,8 @@ describe('rule execution', () => {
         currencyActions.fillExposure.mockResolvedValue(invalid({ ok: true }));
         setup(single([{ type: 'fillExposure' }], { if: [swaps('>', 100)] }));
         await run();
-        expect(pass.currency.strategy.getBankroll).toHaveBeenCalledWith('tok');
+        // the scenario's own read runs under the saved transport policy, handed over as data
+        expect(pass.currency.strategy.getBankroll).toHaveBeenCalledWith('tok', expect.any(Object));
         expect(currencyActions.fillExposure).not.toHaveBeenCalled();
 
         ledger = createMemoryStateLedger();
@@ -2169,6 +2182,7 @@ describe('backgroundServiceOwnsScenarios', () => {
         // own computation from its native part is the webview family test's.
         installWebviewTestPlatform({
             capabilities: {
+                executor: 'android-app',
                 refreshMissionNeeds: false,
                 snapAllowed: true,
                 backgroundServiceOwnsScenarios: () => true,

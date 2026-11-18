@@ -28,6 +28,8 @@ describe('the scripts platform module', () => {
 
     test('the capabilities answer the script values', () => {
         const capabilities = installed.capabilities;
+        // A script run is a plain Node process, like the CLI.
+        expect(capabilities.executor).toBe('cli');
         expect(capabilities.refreshMissionNeeds).toBe(false);
         expect(capabilities.snapAllowed).toBe(true);
         expect(capabilities.backgroundServiceOwnsScenarios()).toBe(false);

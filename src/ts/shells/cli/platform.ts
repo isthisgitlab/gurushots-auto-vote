@@ -32,7 +32,7 @@ const windows: PlatformWindows = {
     afterWipe: () => undefined,
 };
 
-const cliPlatform = createNodePlatform(windows, {
+const cliPlatform = createNodePlatform(windows, 'cli', {
     extractVisionCliAssets: () => visionCliAssets().extractVisionCliAssets(),
     extractVideoDecoderCliAssets: () => videoDecoderCliAssets().extractVideoDecoderCliAssets(),
 });

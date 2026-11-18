@@ -16,6 +16,8 @@ import * as logger from './logger';
 import type { EntryAgeLedger } from './types/stores';
 import { entryAgeLedger } from './entryAgeStore';
 import { authenticate } from './api/login';
+import { baselineTransportPolicy } from './api/transportPolicy';
+import type { TransportPolicy } from './api/transportPolicy';
 import {
     fetchChallengesAndVote,
     applyBoostsOnSuspend,
@@ -175,6 +177,12 @@ const refreshApi = () => {
  */
 const getEntryAgeLedger = (): EntryAgeLedger =>
     settings.loadSettings().app.mock ? mockEntryAgeLedger : entryAgeLedger;
+
+// The transport policy of one logical request, as typed immutable data (api/api-client.ts): a business request captures the
+// effective one itself; the read-only evidence reads of a scenario's facts and of an owner's publication are handed the
+// saved one (baselineTransportPolicy) explicitly, as their declared bootstrap context.
+export type { TransportPolicy };
+export { baselineTransportPolicy };
 
 // The raw surfaces are deliberately NOT exported — every caller selects a
 // surface through getApiStrategy (optionally with the explicit { mock }

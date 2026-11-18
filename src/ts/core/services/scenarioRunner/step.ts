@@ -376,4 +376,4 @@ const runScenarioStep = async (challenge: Challenge, now: number, pass: PassCont
  */
 const backgroundServiceOwnsScenarios = () => platform().capabilities.backgroundServiceOwnsScenarios();
 
-export { runScenarioStep, backgroundServiceOwnsScenarios };
+export { runScenarioStep, backgroundServiceOwnsScenarios, nextBindingInstant };

@@ -306,8 +306,9 @@ describe('AutovoteContext', () => {
             expect(captured.chainDeps!.onCycleChallenges).toEqual(expect.any(Function));
             const deps = captured.notifierDeps!;
 
+            // the installation's effective value, not the saved default
             await deps.getSetting('notifyOnBoost');
-            expect(window.api.getGlobalDefault).toHaveBeenCalledWith('notifyOnBoost');
+            expect(window.api.getEffectiveSetting).toHaveBeenCalledWith('notifyOnBoost', null);
             await deps.getDeadlineActions(invalid({ id: 7 }));
             expect(window.api.getDeadlineActions).toHaveBeenCalledWith({ id: 7 });
             deps.log!('note');
@@ -320,8 +321,12 @@ describe('AutovoteContext', () => {
             expect(deps.translate('app.timeLeft', { time: '5m' })).toBe('5m left');
             expect(deps.translate('app.timeLeft')).toBe('{time} left');
             expect(mockTranslator.t).toHaveBeenCalledWith('app.timeLeft', { time: '5m' });
-            // The same shared translate reaches the scenario notifier.
+            // The same shared translate reaches the scenario notifier, which reads the same effective switch and the status IPC.
             expect(captured.scenarioDeps!.translate('app.timeLeft', { time: '5m' })).toBe('5m left');
+            await captured.scenarioDeps!.getSetting('notifyOnScenario');
+            expect(window.api.getEffectiveSetting).toHaveBeenCalledWith('notifyOnScenario', null);
+            await captured.scenarioDeps!.getScenarioStatus(5);
+            expect(window.api.getScenarioStatus).toHaveBeenCalledWith(5);
             mockTranslator.t.mockImplementation((k) => k);
 
             const savedLog = window.api.logDebug;

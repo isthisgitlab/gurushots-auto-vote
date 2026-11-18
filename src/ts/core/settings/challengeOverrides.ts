@@ -8,17 +8,21 @@
 
 import * as logger from '../logger';
 import { schemaEntry, schemaDefault, getValidationError } from './schema';
-import type { SettingsSchemaEntry } from './schema';
+import type { SettingKey, SettingsSchemaEntry } from './schema';
 import { loadSettings, saveSettings } from './persistence';
 import { runGated } from './scenarioMutationGate';
 import { valuesEqual, globalChallengeValues, challengeValueSetIsValid } from './defaults';
 import { ruleValuesForChallengeId, isTitleProfileSuppressed } from './ruleResolution';
 import {
     ScenarioSettingUnavailableError,
+    installationLayer,
     isBoundPhase,
     isOverlayKey,
+    overlaysInstallation,
     overlaySources,
+    prepareInstallationOverlay,
     prepareOverlay,
+    readInstallationLayer,
     readLayer,
     readOverlay,
     subjectLayer,
@@ -28,16 +32,17 @@ import { JOIN_KEPT_KEYS } from './staleChallengeCleanup';
 import { isActiveChallengeId, challengeTargetForId } from './challengeFacts';
 import { loggableSettingValue } from './logValue';
 import { isUnsafeChallengeKey } from '../challengeKey';
+import { INSTALLATION_KEY } from '../scenarioStateStore';
 import { settingValue } from '../scenarios/expressions';
 import { unknownOf } from '../scenarios/valueState';
 
 import type { ExprValue } from '../scenarios/expressions';
 import type { ValueState } from '../scenarios/valueState';
-import type { ConfigV2 } from '../types/config';
+import type { ConfigApp, ConfigV2 } from '../types/config';
 import type { SettingView } from '../types/scenario';
 import type { ChallengeIdInput, ChallengeValues, SettingValueOf } from '../types/settings';
 import type { ScenarioPublication, ScenarioState } from '../types/stores';
-import type { ResolvedOverlay, SubjectLayer } from './scenarioOverlay';
+import type { InstallationLayer, ResolvedOverlay, SubjectLayer } from './scenarioOverlay';
 import type { ScenarioDocument } from './scenarioSchema';
 
 /**
@@ -430,7 +435,8 @@ const _phaseWritesKey = (settingKey: string): boolean =>
 
 /**
  * Get the effective value for a setting: the active scenario phase's value,
- * then the per-challenge override, matching rules, and the global default.
+ * then the per-challenge override, matching rules, and the global default. A setting the installation scenario
+ * owns is the installation's: the saved value, or the published phase over it (getInstallationSetting).
  *
  * A challenge whose phase has bindings or a profile reads them from the overlay its owner published. With no valid
  * publication a setting the phase may write is never answered from inherited values: it throws
@@ -444,6 +450,12 @@ const getEffectiveSetting = <K extends string>(
     if (!entry) {
         logger.withCategory('settings').error(`Invalid setting key: ${settingKey}`, null);
         return undefined as SettingValueOf<K>;
+    }
+
+    // An installation-owned setting is read from the installation's published phase (getInstallationSetting). A key a
+    // challenge's own phase can also write (a card's compact view) keeps its challenge read when a challenge is named.
+    if (_installationOwns(settingKey) && !(challengeId && entry.perChallenge)) {
+        return getInstallationSetting(settingKey) as SettingValueOf<K>;
     }
 
     const settings = loadSettings();
@@ -498,16 +510,19 @@ const _resolveEffectiveSetting = (settings: ConfigV2, settingKey: string, challe
 };
 
 /**
+ * The base value of one named setting, raw (see _baseRawValues).
+ */
+const _baseRawValue = (settings: ConfigV2, key: string, challengeId: ChallengeIdInput): unknown =>
+    schemaEntry(key) ? _resolveEffectiveSetting(settings, key, challengeId) : settings.app[key];
+
+/**
  * The base value of every named setting for a challenge, raw: everything below the phase overlay (the challenge's
  * override, its rules, the stored defaults, the schema defaults). A key outside the schema is an app setting, read from
  * the configuration's app block.
  */
 const _baseRawValues = (settings: ConfigV2, challengeId: ChallengeIdInput): Record<string, unknown> =>
     Object.fromEntries(
-        getScenarioCapabilities().settings.map(({ key }) => [
-            key,
-            schemaEntry(key) ? _resolveEffectiveSetting(settings, key, challengeId) : settings.app[key],
-        ]),
+        getScenarioCapabilities().settings.map(({ key }) => [key, _baseRawValue(settings, key, challengeId)]),
     );
 
 /**
@@ -665,6 +680,115 @@ const prepareScenarioSnapshot = (
     return { ok: true, snapshot: { publication: prepared.publication, readSetting: reader(prepared.overlay, true) } };
 };
 
+// --- installation settings ---------------------------------------------------------------------------------------------
+
+/**
+ * Whether a setting belongs to the installation scenario: a key its capability lets an installation phase write (the
+ * account policy, the app preferences and the device preferences).
+ */
+const _installationOwns = (settingKey: string): boolean =>
+    scenarioCapability(settingKey)?.phaseWrite.includes('installation') === true;
+
+/** What an installation setting holds: its schema type, its app value type, or unknown for a key only known at runtime. */
+type InstallationValueOf<K extends string> = K extends SettingKey
+    ? SettingValueOf<K>
+    : K extends keyof ConfigApp
+      ? ConfigApp[K]
+      : unknown;
+
+type InstallationRead = { ok: true; value: unknown } | { ok: false; reason: string };
+
+/**
+ * A reader of installation settings over one loaded configuration: the saved value, or the installation phase's published
+ * value over it, or why it is unavailable. The overlay is worked out once, and none is looked at for an installation
+ * with no scenario assigned (its progress record is not read).
+ */
+const _installationReader = (settings: ConfigV2): ((settingKey: string) => InstallationRead) => {
+    const layer: InstallationLayer = installationLayer(settings, nowSec());
+    return (settingKey) => {
+        const found = _installationOwns(settingKey)
+            ? readInstallationLayer(layer, settingKey)
+            : { kind: 'saved' as const };
+        if (found.kind === 'unavailable') return { ok: false, reason: found.reason };
+        return { ok: true, value: found.kind === 'overlay' ? found.value : _baseRawValue(settings, settingKey, null) };
+    };
+};
+
+/**
+ * An installation setting's value for the code that acts on it: the saved value, with the installation scenario's current
+ * phase over it when the owner published one. No installation scenario, a paused one, or a phase that does not set the
+ * key reads the saved value at once (a known withdrawal restores it, nothing is written to the configuration). A phase
+ * that sets the key with no valid publication (missing, from another owner, expired, malformed) throws
+ * ScenarioSettingUnavailableError: never the saved value. A consumer reads it at its boundary (a cycle's start, a
+ * request's entry, a spend) and acts on that one value; readInstallationSetting and captureInstallationSettings
+ * answer without throwing.
+ */
+const getInstallationSetting = <K extends string>(settingKey: K): InstallationValueOf<K> => {
+    const read = _installationReader(loadSettings())(settingKey);
+    if (!read.ok) throw new ScenarioSettingUnavailableError(settingKey, INSTALLATION_KEY, read.reason);
+    return read.value as InstallationValueOf<K>;
+};
+
+/**
+ * One installation setting as a typed value state, for a status or an inspection: unknown, with the reason, where
+ * getInstallationSetting would throw (or the value has no expression form). Never throws, never writes.
+ */
+const readInstallationSetting = (settingKey: string): ValueState<ExprValue> => {
+    const read = _installationReader(loadSettings())(settingKey);
+    return read.ok ? _typedValue(settingKey, read.value) : unknownOf(read.reason, [`setting:${settingKey}`]);
+};
+
+type InstallationCapture<K extends string> =
+    | { ok: true; values: { [P in K]: InstallationValueOf<P> } }
+    | { ok: false; key: K; reason: string };
+
+/**
+ * Several installation settings at once, from one read of the configuration and of the publication, so that what a boundary
+ * captures is consistent: the values, or the first key that is unavailable with the reason. Never throws.
+ */
+const captureInstallationSettings = <K extends string>(settingKeys: readonly K[]): InstallationCapture<K> => {
+    const read = _installationReader(loadSettings());
+    const values: Partial<{ [P in K]: InstallationValueOf<P> }> = {};
+    for (const key of settingKeys) {
+        const found = read(key);
+        if (!found.ok) return { ok: false, key, reason: found.reason };
+        values[key] = found.value as InstallationValueOf<typeof key>;
+    }
+    return { ok: true, values: values as { [P in K]: InstallationValueOf<P> } };
+};
+
+/**
+ * Prepares the installation overlay of the current phase, the owner's to publish: the base values, the bindings resolved
+ * as the runner works them out from the base reads it is handed, and the validated whole. Nothing is stored. The result is
+ * a publication (null for a phase that sets nothing), or the key and reason the phase could not be prepared for.
+ *
+ * @param resolveBindings - the owner's evaluation of the phase's bindings (called only for a phase that has any)
+ * @param generation - the installation generation the owner prepares this under
+ * @param now - unix seconds
+ */
+const prepareInstallationSnapshot = (
+    scenario: ScenarioDocument,
+    state: Pick<ScenarioState, 'phase' | 'phaseEnteredAt' | 'published'>,
+    resolveBindings: (readBase: (settingKey: string, view: SettingView) => ValueState<ExprValue>) => BindingResolution,
+    generation: number,
+    now: number,
+): { ok: true; publication: ScenarioPublication | null } | { ok: false; key: string | null; reason: string } => {
+    const settings = loadSettings();
+    const phase = scenario.phases[state.phase];
+    if (!overlaysInstallation(phase)) return { ok: true, publication: null };
+    const baseRaw = _baseRawValues(settings, null);
+    const baseOf = (settingKey: string): ValueState<ExprValue> =>
+        Object.hasOwn(baseRaw, settingKey)
+            ? _typedValue(settingKey, baseRaw[settingKey])
+            : unknownOf('setting-unknown', [`setting:${settingKey}`]);
+    // A binding is worked out before the overlay exists, so it reads the base view only.
+    const { bound, validUntil } = resolveBindings((settingKey, view) =>
+        view === 'base' ? baseOf(settingKey) : unknownOf('binding-reads-base-only', [`setting:${settingKey}`]),
+    );
+    const prepared = prepareInstallationOverlay(settings, scenario, state, baseRaw, bound, generation, validUntil, now);
+    return prepared.ok ? { ok: true, publication: prepared.publication } : prepared;
+};
+
 // The one wording for the chosen-photos consume lines — the log catalog's
 // English templates match against exactly this text, so the two drift together.
 const formatChosenConsumedMessage = (tag: string, removed: string[], overrideRemoved: boolean): string =>
@@ -750,7 +874,7 @@ const consumeChosenPhotos = (challengeId: string | number, enteredIds: readonly 
     return true;
 };
 
-export type { BindingResolution, ScenarioOverlayStatus, ScenarioSnapshot };
+export type { BindingResolution, InstallationCapture, InstallationValueOf, ScenarioOverlayStatus, ScenarioSnapshot };
 export { ScenarioSettingUnavailableError };
 
 export {
@@ -774,6 +898,10 @@ export {
     scenarioSubjectReason,
     scenarioOverlayStatus,
     prepareScenarioSnapshot,
+    getInstallationSetting,
+    readInstallationSetting,
+    captureInstallationSettings,
+    prepareInstallationSnapshot,
     trimmedChallengeId,
     ownChallengeValues,
     dropEmptyChallengeRecord,

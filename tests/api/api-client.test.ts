@@ -12,17 +12,20 @@ import { installHeadlessTestPlatform, installWebviewTestPlatform } from '../help
 const axios: jest.Mock<Promise<unknown>, [config: AxiosRequestConfig]> = invalid(axiosModule);
 import type * as api_clientModule from '../../src/ts/core/api/api-client';
 import type * as constantsModule from '../../src/ts/core/api/constants';
+import type * as joinModule from '../../src/ts/core/api/join';
 import type * as settingsModule from '../../src/ts/core/settings';
 import type * as loggerModule from '../../src/ts/core/logger';
 import type * as coreModule from '@capacitor/core';
-const { makePostRequest, postOnce, createCommonHeaders, FORM_CONTENT_TYPE } =
+const { makePostRequest, postOnce, createCommonHeaders, FORM_CONTENT_TYPE, baselineTransportPolicy } =
     require('../../src/ts/core/api/api-client') as typeof api_clientModule;
+const { getBankroll } = require('../../src/ts/core/api/join') as typeof joinModule;
 const { ENDPOINTS } = require('../../src/ts/core/api/constants') as typeof constantsModule;
 
 // The logger factory below also exports its shared api/apiRequest mocks.
 type LoggerMock = typeof loggerModule & {
     __mockApiFn: jest.MockedFunction<loggerModule.CategoryLogger['api']>;
     __mockApiRequestFn: jest.MockedFunction<loggerModule.CategoryLogger['apiRequest']>;
+    __mockWarningFn: jest.MockedFunction<loggerModule.CategoryLogger['warning']>;
 };
 // The captured adapter, called with the partial configs the tests hand it.
 type TestAdapter = (config: AxiosRequestConfig) => Promise<AxiosResponse>;
@@ -57,12 +60,15 @@ jest.mock(
 // apiRetryBaseDelayMs is 0 there so backoff sleeps are instant.
 jest.mock('../../src/ts/core/settings', () => ({
     getSetting: jest.fn(),
+    // The typed installation read the transport captures its policy through (settings/challengeOverrides.ts).
+    captureInstallationSettings: jest.fn(),
 }));
 
 // Mock the logger module
 jest.mock('../../src/ts/core/logger', () => {
     const mockApiFn = jest.fn();
     const mockApiRequestFn = jest.fn();
+    const mockWarningFn = jest.fn();
 
     return {
         api: jest.fn(),
@@ -80,7 +86,7 @@ jest.mock('../../src/ts/core/logger', () => {
             error: jest.fn(),
             debug: jest.fn(),
             success: jest.fn(),
-            warning: jest.fn(),
+            warning: mockWarningFn,
             api: mockApiFn,
             apiRequest: mockApiRequestFn,
             startOperation: jest.fn(),
@@ -90,6 +96,7 @@ jest.mock('../../src/ts/core/logger', () => {
         // Export the mock functions for testing
         __mockApiFn: mockApiFn,
         __mockApiRequestFn: mockApiRequestFn,
+        __mockWarningFn: mockWarningFn,
     };
 });
 
@@ -118,6 +125,11 @@ describe('api-client', () => {
                     return undefined;
             }
         });
+        // No installation scenario: the captured policy is the saved values, as the facade answers them.
+        settings.captureInstallationSettings.mockImplementation((keys) => ({
+            ok: true,
+            values: Object.fromEntries(keys.map((key) => [key, settings.getSetting(key)])),
+        }));
     });
 
     describe('FORM_CONTENT_TYPE', () => {
@@ -676,6 +688,146 @@ describe('api-client', () => {
                 });
             expect(await makePostRequest(mockUrl, headers, mockData)).toEqual({ ok: true });
             expect(axios).toHaveBeenCalledTimes(3);
+        });
+    });
+
+    describe('the transport policy a logical request captures', () => {
+        const headers = createCommonHeaders(mockToken);
+        const logger: LoggerMock = invalid(require('../../src/ts/core/logger'));
+
+        const unavailable = { ok: false as const, key: 'apiTimeout', reason: 'the published settings have expired' };
+        const policy = (timeoutSec: number, maxRetries: number, retryBaseDelayMs: number) => ({
+            ok: true as const,
+            values: { apiTimeout: timeoutSec, apiMaxRetries: maxRetries, apiRetryBaseDelayMs: retryBaseDelayMs },
+        });
+        const failure = (status: number) => {
+            const e: Error & { response?: { status: number; data: unknown; headers: Record<string, string> } } =
+                new Error(`Request failed with status code ${status}`);
+            e.response = { status, data: {}, headers: {} };
+            return e;
+        };
+        const timeouts = () => axios.mock.calls.map(([config]) => config.timeout);
+
+        afterEach(() => {
+            jest.useRealTimers();
+            jest.restoreAllMocks();
+        });
+
+        test('a publication made during a retry sequence changes no attempt: timeout, retry count and backoff stay captured', async () => {
+            jest.useFakeTimers();
+            // no jitter: the wait before attempt n+1 is exactly base * 2^n
+            jest.spyOn(Math, 'random').mockReturnValue(0);
+            settings.captureInstallationSettings.mockReturnValueOnce(policy(30, 2, 1000));
+            axios.mockImplementation(async () => {
+                // an owner publishes a different policy while this request is mid-sequence
+                settings.captureInstallationSettings.mockReturnValue(policy(5, 0, 0));
+                throw failure(503);
+            });
+
+            const result = makePostRequest(mockUrl, headers, mockData);
+            await jest.advanceTimersByTimeAsync(0);
+            expect(axios).toHaveBeenCalledTimes(1);
+            // the first backoff is the captured 1000 ms, not the published 0
+            await jest.advanceTimersByTimeAsync(999);
+            expect(axios).toHaveBeenCalledTimes(1);
+            await jest.advanceTimersByTimeAsync(1);
+            expect(axios).toHaveBeenCalledTimes(2);
+            // the second is 2000 ms
+            await jest.advanceTimersByTimeAsync(1999);
+            expect(axios).toHaveBeenCalledTimes(2);
+            await jest.advanceTimersByTimeAsync(1);
+            // captured retry count 2: three attempts, not the published single one
+            expect(axios).toHaveBeenCalledTimes(3);
+            await expect(result).resolves.toBeNull();
+            expect(timeouts()).toEqual([30000, 30000, 30000]);
+            // one capture for the whole request
+            expect(settings.captureInstallationSettings).toHaveBeenCalledTimes(1);
+        });
+
+        test('the next logical request captures the policy published meanwhile', async () => {
+            settings.captureInstallationSettings
+                .mockReturnValueOnce(policy(30, 0, 0))
+                .mockReturnValueOnce(policy(5, 0, 0));
+            axios.mockResolvedValue({ status: 200, headers: {}, data: { ok: true } });
+
+            await makePostRequest(mockUrl, headers, mockData);
+            await makePostRequest(mockUrl, headers, mockData);
+
+            expect(timeouts()).toEqual([30000, 5000]);
+        });
+
+        test('a business request whose policy is unavailable sends nothing and says why once', async () => {
+            settings.captureInstallationSettings.mockReturnValue(unavailable);
+
+            await expect(makePostRequest(mockUrl, headers, mockData)).resolves.toBeNull();
+            await expect(makePostRequest(mockUrl, headers, mockData)).resolves.toBeNull();
+            await expect(postOnce(mockUrl, headers, mockData)).resolves.toEqual({ kind: 'refused' });
+
+            expect(axios).not.toHaveBeenCalled();
+            expect(
+                logger.__mockWarningFn.mock.calls.filter(([message]) => String(message).includes('expired')),
+            ).toHaveLength(1);
+
+            // available again: it sends, and a later outage is said again
+            settings.captureInstallationSettings.mockReturnValue(policy(30, 0, 0));
+            axios.mockResolvedValue({ status: 200, headers: {}, data: { ok: true } });
+            await expect(makePostRequest(mockUrl, headers, mockData)).resolves.toEqual({ ok: true });
+            settings.captureInstallationSettings.mockReturnValue(unavailable);
+            await expect(makePostRequest(mockUrl, headers, mockData)).resolves.toBeNull();
+            expect(
+                logger.__mockWarningFn.mock.calls.filter(([message]) => String(message).includes('expired')),
+            ).toHaveLength(2);
+        });
+
+        test('an evidence read with the explicit baseline policy works while the publication is unavailable', async () => {
+            settings.captureInstallationSettings.mockReturnValue(unavailable);
+            axios.mockResolvedValue({
+                status: 200,
+                headers: {},
+                data: { success: true, bankroll: { challenges: [{ type: 'COINS', amount: 12 }] } },
+            });
+            const baseline = baselineTransportPolicy();
+            // the saved values, as typed data
+            expect(baseline).toEqual({ timeoutSec: 30, maxRetries: 3, retryBaseDelayMs: 0 });
+            expect(Object.isFrozen(baseline)).toBe(true);
+
+            await expect(makePostRequest(mockUrl, headers, mockData, baseline)).resolves.toEqual(expect.anything());
+            const bankroll = await getBankroll(mockToken, baseline);
+
+            expect(bankroll).toMatchObject({ coins: 12 });
+            expect(timeouts()).toEqual([30000, 30000]);
+            // the explicit policy is the whole answer: the publication was not asked
+            expect(settings.captureInstallationSettings).not.toHaveBeenCalled();
+            // and the same read without it is a business request, which sends nothing
+            axios.mockClear();
+            await expect(getBankroll(mockToken)).resolves.toBeNull();
+            expect(axios).not.toHaveBeenCalled();
+        });
+
+        test('an explicit policy sets this request alone: its retry count and backoff, not the saved ones', async () => {
+            jest.useFakeTimers();
+            jest.spyOn(Math, 'random').mockReturnValue(0);
+            axios.mockRejectedValue(failure(503));
+
+            const result = makePostRequest(mockUrl, headers, mockData, {
+                timeoutSec: 7,
+                maxRetries: 1,
+                retryBaseDelayMs: 400,
+            });
+            await jest.advanceTimersByTimeAsync(400);
+            await expect(result).resolves.toBeNull();
+
+            expect(timeouts()).toEqual([7000, 7000]);
+        });
+
+        test('postOnce keeps its single send for a spend: a captured retry count never repeats it', async () => {
+            settings.captureInstallationSettings.mockReturnValue(policy(30, 3, 0));
+            axios.mockRejectedValue(failure(503));
+
+            await expect(postOnce(mockUrl, headers, mockData)).resolves.toEqual({ kind: 'unclear' });
+
+            expect(axios).toHaveBeenCalledTimes(1);
+            expect(timeouts()).toEqual([30000]);
         });
     });
 

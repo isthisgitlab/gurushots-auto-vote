@@ -83,7 +83,8 @@ describe('reads keep the default retry', () => {
         makePostRequest.mockResolvedValue({ items: [], bankroll: { challenges: [] } });
         await getMemberChallenges(token);
         await getBankroll(token);
-        expect(makePostRequest.mock.calls.map((call) => call.length)).toEqual([3, 3]);
+        // no per-call options: the only fourth argument is the transport policy slot, and a business read leaves it empty
+        expect(makePostRequest.mock.calls.map((call) => call.slice(3))).toEqual([[undefined], [undefined]]);
     });
 });
 

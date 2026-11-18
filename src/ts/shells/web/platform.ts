@@ -41,6 +41,6 @@ const windows: PlatformWindows = {
     afterWipe: () => run?.afterWipe(),
 };
 
-installPlatform(createNodePlatform(windows));
+installPlatform(createNodePlatform(windows, 'web'));
 
 export { setWebShellRun };

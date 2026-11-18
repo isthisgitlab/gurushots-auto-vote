@@ -20,6 +20,7 @@
  */
 
 import { makePostRequest, postOnce } from './api-client';
+import type { TransportPolicy } from './transportPolicy';
 import { toActionResult } from './postOutcome';
 import { ENDPOINTS, createWebHeaders, makeRequireValue } from './constants';
 
@@ -106,11 +107,14 @@ const bankrollAmount = (raw: unknown): number | null => {
  *   null on transport failure or an unsuccessful/malformed payload, and when a
  *   recognized currency carries an amount that is not a number: a balance that
  *   cannot be read is not a zero balance (callers must tell the two apart).
+ *
+ * @param policy the transport policy to read under (the baseline policy of a scenario's evidence read); without it the
+ *   effective policy is captured, as for any business request
  */
-const getBankroll = async (token: string): Promise<Bankroll | null> => {
+const getBankroll = async (token: string, policy?: TransportPolicy): Promise<Bankroll | null> => {
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
-    const response = await makePostRequest<BankrollResponse>(ENDPOINTS.getBankroll, headers, '');
+    const response = await makePostRequest<BankrollResponse>(ENDPOINTS.getBankroll, headers, '', policy);
     if (!response || response.success !== true) {
         return null;
     }

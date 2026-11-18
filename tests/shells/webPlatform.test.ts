@@ -27,6 +27,8 @@ describe('the web shell platform module', () => {
     test('the module installs the platform, and the capabilities answer the web values', () => {
         expect(installed).toBeDefined();
         const capabilities = installed.capabilities;
+        // The runtime the installation scenario names as `web`.
+        expect(capabilities.executor).toBe('web');
         expect(capabilities.refreshMissionNeeds).toBe(false);
         expect(capabilities.snapAllowed).toBe(true);
         expect(capabilities.backgroundServiceOwnsScenarios()).toBe(false);

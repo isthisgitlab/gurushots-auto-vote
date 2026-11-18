@@ -29,6 +29,7 @@ import { mockSwapBackLedger } from '../swapBackStore';
 import { createMemoryAutoSpendLedger } from '../currencyAutoStore';
 import { createMemoryEntryAgeLedger } from '../entryAgeStore';
 import { mockScenarioStateLedger } from '../scenarioStateStore';
+import { publishInstallationOverlay } from '../services/scenarioRunner/installation';
 import { mockMethod } from './simulate';
 
 import type { MissionNeeds } from '../services/missions';
@@ -173,6 +174,16 @@ const createMockStrategy = (client: MockEndpoints) => {
             // completes empty. Log the condition but keep the same contract.
             logger.withCategory('authentication').error('No token provided, voting pass will find no challenges', null);
         }
+        // The installation scenario's settings, published by its owner first, as in real (over the in-memory ledger).
+        await publishInstallationOverlay({
+            token,
+            ledger: mockScenarioStateLedger,
+            reads: {
+                getBankroll: client.getBankroll,
+                getMyMissions: client.getMyMissions,
+                getMyCompletedChallenges: client.getMyCompletedChallenges,
+            },
+        });
         // Mission read (only while a mission setting is on), as in real.
         const missions = await loadMissionNeeds(token, Date.now(), { getMyMissions: client.getMyMissions });
         const unregisterMissionNeeds = registerMissionNeeds(token, missions);

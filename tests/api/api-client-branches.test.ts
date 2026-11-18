@@ -31,7 +31,7 @@ jest.mock(
     { virtual: true },
 );
 
-jest.mock('../../src/ts/core/settings', () => ({ getSetting: jest.fn() }));
+jest.mock('../../src/ts/core/settings', () => ({ getSetting: jest.fn(), captureInstallationSettings: jest.fn() }));
 
 jest.mock('../../src/ts/core/timing', () => ({ sleep: jest.fn(() => Promise.resolve()) }));
 
@@ -49,6 +49,11 @@ const URL = 'https://api.gurushots.com/edge';
 const defaultSettings = (overrides = {}) => {
     const values: Record<string, unknown> = { apiTimeout: 30, apiMaxRetries: 3, apiRetryBaseDelayMs: 0, ...overrides };
     settings.getSetting.mockImplementation((key) => values[key]);
+    // No installation scenario: the captured policy is the saved values.
+    settings.captureInstallationSettings.mockImplementation((keys) => ({
+        ok: true,
+        values: Object.fromEntries(keys.map((key) => [key, values[key]])),
+    }));
 };
 
 const httpError = (status: number | string, data: unknown, headers: Record<string, string> = {}) => {

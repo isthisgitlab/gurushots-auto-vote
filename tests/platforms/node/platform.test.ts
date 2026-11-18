@@ -43,7 +43,7 @@ const windows: PlatformWindows = {
 
 describe('the node platform', () => {
     test('it has no adapter, native services or Capacitor transport', () => {
-        const p = createNodePlatform(windows);
+        const p = createNodePlatform(windows, 'cli');
         expect(p.http.adapter).toBeNull();
         expect(p.native).toEqual({ autovote: null, foregroundService: null, apkInstaller: null });
         expect(p.wipe.clearSession).toBeNull();
@@ -53,11 +53,11 @@ describe('the node platform', () => {
     });
 
     test('the wipe finds no native plugin to ask, as localData answers without one', async () => {
-        await expect(createNodePlatform(windows).wipe.nativeWipe()).resolves.toBeNull();
+        await expect(createNodePlatform(windows, 'cli').wipe.nativeWipe()).resolves.toBeNull();
     });
 
     test("the user-data markers are the CLI-session lock module's to hold and read", async () => {
-        const wipe = createNodePlatform(windows).wipe;
+        const wipe = createNodePlatform(windows, 'cli').wipe;
         mockLock.isCliSessionActive.mockResolvedValueOnce(true);
         await expect(wipe.markers.isCliSessionActive()).resolves.toBe(true);
         expect(mockLock.isCliSessionActive).toHaveBeenCalledTimes(1);
@@ -69,18 +69,19 @@ describe('the node platform', () => {
     });
 
     test('the windows are the ones the shell passes', () => {
-        expect(createNodePlatform(windows).windows).toBe(windows);
+        expect(createNodePlatform(windows, 'cli').windows).toBe(windows);
     });
 
     test('the constants name the node answers', () => {
-        const c = createNodePlatform(windows).capabilities;
+        const c = createNodePlatform(windows, 'cli').capabilities;
+        expect(c.executor).toBe('cli');
         expect(c.refreshMissionNeeds).toBe(false);
         expect(c.snapAllowed).toBe(true);
         expect(c.recoveryWording).toBe('file');
     });
 
     test('no background service owns the scenarios here', () => {
-        expect(createNodePlatform(windows).capabilities.backgroundServiceOwnsScenarios()).toBe(false);
+        expect(createNodePlatform(windows, 'cli').capabilities.backgroundServiceOwnsScenarios()).toBe(false);
     });
 
     test('the log context is the default rule over the electron check and the CLI-start flag, never getContext', () => {
@@ -89,26 +90,26 @@ describe('the node platform', () => {
         // answers GUI.
         mockContextFlags.isElectron = false;
         mockContextFlags.startedViaCli = false;
-        expect(createNodePlatform(windows).capabilities.logContext()).toBe('CLI');
+        expect(createNodePlatform(windows, 'cli').capabilities.logContext()).toBe('CLI');
         mockContextFlags.isElectron = false;
         mockContextFlags.startedViaCli = true;
-        expect(createNodePlatform(windows).capabilities.logContext()).toBe('CLI');
+        expect(createNodePlatform(windows, 'cli').capabilities.logContext()).toBe('CLI');
         mockContextFlags.isElectron = true;
         mockContextFlags.startedViaCli = false;
-        expect(createNodePlatform(windows).capabilities.logContext()).toBe('GUI');
+        expect(createNodePlatform(windows, 'cli').capabilities.logContext()).toBe('GUI');
         mockContextFlags.isElectron = true;
         mockContextFlags.startedViaCli = true;
-        expect(createNodePlatform(windows).capabilities.logContext()).toBe('CLI');
+        expect(createNodePlatform(windows, 'cli').capabilities.logContext()).toBe('CLI');
     });
 
     test('the hourly cleanup is armed only for an Electron or CLI start', () => {
         mockContextFlags.isElectron = true;
         mockContextFlags.startedViaCli = false;
-        expect(createNodePlatform(windows).capabilities.logCleanup).toBe(true);
+        expect(createNodePlatform(windows, 'cli').capabilities.logCleanup).toBe(true);
         mockContextFlags.isElectron = false;
         mockContextFlags.startedViaCli = true;
-        expect(createNodePlatform(windows).capabilities.logCleanup).toBe(true);
+        expect(createNodePlatform(windows, 'cli').capabilities.logCleanup).toBe(true);
         mockContextFlags.startedViaCli = false;
-        expect(createNodePlatform(windows).capabilities.logCleanup).toBe(false);
+        expect(createNodePlatform(windows, 'cli').capabilities.logCleanup).toBe(false);
     });
 });

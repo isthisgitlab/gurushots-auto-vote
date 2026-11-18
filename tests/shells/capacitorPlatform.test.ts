@@ -195,6 +195,7 @@ describe('the Capacitor shell platform module', () => {
     });
 
     test('the installed capability answers through the plugin-backed native part', () => {
+        expect(installed.capabilities.executor).toBe('android-app');
         expect(installed.capabilities.backgroundServiceOwnsScenarios()).toBe(true);
     });
 });

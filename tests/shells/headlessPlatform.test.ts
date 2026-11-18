@@ -30,6 +30,7 @@ describe('the headless shell platform module', () => {
         // The headless cycle has no pass-scoped fetch, and Snap is skipped
         // there; recovery names the store to clear; the log context answers
         // CLI without Electron and the hourly cleanup is not armed.
+        expect(capabilities.executor).toBe('android-service');
         expect(capabilities.refreshMissionNeeds).toBe(true);
         expect(capabilities.snapAllowed).toBe(false);
         expect(capabilities.backgroundServiceOwnsScenarios()).toBe(false);

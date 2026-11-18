@@ -122,6 +122,7 @@ describe('the webview platform', () => {
 
     test('the capabilities name the app WebView answers', () => {
         const c = createWebviewPlatform(parts()).capabilities;
+        expect(c.executor).toBe('android-app');
         expect(c.refreshMissionNeeds).toBe(false);
         expect(c.snapAllowed).toBe(true);
         expect(c.recoveryWording).toBe('store');

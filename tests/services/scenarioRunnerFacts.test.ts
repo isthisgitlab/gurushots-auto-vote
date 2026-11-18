@@ -15,7 +15,7 @@ jest.mock('../../src/ts/core/settings', () => ({
     getEntryPins: jest.fn(),
     getEffectiveTagSetting: jest.fn(),
     getEffectiveSetting: jest.fn(),
-    getSetting: jest.fn(),
+    getSetting: jest.fn((key: string) => ({ apiTimeout: 30, apiMaxRetries: 3, apiRetryBaseDelayMs: 500 })[key]),
 }));
 jest.mock('../../src/ts/core/services/autoFill', () => ({ scanFillCandidates: jest.fn() }));
 
@@ -39,6 +39,8 @@ type CategoryMock = { warning: jest.MockedFunction<CategoryLogger['warning']> };
 const log = (loggerModule as typeof loggerModule & { __category: CategoryMock }).__category;
 
 const NOW = Math.floor(Date.now() / 1000);
+// What the settings mock above saves as the API timeout, retries and backoff.
+const SAVED_POLICY = { timeoutSec: 30, maxRetries: 3, retryBaseDelayMs: 500 };
 const warnings = () => log.warning.mock.calls.map((call) => call[0]);
 
 const lit = (value: number, quantity = 'count') => ({ kind: 'literal', value, quantity });
@@ -174,7 +176,8 @@ describe('what is fetched', () => {
 
     test('a balance fact only inside a compare expression loads the bankroll', async () => {
         const evidence = await loadScenarioSnapshot(scenario([compare('balance.coins', 'coins')]), ctx());
-        expect(getBankroll).toHaveBeenCalledWith('tok');
+        // an evidence read runs under the saved transport policy, handed over as data
+        expect(getBankroll).toHaveBeenCalledWith('tok', SAVED_POLICY);
         expect(evidence).toEqual({ bankroll: { keys: 1, swaps: 2, fills: 3, coins: 4 } });
         expect(getMyMissions).not.toHaveBeenCalled();
     });
@@ -308,7 +311,7 @@ describe('missions', () => {
             mission('Use Fill 3 times', 1, 3, { expiration_timestamp: NOW + 600 }),
         ]);
         const { missions } = await loadScenarioSnapshot(scenario([compare('missions.joinNeed')]), ctx());
-        expect(getMyMissions).toHaveBeenCalledWith('tok');
+        expect(getMyMissions).toHaveBeenCalledWith('tok', SAVED_POLICY);
         expect(missions).toEqual({
             readable: true,
             needs: { join: 5, fill: 2, turbo: 0, boost: 0, vote: 0 },
@@ -349,7 +352,7 @@ describe('rewards', () => {
     test('a short page ends the listing: the claimable ids, the listed ids, complete', async () => {
         getMyCompletedChallenges.mockResolvedValue([completed(7, 'CLAIM'), completed(8, 'CLAIMED')]);
         const { rewards } = await loadScenarioSnapshot(rewardScenario, ctx());
-        expect(getMyCompletedChallenges).toHaveBeenCalledWith('tok', 0, 20);
+        expect(getMyCompletedChallenges).toHaveBeenCalledWith('tok', 0, 20, SAVED_POLICY);
         expect(rewards).toEqual({ readable: true, listed: ['7', '8'], claimable: ['7'], complete: true });
     });
 

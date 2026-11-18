@@ -27,6 +27,7 @@ import { getEntryAgeLedger } from '../../core/apiFactory';
 import {
     computeDueNotifications,
     createDedupe,
+    filterStillEnabled,
     formatNotification,
     readNotificationConfig,
 } from '../../core/services/deadlineNotifications';
@@ -41,6 +42,30 @@ import type { Translate, TranslateVars } from '../../core/translations/translato
 import { errorMessage } from '../../core/errorMessage';
 
 const notifyTranslator = createTranslator();
+
+/**
+ * The installation's effective value of a notification setting (the saved one, or the installation scenario's published
+ * phase over it), for the Node host that has the settings facade. One that cannot be read (the phase overlays it and no
+ * valid publication stands) answers `false`: the switch is off and the lead time is none, so nothing is sent on the saved
+ * value; the reason is said once while it lasts.
+ */
+const createEffectiveNotifySetting = (): ((key: string) => unknown) => {
+    let said: string | null = null;
+    return (key) => {
+        const captured = settings.captureInstallationSettings([key]);
+        if (captured.ok) {
+            said = null;
+            return captured.values[key];
+        }
+        if (said !== captured.reason) {
+            said = captured.reason;
+            logger
+                .withCategory('voting')
+                .warning(`notifications are off while ${captured.key} is unavailable (${captured.reason})`, null);
+        }
+        return false;
+    };
+};
 
 /**
  * Resolve an i18n template in the user's saved language through the shared
@@ -107,7 +132,7 @@ const createNodeDeadlineNotifier = (
     } = {},
 ): ((challenges: Challenge[] | null | undefined, now: number) => Promise<void>) => {
     const describeDeadlineActions = deps.describeDeadlineActions || votingLogic.describeDeadlineActions;
-    const getSetting = deps.getSetting || ((key) => settings.getGlobalDefault(key));
+    const getSetting = deps.getSetting || createEffectiveNotifySetting();
     const translate = deps.translate || nodeTranslate;
     const deliver = deps.deliver || deliverOsNotification;
 
@@ -127,6 +152,8 @@ const createNodeDeadlineNotifier = (
             const entryAges = getEntryAgeLedger();
             const perChallengeActions = [];
             for (const challenge of list) {
+                // Its timings come from the challenge's own settings: an unavailable challenge produces no deadline.
+                if (!settings.scenarioSubjectAvailable(challenge?.id)) continue;
                 try {
                     const { actions } = describeDeadlineActions(challenge, now, entryAges) || {};
                     // dataIssues carries the boundary's mark, so the decision
@@ -143,7 +170,9 @@ const createNodeDeadlineNotifier = (
             }
 
             const due = computeDueNotifications(perChallengeActions, now, config);
-            const fresh = dedupe.filterNew(due);
+            // The switches again, immediately before delivery: a notice turned off since the cycle began is not sent.
+            const sendable = filterStillEnabled(due, readNotificationConfig(getSetting).enabled);
+            const fresh = dedupe.filterNew(sendable);
             const notification = formatNotification(fresh, translate);
             if (notification) deliver(notification);
         } catch (error) {
@@ -172,9 +201,10 @@ const createNodeScenarioNotifier = (
         deliver?: (n: { title: string; body: string }) => void;
     } = {},
 ): ((challenges: Challenge[]) => Promise<void>) => {
-    const getSetting = deps.getSetting || ((key) => settings.getGlobalDefault(key));
+    const getSetting = deps.getSetting || createEffectiveNotifySetting();
     const getStatus = deps.getStatus || getScenarioStatus;
     return createScenarioNotifier({
+        // `false` while the effective switch cannot be read (see createEffectiveNotifySetting).
         isEnabled: () => getSetting('notifyOnScenario') !== false,
         readOutbox: (challenge) => getStatus(String(challenge.id)).state?.outbox,
         translate: deps.translate || nodeTranslate,

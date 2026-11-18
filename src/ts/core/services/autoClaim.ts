@@ -57,13 +57,24 @@ const MAX_COMPLETED_PAGES = 5;
 
 let lastClaimAt = 0;
 
+const cat = () => logger.withCategory('claim');
+
+/**
+ * Whether the prize claim is on, as the installation's effective switch reads now (the saved one, or the published phase
+ * over it); `reason` says why when it cannot be read, which counts as off: nothing is claimed without knowing it is wanted.
+ */
+const claimSwitch = (): { enabled: boolean; reason: string | null } => {
+    const captured = settings.captureInstallationSettings(['autoClaimPrizes']);
+    return captured.ok
+        ? { enabled: captured.values.autoClaimPrizes === true, reason: null }
+        : { enabled: false, reason: `${captured.key} is unavailable (${captured.reason})` };
+};
+
 // Read the same clock that gates runClaimPass; zero means due on the first cycle.
 const getAutoClaimStatus = () => ({
-    enabled: settings.getEffectiveSetting('autoClaimPrizes', null) === true,
+    enabled: claimSwitch().enabled,
     nextClaimAt: lastClaimAt === 0 ? 0 : lastClaimAt + CLAIM_INTERVAL_MS,
 });
-
-const cat = () => logger.withCategory('claim');
 
 /**
  * A challenge's reward resources carry `value`, a mission's prizes `amount`.
@@ -177,7 +188,10 @@ const runClaimPass = async (
     deps: ClaimDeps,
 ): Promise<{ ran: boolean; challengesClaimed: number; missionsClaimed: number; results: ClaimResult[] }> => {
     const skipped = { ran: false, challengesClaimed: 0, missionsClaimed: 0, results: [] };
-    if (!token || settings.getEffectiveSetting('autoClaimPrizes', null) !== true) return skipped;
+    if (!token) return skipped;
+    const claim = claimSwitch();
+    if (claim.reason !== null) cat().warning(`prizes are not claimed this cycle: ${claim.reason}`, null);
+    if (!claim.enabled) return skipped;
     if (now - lastClaimAt < CLAIM_INTERVAL_MS) return skipped;
     lastClaimAt = now;
 

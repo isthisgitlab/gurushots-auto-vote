@@ -24,10 +24,13 @@ import { createNodeStorage } from './store';
 import { createNodeWipe } from './wipe';
 
 import type { Platform, PlatformWindows } from '../../core/platform/port';
+import type { InstallationExecutor } from '../../core/types/config';
 
 type ContextModule = typeof import('../../core/logger/context');
 type PathsModule = typeof import('./paths');
 type NodeAssetParts = Parameters<typeof createNodeAssets>[0];
+/** The runtimes of this family. */
+type NodeExecutor = Extract<InstallationExecutor, 'electron' | 'cli' | 'web'>;
 
 const context = (): ContextModule => require('../../core/logger/context') as ContextModule;
 const paths = (): PathsModule => require('./paths') as PathsModule;
@@ -40,8 +43,8 @@ const createNodeNative = (): Platform['native'] => ({
     apkInstaller: null,
 });
 
-const createNodeCapabilities = (): Platform['capabilities'] => ({
-    // The mission-needs refresh resolver is the headless cycle's; Snap plays
+const createNodeCapabilities = (executor: NodeExecutor): Platform['capabilities'] => ({
+    // The runtime the shell is (Electron, the CLI or the web server): it names itself, the family cannot tell. The mission-needs refresh resolver is the headless cycle's; Snap plays
     // from the app, the desktop and the CLI; the scenarios are owned by the
     // native service, of which node has none; recovery names the file to
     // delete; the log context and the hourly cleanup are the logger's own
@@ -49,6 +52,7 @@ const createNodeCapabilities = (): Platform['capabilities'] => ({
     // family's Electron check and the context's CLI-start flag: the
     // setContext override stays inside logger/context, and this member must
     // not call getContext (the port's doc says why).
+    executor,
     refreshMissionNeeds: false,
     snapAllowed: true,
     backgroundServiceOwnsScenarios: () => false,
@@ -62,10 +66,15 @@ const createNodeCapabilities = (): Platform['capabilities'] => ({
 /**
  * The node platform; `windows` is the shell's (Electron's broadcast and
  * relaunch, the web server's, or the CLI's explicit no-ops — each shell
- * module passes its own), and `parts` carries the shell-only members a shell
- * injects (the CLI's vision-runtime extractor).
+ * module passes its own), `executor` is the runtime the shell is, and `parts`
+ * carries the shell-only members a shell injects (the CLI's vision-runtime
+ * extractor).
  */
-const createNodePlatform = (windows: PlatformWindows, parts: NodeAssetParts = {}): Platform => ({
+const createNodePlatform = (
+    windows: PlatformWindows,
+    executor: NodeExecutor,
+    parts: NodeAssetParts = {},
+): Platform => ({
     http: createNodeHttp(),
     storage: createNodeStorage(),
     paths: createNodePaths(),
@@ -73,7 +82,7 @@ const createNodePlatform = (windows: PlatformWindows, parts: NodeAssetParts = {}
     wipe: createNodeWipe(),
     native: createNodeNative(),
     windows,
-    capabilities: createNodeCapabilities(),
+    capabilities: createNodeCapabilities(executor),
 });
 
 export { createNodePlatform, extractedVisionRootOf, __resetExtractedRootForTests };

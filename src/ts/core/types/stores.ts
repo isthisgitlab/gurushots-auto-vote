@@ -167,6 +167,11 @@ export interface ScenarioPublication {
     bindings: Record<string, unknown>;
     /** The profile the phase selected, or null. */
     profile: string | null;
+    /**
+     * Set on the installation's publication only: the installation generation (the owner fence) it was prepared under.
+     * A publication made under another generation is not read.
+     */
+    generation?: number;
 }
 
 /** A challenge's runtime position in its scenario (scenarioStateStore record). */

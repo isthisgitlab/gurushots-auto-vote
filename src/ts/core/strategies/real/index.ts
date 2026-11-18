@@ -39,6 +39,7 @@ import {
     refreshScenarioStateAsync,
 } from '../../scenarioStateStore';
 import { backgroundServiceOwnsScenarios } from '../../services/scenarioRunner';
+import { publishInstallationOverlay } from '../../services/scenarioRunner/installation';
 import { sleep, getRandomDelay } from '../../timing';
 import * as logger from '../../logger';
 import * as settings from '../../settings';
@@ -274,6 +275,14 @@ const fetchChallengesAndVote = async (
     token: string,
     challengeIdFilter: string | number | null = null,
 ): Promise<{ success: boolean; message?: string; error?: string; challenges?: Challenge[] }> => {
+    // The installation scenario's settings for this cycle, published by its owner before anything reads them (never
+    // thrown: a runtime that is not the owner only reads what the owner published).
+    await publishInstallationOverlay({
+        token,
+        ledger: scenarioStateLedger,
+        lock: scenarioStepLock,
+        reads: { getBankroll, getMyMissions, getMyCompletedChallenges },
+    });
     // What the active missions still need — read only while a mission setting is
     // on, shared by the join pre-step and the pass, which count it down.
     const missions = await loadMissionNeeds(token, Date.now(), { getMyMissions });

@@ -109,6 +109,13 @@ export const scenarioSubjectReason = challengeOverrides.scenarioSubjectReason;
 export const scenarioOverlayStatus = challengeOverrides.scenarioOverlayStatus;
 export const prepareScenarioSnapshot = challengeOverrides.prepareScenarioSnapshot;
 export const ScenarioSettingUnavailableError = challengeOverrides.ScenarioSettingUnavailableError;
+// The installation scenario's settings (account policy, app and device preferences) as the code that acts on them reads them:
+// the saved value with the published phase over it, captured at the consumer's boundary. Saved values never change.
+export const getInstallationSetting = challengeOverrides.getInstallationSetting;
+export const readInstallationSetting = challengeOverrides.readInstallationSetting;
+export const captureInstallationSettings = challengeOverrides.captureInstallationSettings;
+export const prepareInstallationSnapshot = challengeOverrides.prepareInstallationSnapshot;
+export type InstallationCapture<K extends string> = challengeOverrides.InstallationCapture<K>;
 export type ScenarioOverlayStatus = challengeOverrides.ScenarioOverlayStatus;
 export type ScenarioSnapshot = challengeOverrides.ScenarioSnapshot;
 export type BindingResolution = challengeOverrides.BindingResolution;

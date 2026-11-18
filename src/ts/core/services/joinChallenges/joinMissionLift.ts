@@ -18,6 +18,8 @@ import { isScenarioUnavailable, resolveCandidateConfig, resolveJoinSetting } fro
 type JoinPassState = {
     bankroll: Bankroll | null;
     remainingBudget: number;
+    /** Auto Join Short Challenges Immediately, as the pass captured it when it started. */
+    shortChallengesImmediately: boolean;
     nowSec: number;
     missingCloseTimeLogged: boolean;
     /** Whether the one-per-pass after-start clamp note has fired. */
@@ -93,6 +95,7 @@ const joinMissionLift = (
     bankroll: Bankroll | null,
     remainingBudget: number,
     nowSec: number,
+    shortChallengesImmediately: boolean,
 ): { lift: number; wouldJoin: number } => {
     // The probe's earlyJoins stays at 1, deliberately not decremented per
     // counted join — it asks "would this join with the window lifted?",
@@ -104,6 +107,7 @@ const joinMissionLift = (
         // any join runs. remainingBudget is a number and copies by value.
         bankroll: bankroll ? { ...bankroll } : null,
         remainingBudget,
+        shortChallengesImmediately,
         nowSec,
         missingCloseTimeLogged: false,
         afterStartClampLogged: false,
@@ -119,7 +123,12 @@ const joinMissionLift = (
         // alreadyPaid: false deliberately undercounts candidates with an
         // unlock claim on file (the real pass joins those submit-only,
         // spending nothing) — conservative, accepted.
-        const decision = decideCandidateJoin(challenge, resolveCandidateConfig(challenge), probePass, false);
+        const decision = decideCandidateJoin(
+            challenge,
+            resolveCandidateConfig(challenge, shortChallengesImmediately),
+            probePass,
+            false,
+        );
         if (!decision.join) continue;
         wouldJoin += 1;
         // Count cumulative affordability across the cycle, not each

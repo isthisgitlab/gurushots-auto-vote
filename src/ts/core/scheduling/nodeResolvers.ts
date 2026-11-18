@@ -21,7 +21,22 @@ import type {
     ResolveAutoSubmitSchedule,
 } from './thresholdWindow';
 import type { ResolveScheduledFill } from './scheduledFill';
+import type { ConfigApp } from '../types/config';
 import type { RuleTiming } from '../voting/currencyAuto';
+
+/**
+ * The app settings one cadence decision runs on, captured once as the decision starts: the saved app block with the
+ * installation's cadence settings over it (the check frequency and the time zone: the saved ones, or the installation
+ * scenario's published phase over them). A decision keeps what it captured, so a publication that lands while it runs
+ * applies from the next decision, and a time zone is never changed under a cycle in flight. Throws when one of them is
+ * unavailable (the phase overlays it and no valid publication stands): the saved value never takes its place, and the chain's
+ * own degraded path answers with a plain retry beat, saying so.
+ */
+const loadCadenceSettings = (): ConfigApp => {
+    const captured = settings.captureInstallationSettings(['timezone', 'checkFrequencyMin', 'checkFrequencyMax']);
+    if (!captured.ok) throw new Error(`${captured.key} is unavailable (${captured.reason})`);
+    return { ...settings.loadSettings().app, ...captured.values };
+};
 
 // Per-challenge lastMinuteThreshold for the shared threshold math. A challenge whose scenario settings are unavailable
 // (settings.scenarioSubjectAvailable) has no threshold to wake for: NaN is compared with nothing, so it is left out of
@@ -118,6 +133,7 @@ const resolveScenarioWake = ((challengeId: string) =>
     scenarioWakeInput(getScenarioStatus(challengeId))) satisfies ResolveScenarioWake;
 
 export {
+    loadCadenceSettings,
     resolveScenarioWake,
     resolveThreshold,
     resolveScheduledFill,

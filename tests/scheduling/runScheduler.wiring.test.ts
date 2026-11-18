@@ -9,6 +9,12 @@
 
 jest.mock('../../src/ts/core/settings', () => ({
     loadSettings: jest.fn(() => ({ app: { checkFrequencyMin: 3, checkFrequencyMax: 3 } })),
+    // The cadence settings of a decision are captured through the installation read (saved values with no installation
+    // scenario); `timezone` is the one the saved app block here does not hold.
+    captureInstallationSettings: jest.fn(() => ({
+        ok: true,
+        values: { timezone: 'UTC', checkFrequencyMin: 3, checkFrequencyMax: 3 },
+    })),
     getSetting: jest.fn(() => 3),
     getEffectiveSetting: jest.fn(() => 5),
     consumeChosenPhotos: jest.fn(() => false),
@@ -99,7 +105,7 @@ describe('log callbacks', () => {
 describe('transport deps', () => {
     test('settings and fetch passthroughs, and runCycle unwraps the challenge list', async () => {
         const { runVotingCycle, getActiveChallenges } = make(invalid({ success: true, challenges: ['x'] }));
-        expect(mockChainOpts!.loadSettings()).toEqual({ checkFrequencyMin: 3, checkFrequencyMax: 3 });
+        expect(mockChainOpts!.loadSettings()).toEqual({ checkFrequencyMin: 3, checkFrequencyMax: 3, timezone: 'UTC' });
         await mockChainOpts!.fetchChallenges();
         expect(getActiveChallenges).toHaveBeenCalledTimes(1);
         expect(mockChainOpts!.resolveLastMinuteCheckMinutes()).toBe(5);

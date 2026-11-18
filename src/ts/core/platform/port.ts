@@ -20,6 +20,7 @@ import type { BroadcastSettingsChange } from '../ipc/settingsThinHandlers';
 import type { DroppedSaveOps } from '../settings/saveDropped';
 import type { QuarantineResult, WriteIfAbsentResult, WriteResult } from '../settings/storageTypes';
 import type { AutoVoteStatus } from '../types/capacitor';
+import type { InstallationExecutor } from '../types/config';
 import type { CasAnswer, ThroughResult } from '../types/stores';
 import type { TransformersModule } from '../types/vision';
 
@@ -312,6 +313,11 @@ export type PlatformWindows = {
  * on state that changes at runtime is a function; the rest are constants.
  */
 export type PlatformCapabilities = {
+    /**
+     * Which runtime this is, as the installation scenario names its owner (types/config.ts InstallationExecutor): only the
+     * runtime the assignment names publishes the installation's settings. Every shell supplies its own.
+     */
+    executor: InstallationExecutor;
     /** Whether the pass builds the mission-needs refresh resolver (the headless cycle has no pass-scoped fetch). */
     refreshMissionNeeds: boolean;
     /** Whether Snap turbo may be played from here. */
