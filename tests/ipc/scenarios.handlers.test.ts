@@ -264,7 +264,7 @@ describe('status and reset', () => {
             bound: true,
             available: false,
             reason: 'nothing is published for this phase yet',
-            sources: { literals: [], bindings: ['exposure'], profile: [] },
+            sources: { patch: [], literals: [], bindings: ['exposure'], profile: [] },
             published: null,
         };
         settings.scenarioOverlayStatus.mockReturnValueOnce(overlay);

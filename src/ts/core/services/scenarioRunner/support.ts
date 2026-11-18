@@ -13,7 +13,9 @@ import type { SpendOutcome } from '../currencyActions';
 import type {
     ActionEffects,
     ActiveContext,
+    ActionOutcome,
     DoneOutcome,
+    JoinAttempt,
     NotDoneOutcome,
     ScenarioAction,
     SpendAction,
@@ -44,6 +46,20 @@ const SPEND: Record<SpendAction, { action: 'swap' | 'key' | 'fill'; limit: Spend
 const isSpend = (action: ScenarioAction): action is ScenarioAction & { type: SpendAction } =>
     Object.hasOwn(SPEND, action.type);
 
+// The spends a `runAutomation` operation makes through the normal automation's own runner.
+const AUTOMATION_SPEND: Readonly<Record<string, SpendAction | undefined>> = {
+    unlockBoost: 'unlockBoost',
+    swap: 'swap',
+    fillExposure: 'fillExposure',
+};
+
+/**
+ * The currency spend a step may make, if any: a spending action, or a `runAutomation` of a spending operation. It is the
+ * identity the step's write-ahead marker, its unclear marker and its limit go by.
+ */
+const spendOf = (action: ScenarioAction): SpendAction | undefined =>
+    action.type === 'runAutomation' ? AUTOMATION_SPEND[action.operation] : isSpend(action) ? action.type : undefined;
+
 /**
  * What a spend is given to make its request with: it sends the request only after the spend is written down.
  */
@@ -69,6 +85,28 @@ const done = (effects: ActionEffects = {}): DoneOutcome => ({ status: 'done', ..
 const skipped = (message: string): NotDoneOutcome => ({ status: 'skipped', message });
 const failed = (message: string): NotDoneOutcome => ({ status: 'failed', message });
 const deferred = (message: string): NotDoneOutcome => ({ status: 'deferred', message });
+
+/**
+ * What a join attempt comes to as a step. Joined is done. Paid for (or possibly paid for) and not entered: the step is retried,
+ * the claim on file makes the retry submit only (it never unlocks again), and the coins count against the limit as spent.
+ * Any other refusal: a skip under the scenario's own decision (`direct`); under the pass's normal policy (`normal`) a
+ * refusal that spent nothing is the policy saying not now, which completes the step and says why.
+ */
+const joinOutcome = (attempt: JoinAttempt, policy: 'direct' | 'normal'): ActionOutcome => {
+    const coins = attempt.charged + attempt.maybeCharged;
+    if (attempt.status === 'joined') return done({ coins });
+    if (attempt.status === 'charged-pending-submit') {
+        return {
+            ...failed('the join is paid for but not completed yet; it is retried without paying again'),
+            coins,
+            resume: true,
+        };
+    }
+    const message = `the join was not made (${attempt.status})`;
+    if (attempt.status === 'busy') return deferred(message);
+    if (attempt.status === 'failed-no-charge' || attempt.status === 'error') return failed(message);
+    return policy === 'normal' ? done({ notDue: attempt.status }) : skipped(message);
+};
 
 /**
  * The end of a rule whose spend got no answer and cannot be shown to have taken effect: it is not spent again, and
@@ -194,11 +232,6 @@ const lockedCurrencySpend = async (
 const currencyDeps = (ctx: ActiveContext) => ({ strategy: ctx.pass.currency.strategy, logger, settings });
 
 /**
- * What entry selectors read: remembered photos, and vote history for `fastest`.
- */
-const selectContext = (state: ScenarioState) => ({ memory: state.memory, history: state.history, now: nowSec() });
-
-/**
  * The photo a `with` / `photo` source names: a remembered id, or null for "best".
  * undefined when the memory slot is empty.
  */
@@ -211,17 +244,18 @@ export {
     nowSec,
     limitOf,
     isSpend,
+    spendOf,
     done,
     skipped,
     failed,
     deferred,
+    joinOutcome,
     refreshLive,
     spendAllowed,
     lockedCurrencySpend,
     noAnswer,
     unclearHalted,
     currencyDeps,
-    selectContext,
     rememberedPhoto,
 };
 export type { Retry };

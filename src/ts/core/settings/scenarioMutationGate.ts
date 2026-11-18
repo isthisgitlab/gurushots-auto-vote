@@ -8,7 +8,7 @@
 
 import { acquireUnlockLock } from '../joinStateStore';
 import { isPlainObject } from '../plainObject';
-import { INSTALLATION_KEY, scenarioStateLedger, scenarioStepLock } from '../scenarioStateStore';
+import { INSTALLATION_KEY, ledgerFor, scenarioStepLock } from '../scenarioStateStore';
 import { isCount } from '../scenarioStateFile';
 import type { StateLock } from '../scenarioStateStore';
 import { loadSettings } from './persistence';
@@ -59,7 +59,7 @@ const subjectKeys = (settings: ConfigV2, plan: Plan): { keys: string[]; unreadab
             if (isPlainObject(record.values) && names.has(normalizeProfileName(record.values.scenario))) keys.add(id);
         }
         if (names.has(normalizeProfileName(settings.installationScenario?.scenario))) keys.add(INSTALLATION_KEY);
-        const listed = scenarioStateLedger.list();
+        const listed = ledgerFor(settings.app.mock === true).list();
         unreadable = listed.corrupt !== false || listed.subjects.some(({ state }) => state === null);
         for (const { key, state } of listed.subjects) {
             if (state && names.has(normalizeProfileName(state.scenario))) keys.add(key);
@@ -69,9 +69,10 @@ const subjectKeys = (settings: ConfigV2, plan: Plan): { keys: string[]; unreadab
 };
 
 /** The first subject that cannot be changed over: why, or null. */
-const refusalFor = (keys: readonly string[]): GateRefusal | null => {
+const refusalFor = (settings: ConfigV2, keys: readonly string[]): GateRefusal | null => {
+    const ledger = ledgerFor(settings.app.mock === true);
     for (const key of keys) {
-        const { corrupt, state } = scenarioStateLedger.get(key);
+        const { corrupt, state } = ledger.get(key);
         if (corrupt) return 'state-unreadable';
         if (state && unresolvedWork(state)) return 'unresolved-work';
     }
@@ -95,7 +96,8 @@ const runGated = <T>(
     try {
         const first = loadSettings();
         const planned = subjectKeys(first, plan(first)).keys;
-        for (const key of planned) {
+        // Mock mode runs in one process, over progress that lives in memory: no step lock is taken for it.
+        for (const key of first.app.mock === true ? [] : planned) {
             const lock = scenarioStepLock(key);
             if (!lock.ok) return { ok: false, reason: 'busy' };
             held.push(lock);
@@ -107,7 +109,7 @@ const runGated = <T>(
         if (subjects.keys.some((key) => !planned.includes(key))) return { ok: false, reason: 'busy' };
         if (wanted.requireIdle !== false) {
             if (subjects.unreadable) return { ok: false, reason: 'state-unreadable' };
-            const refused = refusalFor(subjects.keys);
+            const refused = refusalFor(settings, subjects.keys);
             if (refused) return { ok: false, reason: refused };
         }
         return { ok: true, value: apply(settings, subjects.keys) };

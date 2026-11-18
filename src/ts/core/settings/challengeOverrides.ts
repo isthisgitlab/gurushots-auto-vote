@@ -18,6 +18,7 @@ import {
     installationLayer,
     isBoundPhase,
     isOverlayKey,
+    checkPhaseProfileIn,
     overlaysInstallation,
     overlaySources,
     prepareInstallationOverlay,
@@ -589,7 +590,7 @@ type ScenarioOverlayStatus = {
     available: boolean;
     reason: string | null;
     /** The keys each source of the phase sets: its literals, its bindings, the profile it selects. */
-    sources: { literals: string[]; bindings: string[]; profile: string[] };
+    sources: { patch: string[]; literals: string[]; bindings: string[]; profile: string[] };
     /** The publication in the ledger, when there is a valid one. */
     published: Pick<ScenarioPublication, 'revision' | 'observedAt' | 'validUntil' | 'profile'> | null;
 };
@@ -599,7 +600,7 @@ const scenarioOverlayStatus = (challengeId: ChallengeIdInput): ScenarioOverlaySt
         bound: false,
         available: true,
         reason: null,
-        sources: { literals: [], bindings: [], profile: [] },
+        sources: { patch: [], literals: [], bindings: [], profile: [] },
         published: null,
     };
     if (!challengeId) return none;
@@ -623,6 +624,11 @@ const scenarioOverlayStatus = (challengeId: ChallengeIdInput): ScenarioOverlaySt
             : null,
     };
 };
+
+/**
+ * Whether a saved profile can be a phase's profile (the `useProfile` action's check): the name as saved, or why not.
+ */
+const checkPhaseProfile = (name: string) => checkPhaseProfileIn(loadSettings(), name);
 
 /** What the runner holds for one evaluation of a phase: what to publish, and how to read settings in it. */
 type ScenarioSnapshot = {
@@ -648,7 +654,7 @@ type BindingResolution = { bound: Record<string, ValueState<ExprValue>>; validUn
 const prepareScenarioSnapshot = (
     challengeId: string | number,
     scenario: ScenarioDocument,
-    state: Pick<ScenarioState, 'phase' | 'phaseEnteredAt' | 'published'>,
+    state: Pick<ScenarioState, 'phase' | 'phaseEnteredAt' | 'published' | 'phasePatch' | 'phaseProfile'>,
     resolveBindings: (readBase: (settingKey: string, view: SettingView) => ValueState<ExprValue>) => BindingResolution,
     now: number,
 ): { ok: true; snapshot: ScenarioSnapshot } | { ok: false; key: string | null; reason: string } => {
@@ -667,8 +673,8 @@ const prepareScenarioSnapshot = (
             return found ? _typedValue(settingKey, found.value) : baseOf(settingKey);
         };
     // A phase with literals only is read straight from the document, as it always was: nothing to publish.
-    if (!isBoundPhase(phase)) {
-        const overlay: ResolvedOverlay = { literals: phase.settings ?? {}, bindings: {}, profile: null };
+    if (!isBoundPhase(phase, state)) {
+        const overlay: ResolvedOverlay = { patch: {}, literals: phase.settings ?? {}, bindings: {}, profile: null };
         return { ok: true, snapshot: { publication: null, readSetting: reader(overlay, false) } };
     }
     // A binding is worked out before the overlay exists, so it reads the base view only.
@@ -768,14 +774,14 @@ const captureInstallationSettings = <K extends string>(settingKeys: readonly K[]
  */
 const prepareInstallationSnapshot = (
     scenario: ScenarioDocument,
-    state: Pick<ScenarioState, 'phase' | 'phaseEnteredAt' | 'published'>,
+    state: Pick<ScenarioState, 'phase' | 'phaseEnteredAt' | 'published' | 'phasePatch'>,
     resolveBindings: (readBase: (settingKey: string, view: SettingView) => ValueState<ExprValue>) => BindingResolution,
     generation: number,
     now: number,
 ): { ok: true; publication: ScenarioPublication | null } | { ok: false; key: string | null; reason: string } => {
     const settings = loadSettings();
     const phase = scenario.phases[state.phase];
-    if (!overlaysInstallation(phase)) return { ok: true, publication: null };
+    if (!overlaysInstallation(phase, state)) return { ok: true, publication: null };
     const baseRaw = _baseRawValues(settings, null);
     const baseOf = (settingKey: string): ValueState<ExprValue> =>
         Object.hasOwn(baseRaw, settingKey)
@@ -898,6 +904,7 @@ export {
     scenarioSubjectReason,
     scenarioOverlayStatus,
     prepareScenarioSnapshot,
+    checkPhaseProfile,
     getInstallationSetting,
     readInstallationSetting,
     captureInstallationSettings,

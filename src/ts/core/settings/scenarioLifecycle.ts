@@ -22,7 +22,7 @@
 
 import * as logger from '../logger';
 import { isPlainObject } from '../plainObject';
-import { INSTALLATION_KEY, initialState, refreshScenarioStateAsync, scenarioStateLedger } from '../scenarioStateStore';
+import { INSTALLATION_KEY, initialState, ledgerFor, refreshScenarioStateAsync } from '../scenarioStateStore';
 import { isCount, isReservedSubject } from '../scenarioStateFile';
 import { platform } from '../platform/port';
 import { INSTALLATION_EXECUTORS } from './loadValidation';
@@ -41,6 +41,9 @@ import type { ScenarioDocument } from './scenarioSchema';
 
 const log = () => logger.withCategory('scenario');
 const nowSec = (): number => Math.floor(Date.now() / 1000);
+
+/** The progress ledger of the mode a loaded configuration is in: mock mode never touches the persisted one. */
+const ledgerOf = (settings: ConfigV2) => ledgerFor(settings.app.mock === true);
 
 /** Why a change of one progress record did not land, as every caller words it: `busy`, `not-saved`, else the record could not be read. */
 type RecordFailure = 'busy' | 'not-saved' | 'state-unreadable';
@@ -68,8 +71,9 @@ const getInstallationScenario = (): InstallationScenarioV2 | null => {
  * cannot be read: nothing can be said of a generation then.
  */
 const installationGeneration = (): number | null => {
-    const { corrupt, state } = scenarioStateLedger.get(INSTALLATION_KEY);
-    return corrupt ? null : generationOf(loadSettings(), INSTALLATION_KEY, state);
+    const settings = loadSettings();
+    const { corrupt, state } = ledgerOf(settings).get(INSTALLATION_KEY);
+    return corrupt ? null : generationOf(settings, INSTALLATION_KEY, state);
 };
 
 type InstallationRefusal =
@@ -94,10 +98,11 @@ const isExecutor = (value: unknown): value is InstallationExecutor =>
  * configuration then cannot be saved.
  */
 const advanceInstallationRecord = (
+    settings: ConfigV2,
     generation: number,
     scenario: ScenarioDocument | null,
 ): { ok: true } | { ok: false; reason: RecordFailure } => {
-    const changed = scenarioStateLedger.change(INSTALLATION_KEY, (current) => {
+    const changed = ledgerOf(settings).change(INSTALLATION_KEY, (current) => {
         const same =
             scenario !== null &&
             current !== null &&
@@ -127,18 +132,14 @@ const setInstallationScenario = (
         () => ({ installation: true }),
         (settings): InstallationResult => {
             // The gate read the installation's progress and found it readable.
-            const generation = generationOf(
-                settings,
-                INSTALLATION_KEY,
-                scenarioStateLedger.get(INSTALLATION_KEY).state,
-            );
+            const generation = generationOf(settings, INSTALLATION_KEY, ledgerOf(settings).get(INSTALLATION_KEY).state);
             if (generation !== expectedGeneration) return { ok: false, reason: 'stale-generation', generation };
             const document = name === null ? null : findStoredScenario(settings, name);
             if (name !== null && document === null) return { ok: false, reason: 'unknown-scenario', generation };
             if (document && document.scope !== 'installation')
                 return { ok: false, reason: 'incompatible-scope', generation };
             const next = generation + 1;
-            const moved = advanceInstallationRecord(next, document);
+            const moved = advanceInstallationRecord(settings, next, document);
             if (!moved.ok) return { ok: false, reason: moved.reason, generation };
             const installation = document ? { scenario: document.name, executor, generation: next } : null;
             // `undefined`, not a deleted key: a save merges what it is given over what is stored, which a missing key leaves be.
@@ -163,13 +164,13 @@ const transferInstallationOwner = (executor: InstallationExecutor, expectedGener
         (settings): InstallationResult => {
             const { installationScenario } = settings;
             if (!installationScenario) return { ok: false, reason: 'no-installation' };
-            const read = scenarioStateLedger.get(INSTALLATION_KEY);
+            const read = ledgerOf(settings).get(INSTALLATION_KEY);
             if (read.corrupt) return { ok: false, reason: 'state-unreadable' };
             const generation = generationOf(settings, INSTALLATION_KEY, read.state);
             if (generation !== expectedGeneration) return { ok: false, reason: 'stale-generation', generation };
             const document = findStoredScenario(settings, installationScenario.scenario);
             const next = generation + 1;
-            const moved = advanceInstallationRecord(next, document);
+            const moved = advanceInstallationRecord(settings, next, document);
             if (!moved.ok) return { ok: false, reason: moved.reason, generation };
             const installation = { ...installationScenario, executor, generation: next };
             settings.installationScenario = installation;
@@ -228,11 +229,22 @@ const HANDOFF_REASONS: readonly HandoffRefusal[] = [
 const toHandoffRefusal = (reason: string): HandoffRefusal =>
     HANDOFF_REASONS.find((known) => known === reason) ?? recordFailure(reason);
 
+/** The step of a rule that asks for the handoff (a `handoffScenario` action): the one rule in progress it may begin under. */
+type HandoffFrom = { ruleId: string; actionIndex: number };
+
 /** Why a handoff cannot begin on this record, in the order the reasons are weighed; null when it can. */
-const handoffRefusal = (state: ScenarioState, generation: number, expected: number): HandoffRefusal | null => {
+const handoffRefusal = (
+    state: ScenarioState,
+    generation: number,
+    expected: number,
+    from: HandoffFrom | undefined,
+): HandoffRefusal | null => {
     if (generation !== expected) return 'stale-generation';
     if (unresolvedSpend(state)) return 'unresolved-spend';
-    if (state.inFlight !== null) return 'rule-in-progress';
+    // A rule in progress holds the subject, unless it is the very step that asks for the handoff.
+    const own =
+        from !== undefined && state.inFlight?.ruleId === from.ruleId && state.inFlight.actionIndex === from.actionIndex;
+    if (state.inFlight !== null && !own) return 'rule-in-progress';
     if (state.handoff) return 'handoff-pending';
     return null;
 };
@@ -242,6 +254,10 @@ const finishedRecord = (state: ScenarioState, next: ScenarioDocument | null, gen
     const base: ScenarioState = next ? initialState(next.name, next.start, nowSec()) : { ...state };
     delete base.published;
     delete base.publicationUnreadable;
+    // What a phase of the old scenario patched does not outlive it, and the step that asked for the handoff is over.
+    delete base.phasePatch;
+    delete base.phaseProfile;
+    base.inFlight = null;
     return {
         ...base,
         generation,
@@ -253,11 +269,12 @@ const finishedRecord = (state: ScenarioState, next: ScenarioDocument | null, gen
 
 /** Step (c): finishes the intent, once the assignment stands. */
 const finalizeHandoff = (
+    settings: ConfigV2,
     subject: string,
     intent: NonNullable<ScenarioState['handoff']>,
     next: ScenarioDocument | null,
 ): { ok: true } | { ok: false; reason: RecordFailure | 'handoff-conflict' } => {
-    const changed = scenarioStateLedger.change(subject, (current) =>
+    const changed = ledgerOf(settings).change(subject, (current) =>
         current?.handoff &&
         current.handoff.generation === intent.generation &&
         (current.generation ?? 0) === intent.generation
@@ -281,14 +298,17 @@ const finalizeHandoff = (
  *
  * @param subject - a challenge id, or the installation (`@installation`)
  * @param expectedGeneration - the generation the caller saw
+ * @param from - the step of the rule that asks for it (a `handoffScenario` action), which may be the rule in progress
  */
 const requestScenarioHandoff = async (
     subject: string,
     nextName: string | null,
     expectedGeneration: number,
+    from?: HandoffFrom,
 ): Promise<HandoffResult> => {
     if (subject === '' || isReservedSubject(subject)) return { ok: false, reason: 'invalid-subject' };
-    await refreshScenarioStateAsync();
+    // Mock mode keeps its progress in memory: the persisted store is not read.
+    if (loadSettings().app.mock !== true) await refreshScenarioStateAsync();
     const plan: Plan =
         subject === INSTALLATION_KEY
             ? { installation: true, requireIdle: false }
@@ -299,10 +319,11 @@ const requestScenarioHandoff = async (
             if (subject === INSTALLATION_KEY && !settings.installationScenario) {
                 return { ok: false, reason: 'no-installation' };
             }
-            const { corrupt, state } = scenarioStateLedger.get(subject);
+            const ledger = ledgerOf(settings);
+            const { corrupt, state } = ledger.get(subject);
             if (corrupt) return { ok: false, reason: 'state-unreadable' };
             if (state === null) return { ok: false, reason: 'no-progress' };
-            const refused = handoffRefusal(state, generationOf(settings, subject, state), expectedGeneration);
+            const refused = handoffRefusal(state, generationOf(settings, subject, state), expectedGeneration, from);
             if (refused) return { ok: false, reason: refused };
             const next = nextName === null ? null : findStoredScenario(settings, nextName);
             if (nextName !== null && next === null) return { ok: false, reason: 'unknown-scenario' };
@@ -323,9 +344,14 @@ const requestScenarioHandoff = async (
                 at: nowSec(),
             };
             // (a) the intent: from here on the subject runs nothing, whatever fails next.
-            const written = scenarioStateLedger.change(subject, (current) => {
+            const written = ledger.change(subject, (current) => {
                 if (!current) return { refuse: 'stale-generation' };
-                const again = handoffRefusal(current, generationOf(settings, subject, current), expectedGeneration);
+                const again = handoffRefusal(
+                    current,
+                    generationOf(settings, subject, current),
+                    expectedGeneration,
+                    from,
+                );
                 return again ? { refuse: again } : { ...current, handoff: intent };
             });
             if (!written.ok) return { ok: false, reason: toHandoffRefusal(written.reason) };
@@ -335,7 +361,7 @@ const requestScenarioHandoff = async (
                 return { ok: false, reason: 'not-saved' };
             }
             // (c) the finished record.
-            const finished = finalizeHandoff(subject, intent, next);
+            const finished = finalizeHandoff(settings, subject, intent, next);
             // An intent that changed under the finish is another writer's: the generation the caller saw is stale.
             if (!finished.ok) {
                 return {
@@ -372,7 +398,50 @@ const settleHandoff = (subject: string, state: ScenarioState): HandoffSettlement
         if (normalizeProfileName(assignmentOf(loadSettings(), subject)) !== normalizeProfileName(intent.to))
             return 'failed';
     }
-    return finalizeHandoff(subject, intent, next).ok ? 'finished' : 'failed';
+    return finalizeHandoff(settings, subject, intent, next).ok ? 'finished' : 'failed';
+};
+
+// --- pause and resume ---------------------------------------------------------------------------------------------------
+
+type PauseResult =
+    | { ok: true; paused: boolean }
+    | { ok: false; reason: GateRefusal | 'invalid-subject' | 'no-progress' | 'not-saved' };
+
+/**
+ * The user's pause and resume of one subject (a challenge, or the installation): `paused: true` writes `{ at, reason }`,
+ * `paused: false` clears it. Progress is kept as it is. It takes the subject's step lock without waiting (`busy` while a step
+ * or another change holds it), and touches neither Manual Only nor the Stop fence. Resuming a subject that is not paused is a
+ * success that writes nothing. (The `pauseScenario` action pauses through the runner's own write; only this function resumes.)
+ *
+ * @param subject - a challenge id, or the installation (`@installation`)
+ */
+const setScenarioPaused = (subject: string, paused: boolean, reason = ''): PauseResult => {
+    if (subject === '' || isReservedSubject(subject)) return { ok: false, reason: 'invalid-subject' };
+    const plan: Plan =
+        subject === INSTALLATION_KEY
+            ? { installation: true, requireIdle: false }
+            : { challengeIds: [subject], requireIdle: false };
+    const gated = runGated(
+        () => plan,
+        (settings): PauseResult => {
+            const ledger = ledgerOf(settings);
+            const { corrupt, state } = ledger.get(subject);
+            if (corrupt) return { ok: false, reason: 'state-unreadable' };
+            if (state === null) return { ok: false, reason: 'no-progress' };
+            if (!paused && !state.paused) return { ok: true, paused: false };
+            const changed = ledger.change(subject, (current) => {
+                if (!current) return { refuse: 'no-progress' };
+                if (paused) return { ...current, paused: { at: nowSec(), reason } };
+                const resumed = { ...current };
+                delete resumed.paused;
+                return resumed;
+            });
+            if (!changed.ok) return { ok: false, reason: recordFailure(changed.reason) };
+            log().info(`Scenario of ${subject} ${paused ? 'paused' : 'resumed'}`, null);
+            return { ok: true, paused };
+        },
+    );
+    return gated.ok ? gated.value : { ok: false, reason: gated.reason };
 };
 
 // --- the priority Stop fence -------------------------------------------------------------------------------------------
@@ -560,6 +629,7 @@ export {
     setInstallationScenario,
     transferInstallationOwner,
     requestScenarioHandoff,
+    setScenarioPaused,
     settleHandoff,
     readStopFence,
     initializeStopFence,
@@ -569,4 +639,4 @@ export {
     initializeStopFenceAsync,
     flushStopFenceWrites,
 };
-export type { HandoffResult, InstallationResult, StopFenceRead };
+export type { PauseResult, HandoffResult, InstallationResult, StopFenceRead };

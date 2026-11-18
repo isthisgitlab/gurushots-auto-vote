@@ -25,7 +25,18 @@ export type ScenarioSelector =
     | { by: 'slot'; index: number }
     | { by: 'memory'; slot: string }
     | { by: 'fastest'; window?: Duration; skipProtected?: boolean }
-    | { by: RankingSelectorName; skipProtected?: boolean };
+    | { by: 'slowest'; window?: Duration; skipProtected?: boolean }
+    | { by: RankingSelectorName; skipProtected?: boolean }
+    | { by: 'id'; id: string }
+    | { by: 'pinned'; power: OneOf<typeof vocabulary.PINNED_POWERS> }
+    | { by: 'pendingBoostTarget' }
+    | { by: 'newest' | 'oldest'; time: OneOf<typeof vocabulary.ENTRY_TIME_MODES> }
+    | {
+          by: 'matching';
+          where: EntryPredicate[];
+          order: OneOf<typeof vocabulary.MATCH_ORDERS>;
+          direction: OneOf<typeof vocabulary.ORDER_DIRECTIONS>;
+      };
 
 /** What an expression's number measures: an instant (Unix seconds), a duration (seconds) or a count of something. */
 export type Quantity = OneOf<typeof vocabulary.QUANTITIES>;

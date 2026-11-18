@@ -7,6 +7,7 @@
 
 import { STAGE_ACTIONS } from '../../scenarios/vocabulary';
 import {
+    AUTOMATION_OPERATION_OF,
     OPERATION_OF,
     absorbLeftover,
     finishScenarioRule,
@@ -16,6 +17,7 @@ import {
 import type { ReducerStep } from '../../scenarios/runtime';
 import type { ScenarioState } from '../../types/stores';
 import { consumeMission } from '../missions';
+import { publishChallengeOverlay } from './overlay';
 import type { MissionKind } from '../missions';
 import type {
     ActionHandler,
@@ -26,7 +28,8 @@ import type {
     SpendAction,
     ValidatedRule,
 } from './types';
-import { isSpend, limitOf, log, nowSec, skipped } from './support';
+import type { ActionEffects } from './types';
+import { limitOf, log, nowSec, skipped, spendOf } from './support';
 import type { Retry } from './support';
 import { ACTIONS, settleUnclearSpend } from './actions';
 
@@ -50,11 +53,12 @@ const withNotice = (state: ScenarioState, message: string, at: number): Scenario
  */
 const retryOf = (start: ScenarioState, ruleId: string, firstStep: boolean, action: ScenarioAction): Retry | null => {
     const marker = firstStep && start.inFlight?.ruleId === ruleId ? start.inFlight : null;
-    if (marker?.unclear?.some((type) => type === action.type)) {
+    const spend = spendOf(action);
+    if (spend && marker?.unclear?.includes(spend)) {
         // Counted already; the app, not GuruShots, did not know when it came from a marker the app absorbed.
-        return { count: false, origin: marker.lost?.some((type) => type === action.type) ? 'pending' : 'unclear' };
+        return { count: false, origin: marker.lost?.includes(spend) ? 'pending' : 'unclear' };
     }
-    return marker?.pending === action.type ? { count: true, origin: 'pending' } : null;
+    return spend && marker?.pending === spend ? { count: true, origin: 'pending' } : null;
 };
 
 /**
@@ -134,7 +138,8 @@ const runAction = async (
 ): Promise<ActionOutcome> => {
     const offered: readonly string[] = STAGE_ACTIONS[ctx.stage];
     if (!offered.includes(action.type)) return skipped(`${action.type} is not available in the ${ctx.stage} stage`);
-    if (ctx.stage === 'active' && retry && isSpend(action)) return settleUnclearSpend(action, ctx, state, retry);
+    const spend = spendOf(action);
+    if (ctx.stage === 'active' && retry && spend) return settleUnclearSpend(spend, action, ctx, state, retry);
     // ACTIONS pairs each type with its handler and its stage's context; the union call needs the widened view.
     return (ACTIONS[action.type] as ActionHandler<ScenarioAction>)(action, ctx, state);
 };
@@ -177,13 +182,21 @@ const reducerStep = (
 });
 
 /**
- * The installation's published settings follow its progress: made again after each confirmed action and phase change. That
- * is a write behind the runner's own, so the runner goes on from the record as it now stands (a state it kept would be
- * refused as changed by another writer).
+ * The published settings follow the progress. The installation's are made again after each confirmed action and phase
+ * change; a challenge's after an action that changed its patch or profile (a phase change is published by the next
+ * evaluation). That is a write behind the runner's own, so the runner goes on from the record as it now stands (a state it
+ * kept would be refused as changed by another writer).
+ *
+ * @param settingsChanged - the action changed the runtime patch or profile
  */
-const republished = async (ctx: RunnerContext, state: ScenarioState): Promise<ScenarioState> => {
-    if (ctx.stage !== 'account') return state;
-    await ctx.republish();
+const republished = async (
+    ctx: RunnerContext,
+    state: ScenarioState,
+    settingsChanged: boolean,
+): Promise<ScenarioState> => {
+    if (ctx.stage === 'account') await ctx.overlay.republish();
+    else if (settingsChanged && ctx.stage !== 'postClose') await publishChallengeOverlay(ctx);
+    else return state;
     return ctx.ledger.get(ctx.challengeId).state ?? state;
 };
 
@@ -191,15 +204,20 @@ const republished = async (ctx: RunnerContext, state: ScenarioState): Promise<Sc
  * What a confirmed action counts for beyond its own subject: the operation record the normal automation asks before it
  * repeats the work, and the mission it serves, once.
  */
-const noteConfirmed = (ctx: RunnerContext, action: ScenarioAction): void => {
-    const operation = OPERATION_OF[action.type];
+const noteConfirmed = (ctx: RunnerContext, action: ScenarioAction, effects: ActionEffects): void => {
+    // A step that found nothing due did not do the operation: it marks nothing and counts for no mission.
+    if (effects.notDue !== undefined) return;
+    const operation =
+        action.type === 'runAutomation' ? AUTOMATION_OPERATION_OF[action.operation] : OPERATION_OF[action.type];
     if (operation) {
         ctx.operations.mark(
             operation,
             action.type === 'claimMissionReward' ? `mission:${action.missionId}` : ctx.challengeId,
         );
     }
-    const mission = MISSION_OF[action.type];
+    // The normal runner `runAutomation` runs counts its own boost; only a fill is counted here, as the pass counts it.
+    const mission =
+        action.type === 'runAutomation' && action.operation === 'fillExposure' ? 'fill' : MISSION_OF[action.type];
     if (mission && ctx.stage === 'active') consumeMission(ctx.pass.missions, mission);
 };
 
@@ -222,7 +240,7 @@ const runRule = async (
     for (let index = startIndex; index < rule.do.length; index++) {
         const action = rule.do[index];
         const retry = retryOf(startState, rule.id, index === startIndex, action);
-        state = absorbLeftover(state, isSpend(action) ? action.type : undefined, nowSec(), limitOf);
+        state = absorbLeftover(state, spendOf(action), nowSec(), limitOf);
         // A spend is written down by the step itself, just before its request (see lockedCurrencySpend); one that
         // could not be is not made. A retry makes no spend.
         ctx.beforeSpend = retry
@@ -239,13 +257,18 @@ const runRule = async (
         }
         committed = true;
         gotoPhase = result.goto ?? gotoPhase;
+        log().info(`${tag} scenario "${ctx.scenario.name}": ${rule.label ?? rule.id} → ${action.type}`, null);
+        // The subject is another scenario's now: its record was written whole by the handoff, and nothing is written to it.
+        if (result.handedOff) return { state, completed: false };
         state = reduceScenarioOutcome(state, reducerStep(ctx, rule, { action, index, at, committed }, ''), result);
         const saved = saveResult(ctx, state);
-        noteConfirmed(ctx, action);
-        log().info(`${tag} scenario "${ctx.scenario.name}": ${rule.label ?? rule.id} → ${action.type}`, null);
+        noteConfirmed(ctx, action, result);
         // A step that landed and could not be written down is the last one this pass: the next step could spend too.
         if (!saved) return { state, completed: false };
-        state = await republished(ctx, state);
+        state = await republished(ctx, state, result.patch !== undefined || result.profile !== undefined);
+        // A paused subject runs nothing more: the rule stays at its next step for the Resume (a pause that ends the rule
+        // lets it finish as any other).
+        if (result.pause !== undefined && index + 1 < rule.do.length) return { state, completed: false };
     }
     const finishedAt = nowSec();
     const finished = finishScenarioRule(state, {
@@ -261,7 +284,7 @@ const runRule = async (
         log().info(`${tag} scenario "${ctx.scenario.name}": phase ${state.phase} → ${finished.phase}`, null);
     }
     const completed = saveResult(ctx, finished);
-    return { state: changedPhase && completed ? await republished(ctx, finished) : finished, completed };
+    return { state: changedPhase && completed ? await republished(ctx, finished, false) : finished, completed };
 };
 
 export { withNotice, runRule };

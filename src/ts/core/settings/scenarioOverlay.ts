@@ -4,14 +4,16 @@
  * plan for it. Leaving the phase, or the scenario, returns every setting to its normal value; nothing is ever copied
  * into stored overrides.
  *
- * A phase has up to three sources, highest first:
+ * A phase has up to four sources, highest first:
+ *   - the runtime patch (`phasePatch` in the progress record: what `setSetting` actions changed for this phase entry),
  *   - its literals (`settings`) and its bindings (`bindings`: values worked out from base settings and raw facts when
  *     the phase is published; a key is one or the other),
- *   - the one saved challenge profile it selects (`profile`).
+ *   - the one saved challenge profile it selects (`profile`), or the one a `useProfile` action chose for this phase
+ *     entry instead (`phaseProfile`).
  * Below them is the normal resolution (the "base" view: override, rules, defaults).
  *
  * A phase with literals only needs nothing else: they are read straight from the document. A phase with bindings or a
- * profile is read through the overlay its owner published into the scenario ledger (types/stores.ts
+ * profile, or that holds a runtime patch or profile, is read through the overlay its owner published into the scenario ledger (types/stores.ts
  * ScenarioPublication): the resolved binding values, validated against the phase and profile as they are now. A
  * publication that is missing, malformed, for another phase entry, made from another document or profile, or expired
  * is unavailable, and an unavailable overlay never falls back to inherited values: a read of a setting the phase may
@@ -29,7 +31,7 @@
  * or unreadable publication of a key the phase sets is unavailable, never the saved value.
  */
 
-import { INSTALLATION_KEY, scenarioStateLedger, mockScenarioStateLedger } from '../scenarioStateStore';
+import { INSTALLATION_KEY, ledgerFor as modeLedger } from '../scenarioStateStore';
 import { isPlainObject } from '../plainObject';
 import { storedSettingValue } from '../scenarios/expressions';
 import { challengeValueSetIsValid, globalChallengeValues } from './defaults';
@@ -49,7 +51,7 @@ import type { ScenarioDocument, ScenarioPhase } from './scenarioSchema';
 // Mock mode keeps scenario state in memory only (it must never touch the real
 // scenarioState.json), so the overlay reads the same ledger the mock pass uses.
 /** @param settings */
-const ledgerFor = (settings: ConfigV2) => (settings.app.mock === true ? mockScenarioStateLedger : scenarioStateLedger);
+const ledgerFor = (settings: ConfigV2) => modeLedger(settings.app.mock === true);
 
 /**
  * Settings that resolve as one group: the first source that sets any of them supplies all of them, and a member it
@@ -85,6 +87,8 @@ class ScenarioSettingUnavailableError extends Error {
 
 /** The sources of an overlay, resolved: what a read goes through. */
 type ResolvedOverlay = {
+    /** The runtime patch of this phase entry (above everything the document gives). */
+    patch: Record<string, unknown>;
     /** The phase's own literals. */
     literals: Record<string, unknown>;
     /** The resolved binding values (the stored form of each setting). */
@@ -113,11 +117,27 @@ type SubjectLayer = { kind: 'none' } | { kind: 'phase'; layer: PhaseLayer } | { 
 
 const hasOwn = (source: object, key: string): boolean => Object.prototype.hasOwnProperty.call(source, key);
 
+/** What a record changed at run time for its phase entry: the patch and the profile (types/stores.ts). */
+type RuntimeChange = Pick<ScenarioState, 'phasePatch' | 'phaseProfile'>;
+
 /**
- * Whether a phase has bindings or a profile.
+ * The profile a phase uses: the one a `useProfile` action chose for this phase entry (none, when it chose none), else the
+ * one the phase names.
  */
-const isBoundPhase = (phase: ScenarioPhase): boolean =>
-    phase.profile !== undefined || Object.keys(phase.bindings ?? {}).length > 0;
+const profileOf = (phase: ScenarioPhase, change?: RuntimeChange): string | undefined =>
+    change?.phaseProfile === undefined ? phase.profile : (change.phaseProfile ?? undefined);
+
+const hasPatch = (change?: RuntimeChange): boolean => Object.keys(change?.phasePatch ?? {}).length > 0;
+
+/**
+ * Whether a phase is read through a publication: it has bindings or a profile, or its entry holds a runtime patch or a
+ * runtime profile.
+ */
+const isBoundPhase = (phase: ScenarioPhase, change?: RuntimeChange): boolean =>
+    phase.profile !== undefined ||
+    Object.keys(phase.bindings ?? {}).length > 0 ||
+    hasPatch(change) ||
+    change?.phaseProfile !== undefined;
 
 /**
  * Canonical JSON text: object keys in order, so equal documents give equal text.
@@ -160,18 +180,27 @@ const storedProfile = (settings: ConfigV2, name: string): unknown => {
 };
 
 /**
- * A hash of what a publication of this phase depends on in the configuration: the phase's definition and the profile it
- * selects, as stored. An edit to either makes a publication made before it unavailable until the owner publishes again.
+ * A hash of what a publication of this phase depends on: the phase's definition and the profile it selects, as stored, and
+ * what the record changed at run time (the patch and the chosen profile). An edit to any makes a publication made before it
+ * unavailable until the owner publishes again.
  */
-const phaseFingerprint = (settings: ConfigV2, scenario: ScenarioDocument, phaseName: string): string => {
+const phaseFingerprint = (
+    settings: ConfigV2,
+    scenario: ScenarioDocument,
+    phaseName: string,
+    change?: RuntimeChange,
+): string => {
     const phase = scenario.phases[phaseName];
+    const profile = profileOf(phase, change);
     return hashText(
         stableJson({
             scenario: scenario.name,
             phase: phaseName,
             literals: phase.settings,
             bindings: phase.bindings,
-            profile: phase.profile === undefined ? null : [phase.profile, storedProfile(settings, phase.profile)],
+            profile: profile === undefined ? null : [profile, storedProfile(settings, profile)],
+            // Only a record that changed something at run time adds to what a publication is made from.
+            patch: hasPatch(change) ? change?.phasePatch : undefined,
         }),
     );
 };
@@ -197,6 +226,26 @@ const resolvePhaseProfile = (
 };
 
 /**
+ * Whether a saved profile can be a phase's profile (a `useProfile` action's check): it exists, reads as a valid profile, and
+ * sets only keys a phase may change (never the scenario assignment or Manual Only). The name as saved when it can.
+ */
+const checkPhaseProfileIn = (
+    settings: ConfigV2,
+    name: string,
+): { ok: true; name: string } | { ok: false; reason: string } => {
+    const key = findProfileKey(settings.profiles, normalizeProfileName(name));
+    if (key === null) return { ok: false, reason: `there is no profile named "${name}"` };
+    const values = sanitizeProfileValues(settings.profiles[key], true, globalChallengeValues(settings), false);
+    if (values === null) return { ok: false, reason: `the profile "${key}" is not valid` };
+    const forbidden = Object.keys(values).find(
+        (settingKey) => !scenarioCapability(settingKey)?.phaseWrite.includes('challenge'),
+    );
+    return forbidden === undefined
+        ? { ok: true, name: key }
+        : { ok: false, reason: `the profile "${key}" sets ${forbidden}, which a phase cannot change` };
+};
+
+/**
  * Reads a published overlay if it is valid now: the phase entry, the document and profile it was made from, and its
  * clock. Pure over the loaded configuration and the state.
  *
@@ -215,7 +264,7 @@ const readPublication = (
     if (published.phase !== state.phase || published.phaseEnteredAt !== state.phaseEnteredAt) {
         return { ok: false, reason: 'the published settings are from an earlier visit to a phase' };
     }
-    if (published.documentFingerprint !== phaseFingerprint(settings, scenario, state.phase)) {
+    if (published.documentFingerprint !== phaseFingerprint(settings, scenario, state.phase, state)) {
         return { ok: false, reason: 'the scenario or its profile changed after its settings were published' };
     }
     if (published.validUntil !== null && published.validUntil <= now) {
@@ -227,15 +276,24 @@ const readPublication = (
         return { ok: false, reason: 'the published settings do not match the bindings of this phase' };
     }
     let profile: { name: string; values: ChallengeValues } | null = null;
-    if (phase.profile !== undefined) {
-        const resolved = resolvePhaseProfile(settings, phase.profile);
+    const profileName = profileOf(phase, state);
+    if (profileName !== undefined) {
+        const resolved = resolvePhaseProfile(settings, profileName);
         if (!resolved.ok) return resolved;
         profile = resolved.value;
     }
     if ((profile?.name ?? null) !== published.profile) {
         return { ok: false, reason: 'the published settings name another profile' };
     }
-    return { ok: true, value: { literals: phase.settings ?? {}, bindings: { ...published.bindings }, profile } };
+    return {
+        ok: true,
+        value: {
+            patch: { ...state.phasePatch },
+            literals: phase.settings ?? {},
+            bindings: { ...published.bindings },
+            profile,
+        },
+    };
 };
 
 /**
@@ -258,7 +316,7 @@ const subjectLayer = (
     if (!scenario) return { kind: 'none' };
     const { corrupt, state } = ledgerFor(settings).get(challengeId);
     if (corrupt) {
-        return Object.values(scenario.phases).some(isBoundPhase)
+        return Object.values(scenario.phases).some((phase) => isBoundPhase(phase))
             ? { kind: 'unreadable', reason: 'the saved progress of this challenge cannot be read' }
             : { kind: 'none' };
     }
@@ -267,7 +325,7 @@ const subjectLayer = (
     }
     const phase = scenario.phases[state.phase];
     if (!phase) return { kind: 'none' };
-    const bound = isBoundPhase(phase);
+    const bound = isBoundPhase(phase, state);
     return {
         kind: 'phase',
         layer: {
@@ -278,7 +336,7 @@ const subjectLayer = (
             state,
             overlay: bound
                 ? readPublication(settings, scenario, state, now)
-                : { ok: true, value: { literals: phase.settings ?? {}, bindings: {}, profile: null } },
+                : { ok: true, value: { patch: {}, literals: phase.settings ?? {}, bindings: {}, profile: null } },
         },
     };
 };
@@ -289,15 +347,20 @@ const subjectLayer = (
  * (OVERLAY_GROUPS): the first source that sets any member owns the group, and a member it omits reads as 0.
  */
 const readOverlay = (overlay: ResolvedOverlay, bound: boolean, key: string): { value: unknown } | null => {
-    const { literals, bindings, profile } = overlay;
-    const sets = (source: 'phase' | 'profile', member: string): boolean =>
-        source === 'phase'
+    const { patch, literals, bindings, profile } = overlay;
+    const sets = (source: 'patch' | 'phase' | 'profile', member: string): boolean => {
+        if (source === 'patch') return hasOwn(patch, member);
+        return source === 'phase'
             ? hasOwn(literals, member) || hasOwn(bindings, member)
             : profile !== null && hasOwn(profile.values, member);
+    };
     const members = (bound ? OVERLAY_GROUPS.find((group) => group.includes(key)) : undefined) ?? [key];
-    const owner = (['phase', 'profile'] as const).find((source) => members.some((member) => sets(source, member)));
+    const owner = (['patch', 'phase', 'profile'] as const).find((source) =>
+        members.some((member) => sets(source, member)),
+    );
     if (owner === undefined) return null;
     if (!sets(owner, key)) return { value: 0 };
+    if (owner === 'patch') return { value: patch[key] };
     if (owner === 'profile') return { value: (profile as NonNullable<typeof profile>).values[key] };
     return { value: hasOwn(literals, key) ? literals[key] : bindings[key] };
 };
@@ -308,9 +371,12 @@ const readLayer = (layer: PhaseLayer, key: string): { value: unknown } | null =>
 /**
  * The keys each source of a layer's overlay sets, for the status reads.
  */
-const overlaySources = (layer: PhaseLayer): { literals: string[]; bindings: string[]; profile: string[] } => {
+const overlaySources = (
+    layer: PhaseLayer,
+): { patch: string[]; literals: string[]; bindings: string[]; profile: string[] } => {
     const overlay = layer.overlay.ok ? layer.overlay.value : null;
     return {
+        patch: Object.keys(overlay?.patch ?? layer.state.phasePatch ?? {}),
         literals: Object.keys(overlay?.literals ?? layer.phase.settings ?? {}),
         bindings: Object.keys(overlay?.bindings ?? layer.phase.bindings ?? {}),
         profile: Object.keys(overlay?.profile?.values ?? {}),
@@ -330,7 +396,7 @@ const overlaySources = (layer: PhaseLayer): { literals: string[]; bindings: stri
 const prepareOverlay = (
     settings: ConfigV2,
     scenario: ScenarioDocument,
-    state: Pick<ScenarioState, 'phase' | 'phaseEnteredAt' | 'published'>,
+    state: Pick<ScenarioState, 'phase' | 'phaseEnteredAt' | 'published' | 'phasePatch' | 'phaseProfile'>,
     base: Record<string, unknown>,
     bound: Record<string, ValueState<ExprValue>>,
     challengeId: string,
@@ -342,8 +408,9 @@ const prepareOverlay = (
     const phase = scenario.phases[state.phase];
     const refuse = (key: string | null, reason: string) => ({ ok: false as const, key, reason });
     let profile: ResolvedOverlay['profile'] = null;
-    if (phase.profile !== undefined) {
-        const resolved = resolvePhaseProfile(settings, phase.profile);
+    const profileName = profileOf(phase, state);
+    if (profileName !== undefined) {
+        const resolved = resolvePhaseProfile(settings, profileName);
         if (!resolved.ok) return refuse(null, resolved.reason);
         profile = resolved.value;
     }
@@ -362,25 +429,31 @@ const prepareOverlay = (
         bindings[key] = stored.value;
     }
     const literals = phase.settings ?? {};
-    const candidates: ChallengeValues = { ...profile?.values, ...literals, ...bindings };
+    const patch = { ...state.phasePatch };
+    const candidates: ChallengeValues = { ...profile?.values, ...literals, ...bindings, ...patch };
     const context = { ...base, ...candidates };
-    for (const key of Object.keys(bindings)) {
-        if (!validateSetting(key, bindings[key], context)) {
-            return refuse(key, String(getValidationError(key, bindings[key], context)));
+    // A patch is the top tier: a key a phase may not write, or a value that does not hold, is refused like a binding.
+    for (const key of Object.keys(patch)) {
+        if (!scenarioCapability(key)?.phaseWrite.includes('challenge')) {
+            return refuse(key, 'not a setting a phase may change');
         }
+    }
+    for (const key of [...Object.keys(bindings), ...Object.keys(patch)]) {
+        const value = hasOwn(patch, key) ? patch[key] : bindings[key];
+        if (!validateSetting(key, value, context)) return refuse(key, String(getValidationError(key, value, context)));
     }
     if (!challengeValueSetIsValid(context, candidates, challengeId)) {
         return refuse(
-            Object.keys(bindings)[0] ?? null,
+            Object.keys(patch)[0] ?? Object.keys(bindings)[0] ?? null,
             'these values conflict with each other or with the settings they combine with',
         );
     }
     return {
         ok: true,
-        overlay: { literals, bindings, profile },
+        overlay: { patch, literals, bindings, profile },
         publication: {
             revision: (state.published?.revision ?? 0) + 1,
-            documentFingerprint: phaseFingerprint(settings, scenario, state.phase),
+            documentFingerprint: phaseFingerprint(settings, scenario, state.phase, state),
             phase: state.phase,
             phaseEnteredAt: state.phaseEnteredAt,
             observedAt: now,
@@ -393,8 +466,12 @@ const prepareOverlay = (
 
 // --- the installation scenario's overlay -------------------------------------------------------------------------------
 
-/** What an installation publication stands for: the phase's own literals and the resolved binding values. */
-type InstallationOverlayValues = { literals: Record<string, unknown>; bindings: Record<string, unknown> };
+/** What an installation publication stands for: the runtime patch, the phase's own literals and the resolved binding values. */
+type InstallationOverlayValues = {
+    patch: Record<string, unknown>;
+    literals: Record<string, unknown>;
+    bindings: Record<string, unknown>;
+};
 
 /** What the installation scenario overlays: nothing, or the keys of its current phase and the overlay to read them from. */
 type InstallationLayer =
@@ -407,13 +484,18 @@ type InstallationLayer =
       }
     | { kind: 'unreadable'; reason: string; keys: ReadonlySet<string> };
 
-/** The keys one phase of an installation scenario sets or binds: what its overlay reaches. */
-const installationPhaseKeys = (phase: ScenarioPhase): string[] => [
-    ...new Set([...Object.keys(phase.settings ?? {}), ...Object.keys(phase.bindings ?? {})]),
+/** The keys one phase of an installation scenario sets or binds, or its record patched: what its overlay reaches. */
+const installationPhaseKeys = (phase: ScenarioPhase, change?: RuntimeChange): string[] => [
+    ...new Set([
+        ...Object.keys(change?.phasePatch ?? {}),
+        ...Object.keys(phase.settings ?? {}),
+        ...Object.keys(phase.bindings ?? {}),
+    ]),
 ];
 
 /** Whether a phase of an installation scenario overlays anything: it is then read through a publication. */
-const overlaysInstallation = (phase: ScenarioPhase): boolean => installationPhaseKeys(phase).length > 0;
+const overlaysInstallation = (phase: ScenarioPhase, change?: RuntimeChange): boolean =>
+    installationPhaseKeys(phase, change).length > 0;
 
 /**
  * Reads the installation's published overlay if it is valid now: the owner generation it was made under, the phase entry,
@@ -444,7 +526,7 @@ const readInstallationPublication = (
     if (published.phase !== state.phase || published.phaseEnteredAt !== state.phaseEnteredAt) {
         return { ok: false, reason: 'the published settings are from an earlier visit to a phase' };
     }
-    if (published.documentFingerprint !== phaseFingerprint(settings, scenario, phaseName)) {
+    if (published.documentFingerprint !== phaseFingerprint(settings, scenario, phaseName, state)) {
         return { ok: false, reason: 'the scenario changed after its settings were published' };
     }
     if (published.validUntil !== null && published.validUntil <= now) {
@@ -457,7 +539,10 @@ const readInstallationPublication = (
     ) {
         return { ok: false, reason: 'the published settings do not match the bindings of this phase' };
     }
-    return { ok: true, value: { literals: phase.settings ?? {}, bindings: { ...published.bindings } } };
+    return {
+        ok: true,
+        value: { patch: { ...state.phasePatch }, literals: phase.settings ?? {}, bindings: { ...published.bindings } },
+    };
 };
 
 /**
@@ -476,7 +561,7 @@ const installationLayer = (settings: ConfigV2, now: number): InstallationLayer =
     if (!scenario || scenario.scope !== 'installation') return { kind: 'none' };
     const { corrupt, state } = ledgerFor(settings).get(INSTALLATION_KEY);
     if (corrupt) {
-        const keys = new Set(Object.values(scenario.phases).flatMap(installationPhaseKeys));
+        const keys = new Set(Object.values(scenario.phases).flatMap((phase) => installationPhaseKeys(phase)));
         return keys.size === 0
             ? { kind: 'none' }
             : { kind: 'unreadable', reason: 'the saved progress of the installation scenario cannot be read', keys };
@@ -486,7 +571,7 @@ const installationLayer = (settings: ConfigV2, now: number): InstallationLayer =
     const phaseName = recorded ? state.phase : scenario.start;
     const phase = scenario.phases[phaseName];
     if (!phase) return { kind: 'none' };
-    const keys = new Set(installationPhaseKeys(phase));
+    const keys = new Set(installationPhaseKeys(phase, recorded ? state : undefined));
     if (keys.size === 0) return { kind: 'none' };
     return {
         kind: 'phase',
@@ -512,7 +597,8 @@ const readInstallationLayer = (layer: InstallationLayer, key: string): Installat
     if (layer.kind === 'none' || !layer.keys.has(key)) return { kind: 'saved' };
     if (layer.kind === 'unreadable') return { kind: 'unavailable', reason: layer.reason };
     if (!layer.overlay.ok) return { kind: 'unavailable', reason: layer.overlay.reason };
-    const { literals, bindings } = layer.overlay.value;
+    const { patch, literals, bindings } = layer.overlay.value;
+    if (hasOwn(patch, key)) return { kind: 'overlay', value: patch[key] };
     return { kind: 'overlay', value: hasOwn(literals, key) ? literals[key] : bindings[key] };
 };
 
@@ -549,7 +635,7 @@ const INSTALLATION_ATOMIC_GROUPS: ReadonlyArray<{
 const prepareInstallationOverlay = (
     settings: ConfigV2,
     scenario: ScenarioDocument,
-    state: Pick<ScenarioState, 'phase' | 'phaseEnteredAt' | 'published'>,
+    state: Pick<ScenarioState, 'phase' | 'phaseEnteredAt' | 'published' | 'phasePatch'>,
     base: Record<string, unknown>,
     bound: Record<string, ValueState<ExprValue>>,
     generation: number,
@@ -575,8 +661,15 @@ const prepareInstallationOverlay = (
         bindings[key] = stored.value;
     }
     const literals = phase.settings ?? {};
-    const candidates: Record<string, unknown> = { ...literals, ...bindings };
+    const patch = { ...state.phasePatch };
+    const candidates: Record<string, unknown> = { ...literals, ...bindings, ...patch };
     const context = { ...base, ...candidates };
+    // A patch is the top tier: a key an installation phase may not write is refused.
+    for (const key of Object.keys(patch)) {
+        if (!scenarioCapability(key)?.phaseWrite.includes('installation')) {
+            return refuse(key, 'not a setting a phase may change');
+        }
+    }
     for (const key of Object.keys(candidates)) {
         const allowed = schemaEntry(key)
             ? validateSetting(key, candidates[key], context)
@@ -593,10 +686,10 @@ const prepareInstallationOverlay = (
     }
     return {
         ok: true,
-        overlay: { literals, bindings },
+        overlay: { patch, literals, bindings },
         publication: {
             revision: (state.published?.revision ?? 0) + 1,
-            documentFingerprint: phaseFingerprint(settings, scenario, state.phase),
+            documentFingerprint: phaseFingerprint(settings, scenario, state.phase, state),
             phase: state.phase,
             phaseEnteredAt: state.phaseEnteredAt,
             observedAt: now,
@@ -616,11 +709,13 @@ const isOverlayKey = (key: string): boolean => schemaEntry(key)?.perChallenge ==
 export {
     ScenarioSettingUnavailableError,
     OVERLAY_GROUPS,
+    checkPhaseProfileIn,
     hasOwn,
     installationLayer,
     installationPhaseKeys,
     isBoundPhase,
     isOverlayKey,
+    profileOf,
     overlaysInstallation,
     phaseFingerprint,
     prepareInstallationOverlay,

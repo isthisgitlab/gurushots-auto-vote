@@ -112,6 +112,29 @@ const isLastRequest = (value: unknown): boolean =>
         typeof value.result === 'string' &&
         Number.isFinite(value.at));
 
+// What a runtime phase patch (types/stores.ts phasePatch) may hold: at most this many settings, each a flag, a number, a
+// short text or a short list of them — the literal forms a setting is stored in.
+const PATCH_MAX_KEYS = 20;
+const PATCH_MAX_TEXT = 200;
+const PATCH_MAX_LIST = 50;
+const PROFILE_NAME_MAX = 60;
+
+const isPatchText = (value: unknown): boolean => typeof value === 'string' && value.length <= PATCH_MAX_TEXT;
+
+const isPatchValue = (value: unknown): boolean =>
+    typeof value === 'boolean' ||
+    (typeof value === 'number' && Number.isFinite(value)) ||
+    isPatchText(value) ||
+    (Array.isArray(value) && value.length <= PATCH_MAX_LIST && value.every(isPatchText));
+
+const isPhasePatch = (value: unknown): boolean =>
+    isPlainObject(value) &&
+    Object.keys(value).length <= PATCH_MAX_KEYS &&
+    Object.entries(value).every(([key, item]) => key !== '' && key.length <= PATCH_MAX_TEXT && isPatchValue(item));
+
+const isPhaseProfile = (value: unknown): boolean =>
+    value === null || (typeof value === 'string' && value !== '' && value.length <= PROFILE_NAME_MAX);
+
 const isInFlight = (value: unknown): boolean =>
     isPlainObject(value) &&
     typeof value.ruleId === 'string' &&
@@ -172,6 +195,8 @@ const isRecord = (r: unknown): r is ScenarioState =>
     (r.generation === undefined || isCount(r.generation)) &&
     (r.paused === undefined || isPaused(r.paused)) &&
     (r.handoff === undefined || isHandoff(r.handoff)) &&
+    (r.phasePatch === undefined || isPhasePatch(r.phasePatch)) &&
+    (r.phaseProfile === undefined || isPhaseProfile(r.phaseProfile)) &&
     (r.lastRequest === undefined || isLastRequest(r.lastRequest));
 
 // What a reset of one challenge leaves in its place: the record is gone, its count of resets is not.

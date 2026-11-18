@@ -379,6 +379,70 @@ const priceLimitIssues = (expr: ScenarioExpr, stepPath: string, stages: readonly
 };
 
 /**
+ * The issues of a `runAutomation` step: `join` runs before joining only, every other operation while the challenge is
+ * active.
+ */
+const automationIssues = (
+    operation: (typeof vocabulary.AUTOMATION_OPERATIONS)[number],
+    stepPath: string,
+    stages: readonly ScenarioStage[],
+): ScenarioIssue[] => {
+    const home: ScenarioStage = operation === 'join' ? 'preJoin' : 'active';
+    return stages
+        .filter((stage) => stage !== home)
+        .map((stage) => ({
+            path: `${stepPath}.operation`,
+            message: `${operation} is ${operation === 'join' ? 'a pre-join operation' : 'an active-challenge operation'}: it is not available ${stagePhrase(stage)}`,
+        }));
+};
+
+/**
+ * Whether a setSetting value is an expression rather than a literal: literals are flags, numbers, texts and lists.
+ */
+const isExpressionValue = (value: unknown): value is ScenarioExpr =>
+    typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/**
+ * The issues of a `setSetting` / `clearSetting` step: its key is one the document's scope may patch and has a value an
+ * action can set, and the value is a literal that key takes (and its own validation accepts) or an expression of its type.
+ * What the settings hold together (a pair, a group) is judged when the action runs, against the values then in force.
+ */
+const settingActionIssues = (
+    step: { key: string; value?: unknown },
+    stepPath: string,
+    scope: ScenarioScope,
+    stages: readonly ScenarioStage[],
+    globalDefaults: Record<string, unknown>,
+): ScenarioIssue[] => {
+    const refusal = phaseRefusal(step.key, scope);
+    if (refusal !== undefined) return [{ path: `${stepPath}.key`, message: refusal }];
+    // phaseRefusal returned nothing: the key has a capability a phase of this scope may write.
+    const descriptor = (scenarioCapability(step.key) as { value: ScenarioValueDescriptor }).value;
+    const target = exprTypeOfDescriptor(descriptor);
+    if (target === null) return [{ path: `${stepPath}.key`, message: `"${step.key}" has no value an action can set` }];
+    if (!('value' in step)) return [];
+    const path = `${stepPath}.value`;
+    if (isExpressionValue(step.value)) {
+        const checked = expressionIssues(step.value, path, stages);
+        const mismatch =
+            checked.type && !sameType(checked.type, target)
+                ? [
+                      {
+                          path,
+                          message: `This gives ${describeType(checked.type)}, but ${step.key} takes ${describeType(target)}`,
+                      },
+                  ]
+                : [];
+        return [...checked.issues, ...mismatch];
+    }
+    if (!descriptorAccepts(descriptor, step.value)) return [{ path, message: `${step.key} does not take this value` }];
+    const context = { ...globalDefaults, [step.key]: step.value };
+    return schemaEntry(step.key) && !validateSetting(step.key, step.value, context)
+        ? [{ path, message: String(getValidationError(step.key, step.value, context)) }]
+        : [];
+};
+
+/**
  * Rule ids unique across the scenario (the engine keys its "already fired"
  * records by them). Missing ids are generated as `<phase>-<n>`.
  */
@@ -494,6 +558,17 @@ export const semanticIssues = (
                 }
                 if (step.type === 'join' && step.maxCoins)
                     issues.push(...priceLimitIssues(step.maxCoins, stepPath, stages));
+                if (step.type === 'runAutomation') issues.push(...automationIssues(step.operation, stepPath, stages));
+                if (step.type === 'setSetting' || step.type === 'clearSetting') {
+                    issues.push(...settingActionIssues(step, stepPath, scope, stages, globalDefaults));
+                }
+                if (step.type === 'useProfile' && step.name !== null && profiles) {
+                    const refused = profileIssue(step.name, `${stepPath}.name`, profiles);
+                    if (refused) issues.push(refused);
+                }
+                if (step.type === 'handoffScenario' && stepIndex !== item.do.length - 1) {
+                    issues.push({ path: stepPath, message: 'handoffScenario must be the last action of its rule' });
+                }
                 const memory = vocabulary.actionMemory(step);
                 for (const slot of memory.reads) reads.push({ slot, path: stepPath });
                 for (const slot of memory.writes) writes.add(slot);

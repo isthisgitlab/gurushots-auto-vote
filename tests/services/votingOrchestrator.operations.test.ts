@@ -21,7 +21,9 @@ jest.mock('../../src/ts/core/services/currencyAuto', () => ({
 jest.mock('../../src/ts/core/services/votingOrchestrator/actionRunners', () => ({
     runDeadlineActions: jest.fn(async () => null),
 }));
-jest.mock('../../src/ts/core/services/votingOrchestrator/turbo', () => ({ playAutoTurbo: jest.fn(async () => {}) }));
+jest.mock('../../src/ts/core/services/votingOrchestrator/turbo', () => ({
+    playAutoTurbo: jest.fn(async () => ({ kind: 'refused', reason: 'test' })),
+}));
 jest.mock('../../src/ts/core/services/votingOrchestrator/newEntries', () => ({
     detectNewEntry: jest.fn(() => ({ hasNewEntry: false })),
     recordEntrySnapshot: jest.fn(),
@@ -48,6 +50,7 @@ jest.mock('../../src/ts/core/voting/cancellation', () => ({ isCancelled: jest.fn
 
 import currencyAutoModule = require('../../src/ts/core/services/currencyAuto');
 import voteModule = require('../../src/ts/core/services/votingOrchestrator/vote');
+import turboModule = require('../../src/ts/core/services/votingOrchestrator/turbo');
 import type * as votingOrchestratorModule from '../../src/ts/core/services/votingOrchestrator';
 import type { Challenge } from '../../src/ts/core/types/gurushots';
 import type { MissionNeeds } from '../../src/ts/core/services/missions';
@@ -58,6 +61,7 @@ import { invalid } from '../helpers/invalid';
 
 const currencyAuto = jest.mocked(currencyAutoModule);
 const { voteOnChallenge } = jest.mocked(voteModule);
+const { playAutoTurbo } = jest.mocked(turboModule);
 const { runVotingPass } = require('../../src/ts/core/services/votingOrchestrator') as typeof votingOrchestratorModule;
 
 const NOW = Math.floor(Date.now() / 1000);
@@ -107,6 +111,24 @@ describe('what the normal automation does for a challenge', () => {
         expect(currencyAuto.runAutoExposureFill).not.toHaveBeenCalled();
         // and no fill was counted for work that was not done here
         expect(needs.fill).toBe(1);
+    });
+
+    test('a Turbo game a scenario action already played this cycle is not played again', async () => {
+        const operations = createOperationRecord();
+        operations.mark('earn', '7');
+        await runVotingPass('tok', null, deps(operations));
+        expect(playAutoTurbo).not.toHaveBeenCalled();
+    });
+
+    test('with no game recorded the pass plays it as it always did, with its own record to mark', async () => {
+        const operations = createOperationRecord();
+        await runVotingPass('tok', null, deps(operations));
+        expect(playAutoTurbo).toHaveBeenCalledTimes(1);
+        expect(playAutoTurbo).toHaveBeenCalledWith(
+            expect.objectContaining({ id: 7 }),
+            expect.any(Number),
+            expect.objectContaining({ operations }),
+        );
     });
 
     test('what was recorded for another challenge does not hold this one back', async () => {

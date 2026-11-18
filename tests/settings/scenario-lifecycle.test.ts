@@ -55,7 +55,7 @@ import { invalid } from '../helpers/invalid';
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import type { MemoryStore } from '../helpers/headlessStore';
 
-const { scenarioStateLedger, initialState, INSTALLATION_KEY } =
+const { scenarioStateLedger, mockScenarioStateLedger, initialState, INSTALLATION_KEY } =
     require('../../src/ts/core/scenarioStateStore') as typeof scenarioStateStoreModule;
 const { runScenarioStep } = require('../../src/ts/core/services/scenarioRunner') as typeof runnerModule;
 
@@ -699,6 +699,44 @@ describe('handoff', () => {
         expect(await handoff()).toMatchObject({ reason: 'handoff-pending' });
     });
 
+    test('the step of a rule that asks for the handoff is the one rule in progress it may begin under', async () => {
+        const from = { ruleId: 'fill', actionIndex: 1 };
+        assigned({ inFlight: { ruleId: 'fill', actionIndex: 1 } });
+        // a handoff of the same step goes through; one asked for by another step, or another rule, does not
+        expect(await settings.requestScenarioHandoff('7', 'Next', 0, { ruleId: 'fill', actionIndex: 2 })).toEqual({
+            ok: false,
+            reason: 'rule-in-progress',
+        });
+        expect(await settings.requestScenarioHandoff('7', 'Next', 0, { ruleId: 'other', actionIndex: 1 })).toEqual({
+            ok: false,
+            reason: 'rule-in-progress',
+        });
+        expect(record('7')?.handoff).toBeUndefined();
+        expect(await settings.requestScenarioHandoff('7', 'Next', 0, from)).toEqual({ ok: true, generation: 1 });
+        expect(record('7')).toMatchObject({ scenario: 'Next', generation: 1, handoff: null, inFlight: null });
+    });
+
+    test('a spend that may have landed still refuses a handoff asked for by the step it belongs to', async () => {
+        assigned({ inFlight: { ruleId: 'fill', actionIndex: 1, pending: 'fillExposure' } });
+        expect(await settings.requestScenarioHandoff('7', 'Next', 0, { ruleId: 'fill', actionIndex: 1 })).toEqual({
+            ok: false,
+            reason: 'unresolved-spend',
+        });
+        expect(record('7')?.inFlight).toEqual({ ruleId: 'fill', actionIndex: 1, pending: 'fillExposure' });
+    });
+
+    test('what the old scenario patched for its phase does not outlive the handoff, whether another scenario follows or not', async () => {
+        assigned({ phasePatch: { autoBoost: true }, phaseProfile: 'Calm' });
+        expect(await handoff('Next')).toEqual({ ok: true, generation: 1 });
+        expect(record('7')?.phasePatch).toBeUndefined();
+        expect(record('7')?.phaseProfile).toBeUndefined();
+        seed('7', { phasePatch: { autoBoost: true }, phaseProfile: null, generation: 1, scenario: 'Next' });
+        expect(await handoff(null, 1)).toEqual({ ok: true, generation: 2 });
+        expect(record('7')?.phasePatch).toBeUndefined();
+        expect(record('7')?.phaseProfile).toBeUndefined();
+        expect(record('7')?.inFlight).toBeNull();
+    });
+
     test('a rule that assigns the scenario would still decide it: nothing is begun', async () => {
         assigned();
         settings.removeChallengeOverride('scenario', '7');
@@ -1294,5 +1332,180 @@ describe('the priority Stop fence', () => {
         await expect(isolated!.initializeStopFence()).resolves.toEqual({ ok: false, reason: 'not-saved' });
         await expect(isolated!.recordFullStop('s', 1)).resolves.toEqual({ ok: false, reason: 'not-saved' });
         await expect(isolated!.clearStopBlock(0)).resolves.toEqual({ ok: false, reason: 'not-saved' });
+    });
+});
+
+describe('pause and resume by the user', () => {
+    const pausing = () =>
+        simple('Plan', {
+            phases: {
+                main: {
+                    rules: [
+                        {
+                            id: 'p',
+                            repeat: 'once',
+                            do: [
+                                { type: 'pauseScenario', reason: 'cooling off' },
+                                { type: 'notify', message: 'after' },
+                            ],
+                        },
+                    ],
+                },
+            },
+        });
+
+    test('a pause by the action stops the subject; the user’s resume lets its actions run again, from where it stopped', async () => {
+        expect(settings.saveScenario(pausing()).ok).toBe(true);
+        expect(settings.setChallengeOverride('scenario', '7', 'Plan')).toBe(true);
+        await runStep();
+        expect(record('7')?.paused).toEqual({ at: expect.any(Number), reason: 'cooling off' });
+        expect(record('7')?.outbox).toEqual([]);
+        // paused: the next passes run nothing
+        await runStep();
+        expect(record('7')?.outbox).toEqual([]);
+
+        const manual = settings.getEffectiveSetting('manualPhotosOnly', '7');
+        const ledgerBefore = store.keys.get(STATE_KEY);
+        expect(settings.setScenarioPaused('7', false)).toEqual({ ok: true, paused: false });
+        expect(record('7')?.paused).toBeUndefined();
+        // progress kept, Manual Only and the stop fence untouched
+        expect(record('7')?.inFlight).toEqual({ ruleId: 'p', actionIndex: 1 });
+        expect(settings.getEffectiveSetting('manualPhotosOnly', '7')).toBe(manual);
+        expect(store.keys.get(FENCE_KEY)).toBeUndefined();
+        expect(store.keys.get(STATE_KEY)).not.toBe(ledgerBefore);
+
+        await runStep();
+        expect(record('7')?.outbox?.map((notice) => notice.message)).toEqual(['after']);
+        expect(record('7')?.fired.p).toBeDefined();
+    });
+
+    test('the user pauses with a reason, and a pause again replaces it; progress is kept', () => {
+        assigned({ memory: { held: 'z' }, fired: { fill: { at: 5 } } });
+        expect(settings.setScenarioPaused('7', true, 'asleep')).toEqual({ ok: true, paused: true });
+        expect(record('7')).toMatchObject({
+            paused: { at: expect.any(Number), reason: 'asleep' },
+            memory: { held: 'z' },
+        });
+        expect(record('7')?.fired).toEqual({ fill: { at: 5 } });
+        expect(settings.setScenarioPaused('7', true)).toEqual({ ok: true, paused: true });
+        expect(record('7')?.paused?.reason).toBe('');
+    });
+
+    test('resuming a subject that is not paused is a success that writes nothing', () => {
+        assigned();
+        const before = store.keys.get(STATE_KEY);
+        expect(settings.setScenarioPaused('7', false)).toEqual({ ok: true, paused: false });
+        expect(store.keys.get(STATE_KEY)).toBe(before);
+    });
+
+    test('the installation is paused and resumed the same way', () => {
+        seed(INSTALLATION_KEY, { generation: 1 });
+        expect(settings.setScenarioPaused(INSTALLATION_KEY, true, 'user')).toEqual({ ok: true, paused: true });
+        expect(record(INSTALLATION_KEY)?.paused).toMatchObject({ reason: 'user' });
+        expect(settings.setScenarioPaused(INSTALLATION_KEY, false)).toEqual({ ok: true, paused: false });
+        expect(record(INSTALLATION_KEY)?.paused).toBeUndefined();
+    });
+
+    test('is busy while the subject’s step lock or the gate is held, and nothing is written', () => {
+        assigned();
+        for (const id of ['scenario-7', 'scenario-mutation']) {
+            held.add(id);
+            const before = store.keys.get(STATE_KEY);
+            expect(settings.setScenarioPaused('7', true)).toEqual({ ok: false, reason: 'busy' });
+            expect(store.keys.get(STATE_KEY)).toBe(before);
+            held.delete(id);
+        }
+        expect(record('7')?.paused).toBeUndefined();
+    });
+
+    test('refuses a subject that is not one, has no progress, or whose progress cannot be read', () => {
+        assigned();
+        expect(settings.setScenarioPaused('', true)).toEqual({ ok: false, reason: 'invalid-subject' });
+        expect(settings.setScenarioPaused('@all', true)).toEqual({ ok: false, reason: 'invalid-subject' });
+        expect(settings.setScenarioPaused('99', true)).toEqual({ ok: false, reason: 'no-progress' });
+        store.keys.set(STATE_KEY, '{broken');
+        expect(settings.setScenarioPaused('7', true)).toEqual({ ok: false, reason: 'state-unreadable' });
+    });
+
+    test('a record that is gone when the write is made, or a write that is not saved, is reported', () => {
+        assigned();
+        const real = scenarioStateLedger.change.bind(scenarioStateLedger);
+        jest.spyOn(scenarioStateLedger, 'change').mockImplementationOnce((key) =>
+            real(key, () => ({ refuse: 'no-progress' })),
+        );
+        expect(settings.setScenarioPaused('7', true)).toEqual({ ok: false, reason: 'state-unreadable' });
+        jest.spyOn(scenarioStateLedger, 'change').mockImplementationOnce((key, update) => {
+            update(null);
+            return { ok: false, reason: 'not-saved' };
+        });
+        expect(settings.setScenarioPaused('7', true)).toEqual({ ok: false, reason: 'not-saved' });
+    });
+});
+
+describe('mock mode keeps its progress in memory: the persisted store is never read or written', () => {
+    afterEach(async () => {
+        await mockScenarioStateLedger.removeAll();
+    });
+
+    const mockAssigned = () => {
+        expect(settings.saveScenario(simple('Plan')).ok).toBe(true);
+        expect(settings.saveScenario(simple('Next')).ok).toBe(true);
+        expect(settings.setChallengeOverride('scenario', '7', 'Plan')).toBe(true);
+        settings.setSetting('mock', true);
+        expect(mockScenarioStateLedger.change('7', () => initialState('Plan', 'main', NOW)).ok).toBe(true);
+    };
+
+    test('a handoff succeeds in the mock ledger and leaves the persisted store as it was', async () => {
+        mockAssigned();
+        const readSpy = jest.spyOn(scenarioStateLedger, 'get');
+        const changeSpy = jest.spyOn(scenarioStateLedger, 'change');
+        const before = store.keys.get(STATE_KEY);
+        expect(await settings.requestScenarioHandoff('7', 'Next', 0)).toEqual({ ok: true, generation: 1 });
+        expect(mockScenarioStateLedger.get('7').state).toMatchObject({
+            scenario: 'Next',
+            generation: 1,
+            handoff: null,
+        });
+        expect(settings.getEffectiveSetting('scenario', '7')).toBe('Next');
+        expect(store.keys.get(STATE_KEY)).toBe(before);
+        expect(readSpy).not.toHaveBeenCalled();
+        expect(changeSpy).not.toHaveBeenCalled();
+    });
+
+    test('an unresolved spend in the mock ledger refuses the handoff, as in the persisted one', async () => {
+        mockAssigned();
+        mockScenarioStateLedger.change('7', (current) => ({
+            ...(current as ScenarioState),
+            inFlight: { ruleId: 'fill', actionIndex: 0, pending: 'fillExposure' },
+        }));
+        expect(await settings.requestScenarioHandoff('7', 'Next', 0)).toEqual({
+            ok: false,
+            reason: 'unresolved-spend',
+        });
+        // the persisted ledger has no record of the subject: reading it would have said no-progress
+        expect(scenarioStateLedger.get('7').state).toBeNull();
+    });
+
+    test('pause and resume, the installation selection and its generation use the mock ledger too', () => {
+        mockAssigned();
+        const readSpy = jest.spyOn(scenarioStateLedger, 'get');
+        const changeSpy = jest.spyOn(scenarioStateLedger, 'change');
+        expect(settings.setScenarioPaused('7', true, 'user')).toEqual({ ok: true, paused: true });
+        expect(mockScenarioStateLedger.get('7').state?.paused).toMatchObject({ reason: 'user' });
+        expect(settings.setScenarioPaused('7', false)).toEqual({ ok: true, paused: false });
+        expect(settings.saveScenario(installationDoc('Inst')).ok).toBe(true);
+        expect(settings.setInstallationScenario('Inst', 'cli', 0)).toMatchObject({ ok: true, generation: 1 });
+        expect(settings.installationGeneration()).toBe(1);
+        expect(mockScenarioStateLedger.get(INSTALLATION_KEY).state?.generation).toBe(1);
+        expect(settings.transferInstallationOwner('electron', 1)).toMatchObject({ ok: true, generation: 2 });
+        expect(readSpy).not.toHaveBeenCalled();
+        expect(changeSpy).not.toHaveBeenCalled();
+    });
+
+    test('mock mode takes no step lock: one process runs it', () => {
+        mockAssigned();
+        held.add('scenario-7');
+        expect(settings.setScenarioPaused('7', true)).toEqual({ ok: true, paused: true });
+        held.delete('scenario-7');
     });
 });

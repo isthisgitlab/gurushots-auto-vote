@@ -320,8 +320,9 @@ const joinOne = async (
     const subject = String(challenge?.id);
     // What was joined this cycle is not decided again, by either.
     if (preJoin?.operations.has('join', subject)) return 'skipped:done-this-pass';
-    const viaScenario = await preJoin?.run(challenge, (maxCoins) =>
-        joinCandidate(challenge, token, deps, pass, { maxCoins }),
+    // A join a scenario asks for is its own decision (`direct`) or, for a `runAutomation` join, the pass's own (`normal`).
+    const viaScenario = await preJoin?.run(challenge, (maxCoins, policy) =>
+        joinCandidate(challenge, token, deps, pass, policy === 'normal' ? null : { maxCoins }),
     );
     if (viaScenario) {
         preJoin?.operations.mark('join', subject);

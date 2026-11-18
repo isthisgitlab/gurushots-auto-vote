@@ -15,7 +15,8 @@ import type { CompletedChallenge } from '../types/gurushots';
 import type { Duration, FactName, Quantity, ScenarioSelector, ScenarioStage } from '../types/scenario';
 import { isBoostWindowOpen, isKeyUnlockedBoost } from '../voting/boostWindow';
 import { isOneOf } from './vocabulary';
-import { selectEntry, entriesOf, rankOf, readableEntries, votesOf, windowOf } from './selectors';
+import { resolveEntry, entriesOf, rankOf, readableEntries, votesOf, windowOf } from './selectors';
+import type { SelectEvidence } from './selectors';
 import { speedRatio, votesPerHour } from './speed';
 import { absent, known, unknownOf } from './valueState';
 
@@ -65,6 +66,11 @@ export interface PinEvidence {
     turbo: string | null;
 }
 
+/** The photo an earlier fill-new submitted that the subject challenge's Boost is still waiting on, or null. */
+export interface PendingBoostEvidence {
+    id: string | null;
+}
+
 /** One read-only scan of the photos a submission would consider (the same rules as submitting). */
 export interface PhotoScanEvidence {
     eligible: number;
@@ -101,13 +107,14 @@ export interface FactSnapshot {
     entryAges?: Evidence<EntryAgeEvidence>;
     uncertain?: Evidence<UncertainEvidence>;
     pins?: Evidence<PinEvidence>;
+    pendingBoost?: Evidence<PendingBoostEvidence>;
     photoScan?: Evidence<PhotoScanEvidence>;
 }
 
 /** The evidence fields a loader may add to a snapshot (every one optional: absent means not loaded). */
 export type FactEvidence = Pick<
     FactSnapshot,
-    'bankroll' | 'missions' | 'rewards' | 'entryAges' | 'uncertain' | 'pins' | 'photoScan'
+    'bankroll' | 'missions' | 'rewards' | 'entryAges' | 'uncertain' | 'pins' | 'pendingBoost' | 'photoScan'
 >;
 
 export type FactValue = number | boolean | string | string[];
@@ -235,8 +242,9 @@ const snapshotEntries = (snapshot: FactSnapshot): RankingEntry[] | null =>
     snapshot.challenge === undefined ? null : readableEntries(snapshot.challenge);
 
 /**
- * The entry a selector picks. Unknown when the entry list cannot be read, when no selector was given, or when `fastest`
- * has no history to rank by; absent when the selector proves there is no such entry.
+ * The entry a selector picks. Unknown when the entry list cannot be read, when no selector was given, when the selector's
+ * evidence is not loaded or usable, when `fastest` has no history to rank by, or when a potentially winning entry cannot be
+ * compared (selectors.ts resolveEntry); absent when the selector proves there is no such entry.
  */
 const selectedEntry = (snapshot: FactSnapshot, select?: ScenarioSelector): ValueState<RankingEntry> => {
     const { challenge } = snapshot;
@@ -244,11 +252,16 @@ const selectedEntry = (snapshot: FactSnapshot, select?: ScenarioSelector): Value
     if (challenge === undefined || entries === null) return unknownOf('entries-unreadable', ['member.ranking.entries']);
     if (!select) return unknownOf('selector-missing', []);
     const { memory, history } = snapshot.state;
-    const entry = selectEntry(select, challenge, { memory, history, now: snapshot.now });
-    if (entry) return known(entry);
-    return select.by === 'fastest' && entries.length > 0
-        ? unknownOf('insufficient-history', ['vote-history'])
-        : absent('not-present');
+    // The evidence the selector reads, as value states (an evidence the snapshot lacks reads as not loaded).
+    const evidence: SelectEvidence = {
+        pins: snapshot.pins === undefined ? undefined : loaded(snapshot.pins, ENTRY_PINS),
+        entryTimes: snapshot.entryAges === undefined ? undefined : loaded(snapshot.entryAges, ENTRY_AGES),
+        pendingBoost:
+            snapshot.pendingBoost === undefined ? undefined : loaded(snapshot.pendingBoost, ENTRY_PENDING_BOOST),
+    };
+    return resolveEntry(select, challenge, { memory, history, now: snapshot.now, evidence }, (field, entry) =>
+        readEntryField(field, entry, snapshot),
+    );
 };
 
 /**
@@ -324,6 +337,7 @@ const REWARDS = 'rewards';
 const ENTRY_AGES = 'entry-ages';
 const ENTRY_UNCERTAIN = 'entry-uncertain';
 const ENTRY_PINS = 'entry-pins';
+const ENTRY_PENDING_BOOST = 'entry-pending-boost';
 const PHOTO_SCAN = 'photo-scan';
 
 type MissionKindName = keyof MissionEvidence['needs'];
@@ -1001,6 +1015,8 @@ export {
     readScenarioFact,
     readNumericFact,
     readEntryField,
+    selectedEntry,
+    loaded,
     readEntryFact,
     snapshotEntries,
     factStageIssues,

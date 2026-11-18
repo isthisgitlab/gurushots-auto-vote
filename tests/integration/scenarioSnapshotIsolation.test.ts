@@ -1028,6 +1028,100 @@ describe('the installation scenario publication', () => {
         });
     });
 
+    describe('a runtime phase patch', () => {
+        const patchRecord = (phasePatch: Record<string, unknown> | undefined) =>
+            expect(
+                scenarioStateLedger.change(INSTALLATION, (current) => ({
+                    ...(current as ScenarioState),
+                    ...(phasePatch === undefined ? {} : { phasePatch }),
+                })),
+            ).toMatchObject({ ok: true });
+        const unpatch = () =>
+            expect(
+                scenarioStateLedger.change(INSTALLATION, (current) => {
+                    const rest = { ...(current as ScenarioState) };
+                    delete rest.phasePatch;
+                    return rest;
+                }),
+            ).toMatchObject({ ok: true });
+
+        test('is the top tier of the installation overlay, and the saved settings are never written', async () => {
+            select();
+            await expect(publishAs(7)).resolves.toBe('published');
+            expect(settings.getInstallationSetting('apiTimeout')).toBe(12);
+            const saved = store.value;
+            patchRecord({ apiTimeout: 20 });
+            await expect(publishAs(7)).resolves.toBe('published');
+            // the patch over the phase's literal; the binding and the saved values beside it are as they were
+            expect(settings.getInstallationSetting('apiTimeout')).toBe(20);
+            expect(settings.getInstallationSetting('currencyReserveKeys')).toBe(7);
+            expect(settings.getInstallationSetting('apiMaxRetries')).toBe(3);
+            expect(settings.getSetting('apiTimeout')).toBe(30);
+            expect(store.value).toBe(saved);
+        });
+
+        test('a patch that was not published yet makes the keys it reaches unavailable, never the old value', async () => {
+            select();
+            await publishAs(7);
+            patchRecord({ apiTimeout: 20 });
+            unavailableInstallation('apiTimeout', 'the scenario changed after its settings were published');
+        });
+
+        test('reaches a key the phase sets nothing for, and is withdrawn with it', async () => {
+            select('android-service', accountPlan({ settings: {}, bindings: {} }));
+            await expect(publishAs()).resolves.toBe('cleared');
+            patchRecord({ apiMaxRetries: 5 });
+            unavailableInstallation('apiMaxRetries', 'nothing is published');
+            await expect(publishAs()).resolves.toBe('published');
+            expect(settings.getInstallationSetting('apiMaxRetries')).toBe(5);
+            expect(settings.getInstallationSetting('apiTimeout')).toBe(30);
+            unpatch();
+            await expect(publishAs()).resolves.toBe('cleared');
+            expect(settings.getInstallationSetting('apiMaxRetries')).toBe(3);
+        });
+
+        test('a paused installation withdraws the patch with the rest of the overlay', async () => {
+            select();
+            patchRecord({ apiTimeout: 20 });
+            await publishAs(7);
+            expect(settings.getInstallationSetting('apiTimeout')).toBe(20);
+            expect(
+                scenarioStateLedger.change(INSTALLATION, (current) => ({
+                    ...(current as ScenarioState),
+                    paused: { at: NOW, reason: '' },
+                })),
+            ).toMatchObject({ ok: true });
+            expect(settings.getInstallationSetting('apiTimeout')).toBe(30);
+        });
+
+        test.each([
+            ['a value out of its range', { apiTimeout: 9999 }, 'apiTimeout'],
+            ['a setting no installation phase may change', { autoBoost: true }, 'not a setting a phase may change'],
+            [
+                'values that are valid alone but not together',
+                { checkFrequencyMax: 2 },
+                'checkFrequencyMin and checkFrequencyMax',
+            ],
+        ])('%s refuses the whole phase', async (_label, patch, why) => {
+            select();
+            patchRecord(patch);
+            await expect(publishAs(7)).resolves.toBe('blocked');
+            expect(record().lastError?.message).toContain(why);
+            expect(record().published).toBeUndefined();
+            expect(() => settings.getInstallationSetting('apiTimeout')).toThrow(
+                settings.ScenarioSettingUnavailableError,
+            );
+        });
+
+        const unavailableInstallation = (key: string, reason: string) => {
+            expect(() => settings.getInstallationSetting(key)).toThrow(settings.ScenarioSettingUnavailableError);
+            expect(settings.readInstallationSetting(key)).toMatchObject({
+                state: 'unknown',
+                reason: expect.stringContaining(reason),
+            });
+        };
+    });
+
     describe('what the facade prepares for the owner', () => {
         const plan = () => {
             const found = settings.getScenario('Account plan') as ScenarioDocument;

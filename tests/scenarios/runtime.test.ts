@@ -4,6 +4,7 @@
  */
 
 import {
+    AUTOMATION_OPERATION_OF,
     OPERATION_OF,
     absorbLeftover,
     applyEffects,
@@ -73,6 +74,58 @@ describe('a confirmed action', () => {
     test('leaves a notice in the outbox, under the token it was given', () => {
         const next = reduceScenarioOutcome(base(), step(), { status: 'done', notice: 'hello' });
         expect(next.outbox).toEqual([{ id: `${AT}-0-tok`, at: AT, message: 'hello' }]);
+    });
+});
+
+describe('a confirmed settings, profile, pause or not-due step', () => {
+    test('a setSetting adds its key to the runtime phase patch and changes nothing else of the state', () => {
+        const before = base({ phasePatch: { exposure: 80 } });
+        const next = reduceScenarioOutcome(before, step({ actionType: 'setSetting' }), {
+            status: 'done',
+            patch: { set: 'useTurbo', value: true },
+        });
+        expect(next.phasePatch).toEqual({ exposure: 80, useTurbo: true });
+        expect(before.phasePatch).toEqual({ exposure: 80 });
+        const first = reduceScenarioOutcome(base(), step(), { status: 'done', patch: { set: 'exposure', value: 70 } });
+        expect(first.phasePatch).toEqual({ exposure: 70 });
+    });
+
+    test('a clearSetting takes its key out, and the last key takes the patch out with it', () => {
+        const before = base({ phasePatch: { exposure: 80, useTurbo: true } });
+        const one = reduceScenarioOutcome(before, step(), { status: 'done', patch: { clear: 'useTurbo' } });
+        expect(one.phasePatch).toEqual({ exposure: 80 });
+        const none = reduceScenarioOutcome(one, step(), { status: 'done', patch: { clear: 'exposure' } });
+        expect('phasePatch' in none).toBe(false);
+    });
+
+    test('a useProfile sets the runtime profile, a name or null (none)', () => {
+        expect(reduceScenarioOutcome(base(), step(), { status: 'done', profile: 'Calm' }).phaseProfile).toBe('Calm');
+        expect(reduceScenarioOutcome(base(), step(), { status: 'done', profile: null }).phaseProfile).toBeNull();
+        expect('phaseProfile' in reduceScenarioOutcome(base(), step(), { status: 'done' })).toBe(false);
+    });
+
+    test('a pauseScenario pauses the subject with the reason it was given', () => {
+        const next = reduceScenarioOutcome(base(), step(), { status: 'done', pause: 'cooling off' });
+        expect(next.paused).toEqual({ at: AT, reason: 'cooling off' });
+        expect(reduceScenarioOutcome(base(), step(), { status: 'done', pause: '' }).paused).toEqual({
+            at: AT,
+            reason: '',
+        });
+        expect(reduceScenarioOutcome(base(), step(), { status: 'done' }).paused).toBeUndefined();
+    });
+
+    test('a step that found nothing due is recorded as such, in the last action', () => {
+        const next = reduceScenarioOutcome(base(), step({ actionType: 'runAutomation' }), {
+            status: 'done',
+            notDue: 'the boost is not due under its normal policy',
+        });
+        expect(next.lastAction).toEqual({
+            at: AT,
+            ruleId: 'r1',
+            action: 'runAutomation',
+            outcome: 'not due: the boost is not due under its normal policy',
+        });
+        expect(next.inFlight).toEqual({ ruleId: 'r1', actionIndex: 1 });
     });
 });
 
@@ -235,6 +288,25 @@ describe('a finished rule', () => {
         expect(next.lastError).toEqual({ at: AT, message: 'skipped one' });
     });
 
+    test('leaving the phase drops what was patched for it, the profile too; staying keeps both', () => {
+        const patched = base({ phasePatch: { exposure: 80 }, phaseProfile: 'Calm' });
+        const finish = (gotoPhase: string | null) =>
+            finishScenarioRule(patched, {
+                ruleId: 'r1',
+                startState: patched,
+                gotoPhase,
+                skippedStep: null,
+                at: AT,
+                timezone: 'UTC',
+            });
+        const left = finish('next');
+        expect('phasePatch' in left).toBe(false);
+        expect('phaseProfile' in left).toBe(false);
+        expect(patched.phasePatch).toEqual({ exposure: 80 });
+        expect(finish('main')).toMatchObject({ phasePatch: { exposure: 80 }, phaseProfile: 'Calm' });
+        expect(finish(null)).toMatchObject({ phasePatch: { exposure: 80 }, phaseProfile: 'Calm' });
+    });
+
     test('a goto to the phase it is in changes nothing', () => {
         const start = base({ phase: 'main', phaseEnteredAt: AT - 5 });
         const next = finishScenarioRule(start, {
@@ -320,5 +392,19 @@ describe('the per-pass operation record', () => {
         expect(OPERATION_OF.fillExposure).toBe('fill');
         expect(OPERATION_OF.unlockBoost).toBeUndefined();
         expect(OPERATION_OF.notify).toBeUndefined();
+        expect(OPERATION_OF.earnTurbo).toBe('earn');
+    });
+
+    test('names the operation each runAutomation operation performs: a key unlock has none', () => {
+        expect(AUTOMATION_OPERATION_OF).toEqual({
+            submit: 'submit',
+            boost: 'boost',
+            turbo: 'turbo',
+            swap: 'swap',
+            fillExposure: 'fill',
+            vote: 'vote',
+            join: 'join',
+        });
+        expect(AUTOMATION_OPERATION_OF.unlockBoost).toBeUndefined();
     });
 });

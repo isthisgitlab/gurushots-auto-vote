@@ -23,13 +23,14 @@ import { entriesOf } from '../../scenarios/selectors';
 import { scanFillCandidates } from '../autoFill';
 import { isClaimable, readCompletedChallenges } from '../autoClaim';
 import { missionEvidence } from '../missions';
+import { pendingBoostTarget } from '../votingOrchestrator/boost';
 import { log, nowSec } from './support';
 
 import { baselineTransportPolicy } from '../../api/transportPolicy';
 import type { TransportPolicy } from '../../api/transportPolicy';
 import type { FactEvidence, Evidence } from '../../scenarios/facts';
 import type { Bankroll, CompletedChallenge, Mission } from '../../types/gurushots';
-import type { ScenarioCondition, ScenarioExpr, ScenarioStage } from '../../types/scenario';
+import type { ScenarioCondition, ScenarioExpr, ScenarioSelector, ScenarioStage } from '../../types/scenario';
 import type { ScenarioDocument } from '../../settings/scenarioSchema';
 import type { ActiveContext, RunnerContext, ScenarioPass } from './types';
 
@@ -47,7 +48,32 @@ const EVIDENCE_OF_DEPENDENCY: Readonly<Record<string, EvidenceKind>> = {
     'entry-ages': 'entryAges',
     'entry-uncertain': 'uncertain',
     'entry-pins': 'pins',
+    'entry-pending-boost': 'pendingBoost',
     'photo-scan': 'photoScan',
+};
+
+/**
+ * The evidence a selector reads: the pinned photos, the entry times (also to order matching entries by age), the photo a
+ * fill-new boost waits on.
+ */
+const collectSelectorEvidence = (selector: ScenarioSelector, into: Set<EvidenceKind>): void => {
+    switch (selector.by) {
+        case 'pinned':
+            into.add('pins');
+            break;
+        case 'pendingBoostTarget':
+            into.add('pendingBoost');
+            break;
+        case 'newest':
+        case 'oldest':
+            into.add('entryAges');
+            break;
+        case 'matching':
+            if (selector.order === 'age') into.add('entryAges');
+            break;
+        default:
+            break;
+    }
 };
 
 /**
@@ -59,6 +85,9 @@ const collectEvidence = (conditions: readonly ScenarioCondition[] | undefined, i
         switch (condition.type) {
             case 'balance':
                 into.add('bankroll');
+                break;
+            case 'entry':
+                collectSelectorEvidence(condition.select, into);
                 break;
             case 'compare':
                 collectExpressionEvidence([condition.left, condition.right], into);
@@ -90,11 +119,12 @@ const collectExpressionEvidence = (
     into: Set<EvidenceKind>,
 ): void => {
     for (const expression of expressions) {
-        for (const { name } of exprReferences(expression).facts) {
+        for (const { name, select } of exprReferences(expression).facts) {
             for (const dependency of FACTS[name].dependencies) {
                 const kind = EVIDENCE_OF_DEPENDENCY[dependency];
                 if (kind) into.add(kind);
             }
+            if (select) collectSelectorEvidence(select, into);
         }
     }
 };
@@ -234,17 +264,19 @@ const loadAccountEvidence = async (
 };
 
 /**
- * The entry-age ledger's evidence for the subject challenge: when each entry went in, and which entries the app marked
- * as a doubtful subject match. A ledger that cannot be read, or refreshed, is unreadable for both.
+ * The entry-age ledger's evidence for the subject challenge: when each entry went in, which entries the app marked as a
+ * doubtful subject match, and the photo a fill-new boost is waiting on. A ledger that cannot be read, or refreshed, is
+ * unreadable for all of them.
  */
 const readLedger = async (
     ctx: RunnerContext,
     needed: ReadonlySet<EvidenceKind>,
-): Promise<Pick<FactEvidence, 'entryAges' | 'uncertain'>> => {
-    const out: Pick<FactEvidence, 'entryAges' | 'uncertain'> = {};
+): Promise<Pick<FactEvidence, 'entryAges' | 'uncertain' | 'pendingBoost'>> => {
+    const out: Pick<FactEvidence, 'entryAges' | 'uncertain' | 'pendingBoost'> = {};
     const failed = (reason: string) => {
         if (needed.has('entryAges')) out.entryAges = unreadable(reason);
         if (needed.has('uncertain')) out.uncertain = unreadable(reason);
+        if (needed.has('pendingBoost')) out.pendingBoost = unreadable(reason);
         return out;
     };
     // Only a joined challenge in the voting pass has an entry-age ledger at hand.
@@ -261,6 +293,13 @@ const readLedger = async (
         if (!read || !refresh) return failed('entry-ages-unreadable');
         if (needed.has('entryAges')) out.entryAges = { readable: true, times };
         if (needed.has('uncertain')) out.uncertain = { readable: true, ids: uncertain };
+        if (needed.has('pendingBoost')) {
+            // The existing producer of the photo a fill-new boost is waiting on (the boost runner asks it the same way).
+            out.pendingBoost = {
+                readable: true,
+                id: pendingBoostTarget({ challenge: ctx.challenge, entryAges: ledger })?.imageId ?? null,
+            };
+        }
         return out;
     } catch (error) {
         log().warning(
@@ -331,14 +370,25 @@ const loadScenarioSnapshot = async (
     ctx: RunnerContext,
     phase?: string,
     stage: EvidenceStage = 'all',
-): Promise<FactEvidence> => {
-    const needed = new Set(
-        [...evidenceNeeded(scenario, phase, true, ctx.stage)].filter(
-            (kind) => stage === 'all' || (stage === 'policy') === POLICY_EVIDENCE.has(kind),
+): Promise<FactEvidence> =>
+    loadEvidence(
+        new Set(
+            [...evidenceNeeded(scenario, phase, true, ctx.stage)].filter(
+                (kind) => stage === 'all' || (stage === 'policy') === POLICY_EVIDENCE.has(kind),
+            ),
         ),
+        ctx,
     );
+
+/**
+ * The evidence of the `needed` kinds for the subject, fetched now: the account evidence, the entry-age ledger's, the pinned
+ * photos, and the photo scan (a joined challenge only).
+ */
+const loadEvidence = async (needed: ReadonlySet<EvidenceKind>, ctx: RunnerContext): Promise<FactEvidence> => {
     const evidence: FactEvidence = await loadAccountEvidence(needed, ctx.reads);
-    if (needed.has('entryAges') || needed.has('uncertain')) Object.assign(evidence, await readLedger(ctx, needed));
+    if (needed.has('entryAges') || needed.has('uncertain') || needed.has('pendingBoost')) {
+        Object.assign(evidence, await readLedger(ctx, needed));
+    }
     if (needed.has('pins')) evidence.pins = await readPins(ctx);
     if (needed.has('photoScan')) {
         // The scan runs on a joined challenge, with the pass's fill endpoints; a candidate's photos are not scanned here.
@@ -347,5 +397,22 @@ const loadScenarioSnapshot = async (
     return evidence;
 };
 
-export { evidenceNeeded, expressionEvidence, loadAccountEvidence, loadScenarioSnapshot, passReads };
+/**
+ * The evidence the selector of an action reads, fetched when the action runs.
+ */
+const loadSelectorEvidence = (selector: ScenarioSelector, ctx: RunnerContext): Promise<FactEvidence> => {
+    const needed = new Set<EvidenceKind>();
+    collectSelectorEvidence(selector, needed);
+    return loadEvidence(needed, ctx);
+};
+
+export {
+    evidenceNeeded,
+    expressionEvidence,
+    loadAccountEvidence,
+    loadEvidence,
+    loadScenarioSnapshot,
+    loadSelectorEvidence,
+    passReads,
+};
 export type { AccountReads, EvidenceKind, EvidenceStage };

@@ -10,23 +10,23 @@ import * as settings from '../../settings';
 import { platform } from '../../platform/port';
 import { effectiveTimezone } from '../../settings/uiDefaults';
 import { evaluateScenario } from '../../scenarios/evaluate';
-import { evaluateExpression } from '../../scenarios/expressions';
 import { entriesOf } from '../../scenarios/selectors';
 import { recordVoteSample } from '../../scenarios/speed';
 import { initialState } from '../../scenarioStateStore';
 import type { StateLock } from '../../scenarioStateStore';
 import type { Challenge } from '../../types/gurushots';
-import type { ScenarioExpr } from '../../types/scenario';
 import type { ScenarioState } from '../../types/stores';
 import type { ExpressionContext } from '../../scenarios/expressions';
 import type { FactEvidence, FactSubject } from '../../scenarios/facts';
 import { createOperationRecord } from '../../scenarios/runtime';
 import type { PassContext } from '../votingOrchestrator';
 import { errorMessage } from '../../errorMessage';
-import type { ActiveContext, PreJoinContext, RunnerContext, ScenarioAction, ScenarioPass } from './types';
+import type { ActiveContext, RunnerContext, ScenarioAction, ScenarioPass } from './types';
 import { log, nowSec } from './support';
 import { loadScenarioSnapshot, passReads } from './facts';
 import { runRule, withNotice } from './rule';
+import { preparedSettings, publishPrepared, withoutPublication } from './overlay';
+import type { ChallengeContext } from './overlay';
 
 const NO_LOCK: StateLock = { ok: true, release: () => {} };
 
@@ -36,9 +36,6 @@ const corruptText = (kind: 'file' | 'record' | 'unloaded', challengeId: string) 
         : kind === 'file'
           ? 'scenario state is unreadable — reset the progress of every challenge (scenario-reset --all, or the Reset button on a challenge card) to start the plans again'
           : `scenario state of this challenge is unreadable — reset it (scenario-reset --challenge=${challengeId}, or the Reset button on its card) to start the plan again`;
-
-/** A step on a challenge the account has or can join: a candidate before the join, a joined challenge in the pass. */
-type ChallengeContext = ActiveContext | PreJoinContext;
 
 /**
  * The subject the facts of a step are read on, with where it came from.
@@ -124,60 +121,6 @@ const noteHalt = (ctx: RunnerContext, state: ScenarioState, halted: string): voi
 };
 
 /**
- * The state without its published overlay (and the flag that a stored one was malformed): the same object when there is
- * nothing to drop.
- */
-const withoutPublication = (state: ScenarioState): ScenarioState => {
-    if (!state.published && !state.publicationUnreadable) return state;
-    const rest = { ...state };
-    delete rest.published;
-    delete rest.publicationUnreadable;
-    return rest;
-};
-
-/**
- * The expressions of a phase's bindings and the sub-expressions of each, depth first.
- */
-const expressionNodes = (expr: ScenarioExpr): ScenarioExpr[] => {
-    switch (expr.kind) {
-        case 'offset':
-            return [expr, ...expressionNodes(expr.from), ...expressionNodes(expr.by)];
-        case 'difference':
-            return [expr, ...expressionNodes(expr.from), ...expressionNodes(expr.to)];
-        case 'add':
-        case 'subtract':
-            return [expr, ...expressionNodes(expr.left), ...expressionNodes(expr.right)];
-        case 'earlier':
-        case 'later':
-        case 'min':
-        case 'max':
-            return [expr, ...expr.of.flatMap(expressionNodes)];
-        default:
-            return [expr];
-    }
-};
-
-/**
- * The next clock boundary that can change what the bindings resolve to: the earliest instant in the future that any part of
- * them stands for (a close time, a point offset from it). Null when there is none. A published overlay is valid until
- * then, and is made again after it.
- *
- * @param now - unix seconds
- */
-const nextBindingInstant = (bindings: readonly ScenarioExpr[], ctx: ExpressionContext, now: number): number | null => {
-    const instants = bindings
-        .flatMap(expressionNodes)
-        .map((node) => evaluateExpression(node, ctx))
-        .flatMap((value) =>
-            value.state === 'known' && value.value.kind === 'number' && value.value.quantity === 'instant'
-                ? [value.value.value]
-                : [],
-        )
-        .filter((instant) => instant > now);
-    return instants.length ? Math.min(...instants) : null;
-};
-
-/**
  * The words of a phase whose settings could not be prepared, for the halt notice: the phase, the setting that failed
  * (none when it is the profile), and why.
  */
@@ -210,44 +153,19 @@ const prepareEvaluation = async (
     ctx: ChallengeContext,
     state: ScenarioState,
 ): Promise<{ state: ScenarioState; evidence: FactEvidence; readSetting?: ExpressionContext['readSetting'] } | null> => {
-    const { challenge, challengeId, scenario, timezone } = ctx;
+    const { scenario } = ctx;
     const raw = await loadScenarioSnapshot(scenario, ctx, state.phase, 'raw');
-    const phase = scenario.phases[state.phase];
     // A phase the scenario no longer has is the engine's to halt.
-    if (!phase) return { state, evidence: raw };
-    const observedAt = nowSec();
-    const prepared = settings.prepareScenarioSnapshot(
-        challengeId,
-        scenario,
-        state,
-        (readBase) => {
-            const facts: ExpressionContext = {
-                challenge,
-                state,
-                now: observedAt,
-                timezone,
-                ...raw,
-                readSetting: readBase,
-            };
-            const expressions = phase.bindings ?? {};
-            return {
-                bound: Object.fromEntries(
-                    Object.entries(expressions).map(([key, expr]) => [key, evaluateExpression(expr, facts)]),
-                ),
-                validUntil: nextBindingInstant(Object.values(expressions), facts, observedAt),
-            };
-        },
-        observedAt,
-    );
+    if (!scenario.phases[state.phase]) return { state, evidence: raw };
+    const prepared = preparedSettings(ctx, state, raw);
     if (!prepared.ok) {
         blockPhase(ctx, state, prepared);
         return null;
     }
-    const { publication, readSetting } = prepared.snapshot;
-    const next = publication ? { ...withoutPublication(state), published: publication } : withoutPublication(state);
-    if (next !== state && ctx.ledger.set(challengeId, next) !== 'saved') return null;
+    const next = publishPrepared(ctx, state, prepared.snapshot);
+    if (next === null) return null;
     const policy = await loadScenarioSnapshot(scenario, ctx, state.phase, 'policy');
-    return { state: next, evidence: { ...raw, ...policy }, readSetting };
+    return { state: next, evidence: { ...raw, ...policy }, readSetting: prepared.snapshot.readSetting };
 };
 
 /**
@@ -394,6 +312,8 @@ const runScenarioStep = async (challenge: Challenge, now: number, pass: PassCont
             tag,
             reads: passReads(scenarioPass, tag),
             operations: pass.operations ?? createOperationRecord(),
+            // Read before anything of the step could write a swap history onto the challenge.
+            swapHistorySent: Array.isArray(challenge.member?.ranking?.swaps),
         };
         skippedPasses.delete(challengeId);
         try {
@@ -417,12 +337,4 @@ const runScenarioStep = async (challenge: Challenge, now: number, pass: PassCont
  */
 const backgroundServiceOwnsScenarios = () => platform().capabilities.backgroundServiceOwnsScenarios();
 
-export {
-    runScenarioStep,
-    backgroundServiceOwnsScenarios,
-    nextBindingInstant,
-    advance,
-    loadState,
-    noteSkipped,
-    NO_LOCK,
-};
+export { runScenarioStep, backgroundServiceOwnsScenarios, advance, loadState, noteSkipped, NO_LOCK };

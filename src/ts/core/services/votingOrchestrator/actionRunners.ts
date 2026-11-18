@@ -9,6 +9,7 @@ import { runTurboApply } from './turbo';
 import { cancelPass } from './context';
 
 import type { Challenge } from '../../types/gurushots';
+import type { OperationKind } from '../../scenarios/runtime';
 import type { VotingPassResult } from '../../types/votingPass';
 import type { ActionContext, PassContext } from './context';
 
@@ -71,9 +72,12 @@ const submitBoostPinAtAutoSubmit = async (ctx: ActionContext): Promise<boolean> 
     return false;
 };
 
-const runAutoFill = async (ctx: ActionContext) => {
+/**
+ * @returns whether a photo was submitted (what the pass's operation record keeps)
+ */
+const runAutoFill = async (ctx: ActionContext): Promise<boolean> => {
     const { challenge, token, now, fillDeps } = ctx;
-    if (await submitBoostPinAtAutoSubmit(ctx)) return;
+    if (await submitBoostPinAtAutoSubmit(ctx)) return true;
     // Auto-fill missing entries near deadline (one slot per cycle, staggered).
     // On submit it reflects the new entry locally, so a turbo/boost that runs
     // later this cycle (timer order) acts on it instead of waiting a cycle.
@@ -86,9 +90,10 @@ const runAutoFill = async (ctx: ActionContext) => {
                 null,
             );
     }
+    return fillResult === 'submitted';
 };
 
-const runEmergencyFill = async (ctx: ActionContext) => {
+const runEmergencyFill = async (ctx: ActionContext): Promise<boolean> => {
     const { challenge, token, now, fillDeps } = ctx;
     // Emergency fill: net for slots that staggered auto-fill leaves
     // empty (auto-fill off, or tags set with no match) — fills all
@@ -99,13 +104,48 @@ const runEmergencyFill = async (ctx: ActionContext) => {
             .withCategory('voting')
             .info(`${logger.challengeTag(challenge)} emergencySubmit: entries submitted near deadline`, null);
     }
+    return emergencyResult === 'submitted';
 };
 
-const actionRunners: Record<string, ((ctx: ActionContext) => Promise<void>) | undefined> = {
-    boost: runBoost,
-    turbo: runTurboApply,
-    autoSubmit: runAutoFill,
-    emergencySubmit: runEmergencyFill,
+/**
+ * Each deadline action's runner, and the operation it performs (for the pass's record of what was done). A runner answers
+ * whether it did its operation: a photo submitted, a boost or a turbo landed.
+ */
+const actionRunners: Record<
+    string,
+    { kind: OperationKind; run: (ctx: ActionContext) => Promise<boolean> } | undefined
+> = {
+    boost: { kind: 'boost', run: runBoost },
+    turbo: { kind: 'turbo', run: runTurboApply },
+    autoSubmit: { kind: 'submit', run: runAutoFill },
+    emergencySubmit: { kind: 'submit', run: runEmergencyFill },
+};
+
+const actionContextOf = (challenge: Challenge, now: number, pass: PassContext): ActionContext => ({
+    challenge,
+    token: pass.token,
+    now,
+    api: pass.api,
+    fillDeps: pass.fillDeps,
+    entryAges: pass.entryAges,
+    missions: pass.missions,
+});
+
+/**
+ * The normal Boost, Turbo or submit automation of a challenge, run once now under its own enable, timing and selection
+ * policy (the `runAutomation` scenario action). `submit` is the staggered Auto-Submit, then the Emergency Submit net.
+ *
+ * @returns whether the operation was done (a photo submitted, a boost or a turbo landed); false: the policy said not now
+ */
+export const runDeadlineOperation = async (
+    operation: 'boost' | 'turbo' | 'submit',
+    challenge: Challenge,
+    now: number,
+    pass: PassContext,
+): Promise<boolean> => {
+    const ctx = actionContextOf(challenge, now, pass);
+    if (operation === 'submit') return (await runAutoFill(ctx)) || (await runEmergencyFill(ctx));
+    return operation === 'boost' ? runBoost(ctx) : runTurboApply(ctx);
 };
 
 /**
@@ -124,15 +164,14 @@ export const runDeadlineActions = async (
     now: number,
     pass: PassContext,
 ): Promise<VotingPassResult | null> => {
-    const actionCtx: ActionContext = {
-        challenge,
-        token: pass.token,
-        now,
-        api: pass.api,
-        fillDeps: pass.fillDeps,
-        entryAges: pass.entryAges,
-        missions: pass.missions,
-    };
+    const actionCtx = actionContextOf(challenge, now, pass);
+    // What a scenario already did for this challenge this pass is not done again by the normal automation; what the runners
+    // below do is recorded for whatever runs after them (a sibling runner of the same kind is not held by it: the record
+    // is read once, before any of them runs).
+    const subject = String(challenge.id);
+    const doneBefore = new Set<OperationKind>(
+        (['boost', 'turbo', 'submit'] as const).filter((kind) => pass.operations?.has(kind, subject)),
+    );
     for (const { action } of votingLogic.orderDeadlineActions(challenge, now)) {
         // Honor cancellation between actions, same as the per-challenge guard.
         if (cancellation.isCancelled()) {
@@ -141,8 +180,9 @@ export const runDeadlineActions = async (
         // Defensive: orderDeadlineActions only emits the four known keys, but
         // guard the dispatch so a future action added there without a matching
         // runner degrades to a skip instead of throwing and aborting the loop.
-        const run = actionRunners[action];
-        if (typeof run === 'function') await run(actionCtx);
+        const runner = actionRunners[action];
+        if (!runner || doneBefore.has(runner.kind)) continue;
+        if (await runner.run(actionCtx)) pass.operations?.mark(runner.kind, subject);
     }
     return null;
 };

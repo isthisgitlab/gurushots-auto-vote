@@ -334,7 +334,7 @@ describe('scenario phase bindings and profile', () => {
             bound: false,
             available: true,
             reason: null,
-            sources: { literals: ['exposure', 'exposureTarget'], bindings: [], profile: [] },
+            sources: { patch: [], literals: ['exposure', 'exposureTarget'], bindings: [], profile: [] },
             published: null,
         });
     });
@@ -470,7 +470,7 @@ describe('scenario phase bindings and profile', () => {
             bound: false,
             available: true,
             reason: null,
-            sources: { literals: [], bindings: [], profile: [] },
+            sources: { patch: [], literals: [], bindings: [], profile: [] },
             published: null,
         };
         expect(settings.scenarioOverlayStatus(null)).toEqual(none);
@@ -662,6 +662,7 @@ describe('scenario phase bindings and profile', () => {
                 available: true,
                 reason: null,
                 sources: {
+                    patch: [],
                     literals: ['exposureTarget'],
                     bindings: ['exposure'],
                     profile: ['autoBoost', 'boostTime', 'exposure', 'exposureTarget'],
@@ -812,6 +813,205 @@ describe('scenario phase bindings and profile', () => {
                     phases: { push: { settings: { autoJoinAfterHoursFromStart: 1 } } },
                 });
                 expect(timing()).toEqual([1, 25, 9]);
+            });
+        });
+    });
+    describe('a runtime phase patch and profile', () => {
+        /** The record as the runner leaves it after a settings action: the patch and the profile of this phase entry. */
+        const change = (fields: Partial<Pick<ScenarioState, 'phasePatch' | 'phaseProfile'>>) =>
+            expect(
+                scenarioStateLedger.change('7', (current) => ({ ...(current as ScenarioState), ...fields })),
+            ).toMatchObject({ ok: true });
+
+        test('is the top tier: above the phase literals and bindings, the profile, the override, the rules and the defaults', () => {
+            settings.saveChallengeProfile('Tactic', { autoBoost: true, boostTime: 120 });
+            assign(bindingPlan({ profile: 'Tactic' }));
+            change({ phasePatch: { exposureTarget: 95, boostTime: 200, autoSubmit: true } });
+            publish();
+            // over the phase literal (90), over the profile (120), over the default
+            expect(settings.getEffectiveSetting('exposureTarget', '7')).toBe(95);
+            expect(settings.getEffectiveSetting('boostTime', '7')).toBe(200);
+            expect(settings.getEffectiveSetting('autoSubmit', '7')).toBe(true);
+            // what the patch leaves alone reads from the tiers below it
+            expect(settings.getEffectiveSetting('exposure', '7')).toBe(60);
+            expect(settings.getEffectiveSetting('autoBoost', '7')).toBe(true);
+            expect(settings.scenarioOverlayStatus('7').sources).toEqual({
+                patch: ['exposureTarget', 'boostTime', 'autoSubmit'],
+                literals: ['exposureTarget'],
+                bindings: ['exposure'],
+                profile: ['autoBoost', 'boostTime'],
+            });
+        });
+
+        test('never writes the configuration: the overrides and the saved values are as they were', () => {
+            assign(bindingPlan());
+            const before = store.value;
+            change({ phasePatch: { autoSubmit: true } });
+            publish();
+            expect(settings.getEffectiveSetting('autoSubmit', '7')).toBe(true);
+            expect(store.value).toBe(before);
+            expect(settings.getChallengeOverrides('7')).toEqual({ scenario: 'Plan', exposure: 40 });
+            expect(settings.getEffectiveSetting('autoSubmit')).toBe(settings.getGlobalDefault('autoSubmit'));
+        });
+
+        test('makes a phase with literals only a published one: nothing is read until it is published', () => {
+            assign({
+                name: 'Plan',
+                version: 1,
+                start: 'push',
+                phases: { push: { settings: { exposure: 10, exposureTarget: 12 } } },
+            });
+            expect(settings.getEffectiveSetting('exposure', '7')).toBe(10);
+            change({ phasePatch: { autoSubmit: true } });
+            expect(settings.scenarioSubjectAvailable('7')).toBe(false);
+            expect(() => settings.getEffectiveSetting('autoSubmit', '7')).toThrow(
+                settings.ScenarioSettingUnavailableError,
+            );
+            publish();
+            expect(settings.getEffectiveSetting('autoSubmit', '7')).toBe(true);
+            expect(settings.getEffectiveSetting('exposure', '7')).toBe(10);
+        });
+
+        test('a patch changed after publishing makes the publication unavailable', () => {
+            assign();
+            publish();
+            change({ phasePatch: { autoSubmit: true } });
+            expect(settings.scenarioSubjectReason('7')).toBe(
+                'the scenario or its profile changed after its settings were published',
+            );
+            publish();
+            expect(settings.scenarioSubjectAvailable('7')).toBe(true);
+            // a patch that was taken out again is a change too
+            scenarioStateLedger.change('7', (current) => {
+                const rest = { ...(current as ScenarioState) };
+                delete rest.phasePatch;
+                return rest;
+            });
+            expect(settings.scenarioSubjectAvailable('7')).toBe(false);
+        });
+
+        test.each([
+            [
+                'a key a phase may not write',
+                { manualPhotosOnly: false },
+                'manualPhotosOnly',
+                'not a setting a phase may change',
+            ],
+            ['an unknown key', { nonsense: 1 }, 'nonsense', 'not a setting a phase may change'],
+            ['a value its setting refuses', { autoExposureFillBelow: 5000 }, 'autoExposureFillBelow', undefined],
+            [
+                'a pair that does not hold with the phase literal beside it',
+                { exposure: 95 },
+                'exposure',
+                'these values conflict',
+            ],
+        ])('%s refuses the whole phase, naming the key', (_label, phasePatch, key, reason) => {
+            assign({
+                name: 'Plan',
+                version: 1,
+                start: 'push',
+                phases: { push: { settings: { autoBoost: true, exposure: 10, exposureTarget: 90 } } },
+            });
+            change({ phasePatch });
+            const { result } = prepare();
+            expect(result).toMatchObject({ ok: false, key });
+            if (reason !== undefined) expect(result).toMatchObject({ reason: expect.stringContaining(reason) });
+        });
+
+        test('owns a group of settings as the first source that sets any member: the others read 0', () => {
+            settings.setGlobalDefault('autoJoinAfterHoursFromStart', 5);
+            settings.setGlobalDefault('autoJoinAfterPercentElapsed', 25);
+            settings.setGlobalDefault('autoJoinWithinHoursOfEnd', 8);
+            assign({
+                name: 'Plan',
+                version: 1,
+                start: 'push',
+                phases: { push: { settings: { autoJoinWithinHoursOfEnd: 3 } } },
+            });
+            change({ phasePatch: { autoJoinAfterHoursFromStart: 2 } });
+            publish();
+            const timing = ['autoJoinAfterHoursFromStart', 'autoJoinAfterPercentElapsed', 'autoJoinWithinHoursOfEnd'];
+            expect(timing.map((key) => settings.getEffectiveSetting(key, '7'))).toEqual([2, 0, 0]);
+        });
+
+        describe('the runtime profile', () => {
+            beforeEach(() => {
+                settings.saveChallengeProfile('Tactic', { autoBoost: true, boostTime: 120 });
+                settings.saveChallengeProfile('Calm', { boostTime: 300 });
+            });
+
+            test('replaces the phase profile for this phase entry, and none (null) takes it away', () => {
+                assign({ name: 'Plan', version: 1, start: 'push', phases: { push: { profile: 'Tactic' } } });
+                publish();
+                expect(settings.getEffectiveSetting('boostTime', '7')).toBe(120);
+                change({ phaseProfile: 'Calm' });
+                publish();
+                expect(settings.getEffectiveSetting('boostTime', '7')).toBe(300);
+                expect(scenarioStateLedger.get(7).state?.published?.profile).toBe('Calm');
+                change({ phaseProfile: null });
+                publish();
+                expect(settings.scenarioOverlayStatus('7').sources.profile).toEqual([]);
+                expect(settings.getEffectiveSetting('boostTime', '7')).toBe(settings.getGlobalDefault('boostTime'));
+                expect(scenarioStateLedger.get(7).state?.published?.profile).toBeNull();
+            });
+
+            test('gives a phase that names none a profile, as a bound phase', () => {
+                assign({ name: 'Plan', version: 1, start: 'push', phases: { push: {} } });
+                change({ phaseProfile: 'tactic' });
+                expect(settings.scenarioSubjectAvailable('7')).toBe(false);
+                publish();
+                expect(settings.getEffectiveSetting('boostTime', '7')).toBe(120);
+                expect(scenarioStateLedger.get(7).state?.published?.profile).toBe('Tactic');
+            });
+
+            test('a profile changed after publishing makes the publication unavailable, and a missing one blocks the phase', () => {
+                assign({ name: 'Plan', version: 1, start: 'push', phases: { push: {} } });
+                change({ phaseProfile: 'Tactic' });
+                publish();
+                change({ phaseProfile: 'Calm' });
+                expect(settings.scenarioSubjectReason('7')).toBe(
+                    'the scenario or its profile changed after its settings were published',
+                );
+                settings.deleteChallengeProfile('Calm');
+                expect(prepare().result).toEqual({ ok: false, key: null, reason: 'profile-unavailable: Calm' });
+            });
+        });
+    });
+
+    describe('what a saved profile must be to be a phase profile', () => {
+        test('the name as saved, whatever case it is asked in', () => {
+            settings.saveChallengeProfile('Tactic', { autoBoost: true });
+            expect(settings.checkPhaseProfile('tACTIC')).toEqual({ ok: true, name: 'Tactic' });
+        });
+
+        test('refused with its reason: not saved, not valid, or setting a key a phase cannot change', () => {
+            expect(settings.checkPhaseProfile('Nope')).toEqual({
+                ok: false,
+                reason: 'there is no profile named "Nope"',
+            });
+            settings.saveChallengeProfile('Plain', { autoBoost: true });
+            const damage = (name: string, value: unknown) => {
+                const blob = parseJsonAs(
+                    store.value!,
+                    isShape<{ profiles: Record<string, unknown> }>({ profiles: isRecordOf(isUnknown) }),
+                );
+                blob.profiles[name] = value;
+                store.value = JSON.stringify(blob);
+            };
+            damage('Plain', ['bad']);
+            expect(settings.checkPhaseProfile('Plain')).toEqual({
+                ok: false,
+                reason: 'the profile "Plain" is not valid',
+            });
+            damage('Plain', { manualPhotosOnly: true });
+            expect(settings.checkPhaseProfile('Plain')).toEqual({
+                ok: false,
+                reason: 'the profile "Plain" sets manualPhotosOnly, which a phase cannot change',
+            });
+            damage('Plain', { scenario: 'Plan' });
+            expect(settings.checkPhaseProfile('plain')).toEqual({
+                ok: false,
+                reason: 'the profile "Plain" sets scenario, which a phase cannot change',
             });
         });
     });

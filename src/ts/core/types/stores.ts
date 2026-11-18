@@ -226,6 +226,17 @@ export interface ScenarioState {
      * (`to`; null: none) and the generation it was begun at. While it stands the subject runs no action.
      */
     handoff?: { from: string; to: string | null; generation: number; at: number } | null;
+    /**
+     * The runtime phase patch: setting key → value, set by `setSetting` for this phase entry and the top tier of the
+     * subject's overlay (above the phase's literals and bindings). Never written to the configuration; dropped when the
+     * subject leaves the phase.
+     */
+    phasePatch?: Record<string, unknown>;
+    /**
+     * The runtime phase profile, set by `useProfile` for this phase entry: absent, the phase document's `profile`; a name,
+     * that saved profile instead; null, no phase profile. Dropped when the subject leaves the phase.
+     */
+    phaseProfile?: string | null;
     /** The last lifecycle request applied to the subject (unix seconds), for a repeated request to answer the same. */
     lastRequest?: { id: string; result: string; at: number } | null;
     /**

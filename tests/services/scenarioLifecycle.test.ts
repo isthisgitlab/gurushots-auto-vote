@@ -38,6 +38,11 @@ jest.mock('../../src/ts/core/settings', () => ({
     installationGeneration: jest.fn(),
     prepareInstallationSnapshot: jest.fn(),
     getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
+    scenarioCapability: jest.fn(),
+    readScenarioSetting: jest.fn(),
+    readInstallationSetting: jest.fn(),
+    checkPhaseProfile: jest.fn(),
+    requestScenarioHandoff: jest.fn(),
 }));
 jest.mock('../../src/ts/core/voting/cancellation', () => ({ isCancelled: jest.fn(() => false) }));
 jest.mock('../../src/ts/core/services/joinChallenges/performJoin', () => ({ performJoin: jest.fn() }));
@@ -225,6 +230,11 @@ beforeEach(() => {
         snapshot: { publication: null, readSetting: () => ({ state: 'unknown', reason: 'test', dependencies: [] }) },
     });
     settings.getEntryPins.mockReturnValue({ boost: null, turbo: null });
+    settings.scenarioCapability.mockImplementation(
+        jest.requireActual<typeof import('../../src/ts/core/settings/scenarioCapabilities')>(
+            '../../src/ts/core/settings/scenarioCapabilities',
+        ).scenarioCapability,
+    );
     cancellation.isCancelled.mockReturnValue(false);
     performJoin.mockResolvedValue({ status: 'joined', charged: 0 });
     autoFill.refreshChallengeState.mockResolvedValue('refreshed');
@@ -1431,5 +1441,294 @@ describe('the evidence a stage fetches', () => {
 
     test('with no stage named every rule does, as before', () => {
         expect([...evidenceNeeded(scenario, 'main')].sort()).toEqual(['bankroll', 'photoScan']);
+    });
+});
+
+// --- the actions added with the remaining selectors, by stage ---------------------------------------------------------
+
+describe('the settings and lifecycle actions of the installation', () => {
+    const publication = (phase = 'main') => ({
+        revision: 1,
+        documentFingerprint: 'f',
+        phase,
+        phaseEnteredAt: NOW,
+        observedAt: NOW,
+        validUntil: null,
+        bindings: {},
+        profile: null,
+        generation: 1,
+    });
+    const own = (actions: object[]) => {
+        scenarios['Account plan'] = account(actions);
+        settings.getInstallationScenario.mockReturnValue({
+            scenario: 'Account plan',
+            executor: 'electron',
+            generation: 1,
+        });
+        settings.installationGeneration.mockReturnValue(1);
+        settings.prepareInstallationSnapshot.mockImplementation(((_scenario: unknown, at: { phase: string }) => ({
+            ok: true,
+            publication: publication(at.phase),
+        })) as unknown as typeof settings.prepareInstallationSnapshot);
+    };
+    const installation = () => ledger.get(KEY).state as ScenarioState;
+    const prepared = () =>
+        settings.prepareInstallationSnapshot.mock.calls.map((call) => (call[1] as ScenarioState).phasePatch);
+    const known = (value: unknown) =>
+        invalid<ReturnType<typeof settings.readScenarioSetting>>({ state: 'known', value });
+
+    test('setSetting: the patch is checked as the record it would leave, kept in the record, and published again', async () => {
+        own([{ type: 'setSetting', key: 'missionJoinEarly', value: true }]);
+        await expect(lifecycle().installation({ rules: true })).resolves.toBe('published');
+        expect(installation().phasePatch).toEqual({ missionJoinEarly: true });
+        expect(installation().published).toBeDefined();
+        // before the rules, the check of the record the patch would leave, after the action, and after the phase's end
+        expect(prepared().slice(0, 3)).toEqual([undefined, { missionJoinEarly: true }, { missionJoinEarly: true }]);
+        expect(installation().lastAction).toMatchObject({ action: 'setSetting', outcome: 'done' });
+    });
+
+    test('a patch the installation settings refuse changes nothing, and says why', async () => {
+        own([{ type: 'setSetting', key: 'checkFrequencyMax', value: 1 }]);
+        settings.prepareInstallationSnapshot.mockImplementation(((_scenario: unknown, at: ScenarioState) =>
+            at.phasePatch
+                ? { ok: false, key: 'checkFrequencyMax', reason: 'do not hold together' }
+                : {
+                      ok: true,
+                      publication: publication(at.phase),
+                  }) as unknown as typeof settings.prepareInstallationSnapshot);
+        await lifecycle().installation({ rules: true });
+        expect(installation().phasePatch).toBeUndefined();
+        expect(installation().lastError?.message).toContain(
+            'the setting was not changed: checkFrequencyMax: do not hold together',
+        );
+        settings.prepareInstallationSnapshot.mockImplementation(((_scenario: unknown, at: ScenarioState) =>
+            at.phasePatch
+                ? { ok: false, key: null, reason: 'unavailable' }
+                : {
+                      ok: true,
+                      publication: publication(at.phase),
+                  }) as unknown as typeof settings.prepareInstallationSnapshot);
+        ledger = createMemoryStateLedger();
+        await lifecycle().installation({ rules: true });
+        expect(installation().lastError?.message).toContain('the setting was not changed: unavailable');
+    });
+
+    test('a key a challenge scenario owns is not the installation’s to change', async () => {
+        own([{ type: 'setSetting', key: 'autoBoost', value: true }]);
+        await lifecycle().installation({ rules: true });
+        expect(installation().phasePatch).toBeUndefined();
+        expect(installation().lastError?.message).toContain(
+            'autoBoost is not a setting an installation scenario can change',
+        );
+    });
+
+    test('the value of an expression is worked out from the account and the settings it reads', async () => {
+        own([{ type: 'setSetting', key: 'currencyReserveKeys', value: { kind: 'fact', name: 'balance.keys' } }]);
+        await lifecycle().installation({ rules: true });
+        expect(installation().phasePatch).toEqual({ currencyReserveKeys: 5 });
+
+        ledger = createMemoryStateLedger();
+        settings.readInstallationSetting.mockReturnValue(known({ kind: 'boolean', value: true }));
+        settings.readScenarioSetting.mockReturnValue(known({ kind: 'boolean', value: false }));
+        const read = (view: 'base' | 'effective') =>
+            own([
+                {
+                    type: 'setSetting',
+                    key: 'missionJoinEarly',
+                    value: { kind: 'setting', key: 'missionUseBoosts', view },
+                },
+            ]);
+        read('effective');
+        await lifecycle().installation({ rules: true });
+        expect(settings.readInstallationSetting).toHaveBeenCalledWith('missionUseBoosts');
+        expect(installation().phasePatch).toEqual({ missionJoinEarly: true });
+
+        ledger = createMemoryStateLedger();
+        read('base');
+        await lifecycle().installation({ rules: true });
+        expect(settings.readScenarioSetting).toHaveBeenCalledWith('missionUseBoosts', 'base', null);
+        expect(installation().phasePatch).toEqual({ missionJoinEarly: false });
+    });
+
+    test('clearSetting takes a patched key back out', async () => {
+        own([{ type: 'clearSetting', key: 'missionJoinEarly' }]);
+        seed(KEY, 'Account plan', { generation: 1, phasePatch: { missionJoinEarly: true, missionUseBoosts: true } });
+        await lifecycle().installation({ rules: true });
+        expect(installation().phasePatch).toEqual({ missionUseBoosts: true });
+    });
+
+    test('pauseScenario pauses the installation with its progress kept; it sets nothing else', async () => {
+        own([
+            { type: 'pauseScenario', reason: 'asleep' },
+            { type: 'notify', message: 'after' },
+        ]);
+        const before = { ...config };
+        await lifecycle().installation({ rules: true });
+        expect(installation().paused).toEqual({ at: expect.any(Number), reason: 'asleep' });
+        expect(installation().outbox).toEqual([]);
+        expect(installation().inFlight).toEqual({ ruleId: 'r1', actionIndex: 1 });
+        expect(config).toEqual(before);
+        // paused, the next cycle runs no rule
+        await expect(lifecycle().installation({ rules: true })).resolves.toBe('held');
+        expect(installation().outbox).toEqual([]);
+    });
+
+    test('handoffScenario hands the installation over at the generation it is at, and the runner writes nothing after it', async () => {
+        own([
+            { type: 'notify', message: 'before' },
+            { type: 'handoffScenario', to: 'Next plan' },
+        ]);
+        settings.requestScenarioHandoff.mockResolvedValue({ ok: true, generation: 2 });
+        await lifecycle().installation({ rules: true });
+        expect(settings.requestScenarioHandoff).toHaveBeenCalledWith(KEY, 'Next plan', 1, {
+            ruleId: 'r1',
+            actionIndex: 1,
+        });
+        expect(installation().fired.r1).toBeUndefined();
+    });
+
+    test('a handoff of an installation whose progress cannot be read defers', async () => {
+        own([
+            { type: 'notify', message: 'before' },
+            { type: 'handoffScenario', to: null },
+        ]);
+        // the stage reads the generation first, with no rule in progress; the action finds none once the rule is under way
+        settings.installationGeneration.mockImplementation(() => (ledger.get(KEY).state?.inFlight ? null : 1));
+        await lifecycle().installation({ rules: true });
+        expect(settings.requestScenarioHandoff).not.toHaveBeenCalled();
+        expect(log.warning).toHaveBeenCalledWith(expect.stringContaining('the saved progress cannot be read'), null);
+    });
+
+    test('a handoff the settings refuse stops the rule with the reason and changes nothing', async () => {
+        own([{ type: 'handoffScenario', to: 'Next plan' }]);
+        settings.requestScenarioHandoff.mockResolvedValue({ ok: false, reason: 'unresolved-spend' });
+        await lifecycle().installation({ rules: true });
+        expect(installation().lastError?.message).toContain('the handoff was refused (unresolved-spend)');
+        expect(installation().fired.r1).toBeUndefined();
+    });
+});
+
+describe('the settings actions and the normal join before the join', () => {
+    const settingsPlan = (actions: object[]) => preJoin(actions);
+
+    test('setSetting patches the candidate’s settings: the record is checked, kept, and the overlay published for the candidate', async () => {
+        scenarios.Plan = settingsPlan([
+            { type: 'setSetting', key: 'autoJoinMaxCoins', value: { kind: 'fact', name: 'challenge.joinPrice' } },
+        ]);
+        assigned['7'] = 'Plan';
+        config.autoJoin = true;
+        await passOver([candidate({ join_coins: 40 })]);
+        expect(record().phasePatch).toEqual({ autoJoinMaxCoins: 40 });
+        const seen = settings.prepareScenarioSnapshot.mock.calls.map(([id, , state]) => [id, state.phasePatch]);
+        expect(seen).toContainEqual(['7', undefined]);
+        expect(seen).toContainEqual(['7', { autoJoinMaxCoins: 40 }]);
+    });
+
+    test('a candidate’s patch that the settings refuse changes nothing and the join goes on as it would', async () => {
+        scenarios.Plan = settingsPlan([{ type: 'setSetting', key: 'autoJoinMaxCoins', value: 10 }]);
+        assigned['7'] = 'Plan';
+        settings.prepareScenarioSnapshot.mockImplementation((_id, _scenario, state) =>
+            state.phasePatch
+                ? { ok: false, key: 'autoJoinMaxCoins', reason: 'too low' }
+                : invalid({ ok: true, snapshot: { publication: null, readSetting: () => null } }),
+        );
+        await passOver([candidate()]);
+        expect(record().phasePatch).toBeUndefined();
+        expect(record().lastError?.message).toContain('the setting was not changed: autoJoinMaxCoins: too low');
+    });
+
+    test('useProfile before the join keeps the profile in the record', async () => {
+        scenarios.Plan = settingsPlan([{ type: 'useProfile', name: 'Calm' }]);
+        assigned['7'] = 'Plan';
+        settings.checkPhaseProfile.mockReturnValue({ ok: true, name: 'Calm' });
+        await passOver([candidate()]);
+        expect(record().phaseProfile).toBe('Calm');
+    });
+
+    describe('runAutomation join: the pass’s own decision, under its own policy', () => {
+        const normal = () => {
+            scenarios.Plan = settingsPlan([{ type: 'runAutomation', operation: 'join' }]);
+            assigned['7'] = 'Plan';
+        };
+
+        test('joins when the Auto Join policy says so, and is recorded as the candidate’s join', async () => {
+            normal();
+            config.autoJoin = true;
+            await expect(passOver([candidate()])).resolves.toEqual(expect.objectContaining({ joined: 1 }));
+            expect(performJoin).toHaveBeenCalledTimes(1);
+            expect(record().lastAction).toMatchObject({ action: 'runAutomation', outcome: 'done' });
+            expect(operations.has('join', '7')).toBe(true);
+        });
+
+        test('with Auto Join off the step completes as not due, says why, and nothing is joined', async () => {
+            normal();
+            await passOver([candidate()]);
+            expect(performJoin).not.toHaveBeenCalled();
+            expect(record().lastAction).toMatchObject({ outcome: 'not due: skipped:autojoin-off' });
+            expect(record().lastError).toBeNull();
+            expect(record().fired.r1).toBeDefined();
+        });
+
+        test('the timing window applies to it, where a direct join ignores it', async () => {
+            config.autoJoin = true;
+            config.autoJoinWithinHoursOfEnd = 1;
+            settings.resolveRuleSettingGroup.mockReturnValue({ values: { autoJoinWithinHoursOfEnd: 1 } });
+            normal();
+            await passOver([candidate()]);
+            expect(performJoin).not.toHaveBeenCalled();
+            expect(record().lastAction?.outcome).toMatch(/^not due: skipped:/);
+            ledger = createMemoryStateLedger();
+            scenarios.Plan = settingsPlan([{ type: 'join' }]);
+            await expect(passOver([candidate()])).resolves.toEqual(expect.objectContaining({ joined: 1 }));
+        });
+
+        test.each([
+            ['failed-no-charge', 'the join was not made (failed-no-charge)'],
+            ['busy', undefined],
+        ])('a join that ends %s is not a policy refusal', async (status, message) => {
+            normal();
+            config.autoJoin = true;
+            performJoin.mockResolvedValue({ status, charged: 0 });
+            await passOver([candidate()]);
+            expect(record().lastAction).toBeNull();
+            if (message) expect(record().lastError?.message).toContain(message);
+        });
+
+        test('a join paid for and not completed is retried without paying again, the coins counted', async () => {
+            normal();
+            config.autoJoin = true;
+            performJoin.mockResolvedValue({ status: 'charged-pending-submit', charged: 30 });
+            await passOver([candidate({ join_coins: 30 })]);
+            expect(record().spent.coins).toBe(30);
+            expect(record().inFlight).toMatchObject({ ruleId: 'r1', actionIndex: 0 });
+        });
+
+        test('an operation of the active stage is a skip before the join (a stored document is read back without its validation)', async () => {
+            scenarios.Plan = settingsPlan([{ type: 'runAutomation', operation: 'boost' }]);
+            assigned['7'] = 'Plan';
+            await passOver([candidate()]);
+            expect(record().lastError?.message).toContain('boost runs while the challenge is active');
+        });
+    });
+});
+
+describe('pause and handoff after the close', () => {
+    test('pauseScenario pauses the completed subject’s progress', async () => {
+        scenarios.Plan = postClose([{ type: 'pauseScenario', reason: 'done for now' }]);
+        assigned['9'] = 'Plan';
+        seed(9, 'Plan');
+        completed = [claimable(9, 'DONE')];
+        await lifecycle().postClose();
+        expect(record(9).paused).toEqual({ at: expect.any(Number), reason: 'done for now' });
+    });
+
+    test('handoffScenario hands the closed challenge’s progress to the scenario', async () => {
+        scenarios.Plan = postClose([{ type: 'handoffScenario', to: 'Next plan' }]);
+        assigned['9'] = 'Plan';
+        seed(9, 'Plan', { generation: 2 });
+        completed = [claimable(9, 'DONE')];
+        settings.requestScenarioHandoff.mockResolvedValue({ ok: true, generation: 3 });
+        await lifecycle().postClose();
+        expect(settings.requestScenarioHandoff).toHaveBeenCalledWith('9', 'Next plan', 2, undefined);
     });
 });

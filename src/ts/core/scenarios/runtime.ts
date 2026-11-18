@@ -27,6 +27,16 @@ type ActionEffects = {
     coins?: number;
     goto?: string;
     notice?: string;
+    /** A change of the runtime phase patch: one setting set (its stored value), or one cleared. */
+    patch?: { set: string; value: unknown } | { clear: string };
+    /** The runtime phase profile from now on: a saved profile's name, or null for none. */
+    profile?: string | null;
+    /** The subject is paused (`reason`, for the status line); the rule stops after this step and keeps its progress. */
+    pause?: string;
+    /** The subject was handed to another scenario: its record is that scenario's now, and nothing more is written to it. */
+    handedOff?: true;
+    /** The step completed without doing the operation: why the normal policy says not now. It marks no operation as done. */
+    notDue?: string;
 };
 
 type DoneOutcome = { status: 'done' } & ActionEffects;
@@ -78,7 +88,17 @@ const applyEffects = (before: ScenarioState, effects: ActionEffects, at: number,
         ? { ...state.spent, [effects.spent]: (state.spent[effects.spent] ?? 0) + 1 }
         : state.spent;
     const spent = effects.coins ? { ...counted, coins: (counted.coins ?? 0) + effects.coins } : counted;
-    return { ...state, memory, spent };
+    const next: ScenarioState = { ...state, memory, spent };
+    if (effects.patch) {
+        const patched = { ...state.phasePatch };
+        if ('set' in effects.patch) patched[effects.patch.set] = effects.patch.value;
+        else delete patched[effects.patch.clear];
+        if (Object.keys(patched).length > 0) next.phasePatch = patched;
+        else delete next.phasePatch;
+    }
+    if (effects.profile !== undefined) next.phaseProfile = effects.profile;
+    if (effects.pause !== undefined) next.paused = { at, reason: effects.pause };
+    return next;
 };
 
 /** The step an outcome is for: where in which rule, when, and under what the rule's state was. */
@@ -160,7 +180,12 @@ const reduceScenarioOutcome = (state: ScenarioState, step: ReducerStep, outcome:
         return {
             ...applyEffects(state, outcome, at, noticeToken),
             inFlight: { ruleId, actionIndex: index + 1 },
-            lastAction: { at, ruleId, action: actionType, outcome: 'done' },
+            lastAction: {
+                at,
+                ruleId,
+                action: actionType,
+                outcome: outcome.notDue === undefined ? 'done' : `not due: ${outcome.notDue}`,
+            },
         };
     }
     if (outcome.status === 'skipped' && committed) {
@@ -195,7 +220,12 @@ const finishScenarioRule = (
         lastError: skippedStep,
         fired: { ...before.fired, [ruleId]: firedRecord(startState, at, timezone) },
     };
-    return gotoPhase !== null && gotoPhase !== state.phase ? { ...state, phase: gotoPhase, phaseEnteredAt: at } : state;
+    if (gotoPhase === null || gotoPhase === state.phase) return state;
+    // Leaving the phase drops what was patched for it: the next phase starts from its own settings.
+    const left: ScenarioState = { ...state, phase: gotoPhase, phaseEnteredAt: at };
+    delete left.phasePatch;
+    delete left.phaseProfile;
+    return left;
 };
 
 /**
@@ -227,7 +257,7 @@ const absorbLeftover = (
 };
 
 /** The operations a pass keeps one record of. */
-type OperationKind = 'join' | 'claim' | 'vote' | 'boost' | 'turbo' | 'swap' | 'fill' | 'submit';
+type OperationKind = 'join' | 'claim' | 'vote' | 'boost' | 'turbo' | 'earn' | 'swap' | 'fill' | 'submit';
 
 /**
  * The operation each action performs on its subject, for the actions that perform one the normal automation also does.
@@ -240,8 +270,23 @@ const OPERATION_OF: Readonly<Record<string, OperationKind | undefined>> = {
     swap: 'swap',
     boost: 'boost',
     turbo: 'turbo',
+    earnTurbo: 'earn',
     fillExposure: 'fill',
     vote: 'vote',
+};
+
+/**
+ * The operation each `runAutomation` operation performs, for the ones the normal automation keeps a record for (a key
+ * unlock shows on the boost's own state, which the normal automation reads).
+ */
+const AUTOMATION_OPERATION_OF: Readonly<Record<string, OperationKind | undefined>> = {
+    submit: 'submit',
+    boost: 'boost',
+    turbo: 'turbo',
+    swap: 'swap',
+    fillExposure: 'fill',
+    vote: 'vote',
+    join: 'join',
 };
 
 /**
@@ -272,6 +317,7 @@ export {
     absorbLeftover,
     createOperationRecord,
     OPERATION_OF,
+    AUTOMATION_OPERATION_OF,
 };
 export type {
     ActionEffects,

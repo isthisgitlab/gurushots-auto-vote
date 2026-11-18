@@ -141,8 +141,8 @@ const runPreJoinStep = async (
         tag,
         reads: { subject: tag, token: deps.token, ...deps.reads },
         operations,
-        join: async (maxCoins) => {
-            made.attempt = await join(maxCoins);
+        join: async (maxCoins, policy) => {
+            made.attempt = await join(maxCoins, policy);
             return made.attempt;
         },
     };

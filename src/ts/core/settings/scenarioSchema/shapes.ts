@@ -79,15 +79,6 @@ const durationRange = <T extends string>(type: T) =>
 
 const percent = z.number().min(0).max(100);
 
-const selector = z.discriminatedUnion('by', [
-    z.strictObject({ by: z.literal('slot'), index: z.number().int().min(0).max(4) }),
-    z.strictObject({ by: z.literal('memory'), slot: identifier }),
-    z.strictObject({ by: z.literal('fastest'), window: duration.optional(), skipProtected: z.boolean().optional() }),
-    ...vocabulary.RANKING_SELECTORS.map((by) =>
-        z.strictObject({ by: z.literal(by), skipProtected: z.boolean().optional() }),
-    ),
-]);
-
 const entryField = oneOf([...vocabulary.NUMERIC_ENTRY_FIELDS, ...vocabulary.BOOLEAN_ENTRY_FIELDS]);
 
 /**
@@ -110,6 +101,39 @@ const checkEntryValue = (value: { field: string; op: string; value: number | boo
     }
 };
 
+/**
+ * One test an `entryCount` or `entriesWhere` applies to every entry. How many there are (1-8) is checked with the expressions, in
+ * semantics.ts.
+ */
+const entryPredicate = z
+    .strictObject({ field: entryField, op, value: z.union([finiteNumber, z.boolean()]) })
+    .superRefine(checkEntryValue);
+
+const entryId = z.string().regex(/^[\w.:-]{1,64}$/, 'Use letters, digits, ".", ":", "-" or "_" (max 64)');
+
+const selector = z.discriminatedUnion('by', [
+    z.strictObject({ by: z.literal('slot'), index: z.number().int().min(0).max(4) }),
+    z.strictObject({ by: z.literal('memory'), slot: identifier }),
+    z.strictObject({
+        by: oneOf(['fastest', 'slowest']),
+        window: duration.optional(),
+        skipProtected: z.boolean().optional(),
+    }),
+    ...vocabulary.RANKING_SELECTORS.map((by) =>
+        z.strictObject({ by: z.literal(by), skipProtected: z.boolean().optional() }),
+    ),
+    z.strictObject({ by: z.literal('id'), id: entryId }),
+    z.strictObject({ by: z.literal('pinned'), power: oneOf(vocabulary.PINNED_POWERS) }),
+    z.strictObject({ by: z.literal('pendingBoostTarget') }),
+    z.strictObject({ by: oneOf(['newest', 'oldest']), time: oneOf(vocabulary.ENTRY_TIME_MODES) }),
+    z.strictObject({
+        by: z.literal('matching'),
+        where: z.array(entryPredicate).min(1).max(SCENARIO_CAPS.entryPredicates),
+        order: oneOf(vocabulary.MATCH_ORDERS),
+        direction: oneOf(vocabulary.ORDER_DIRECTIONS),
+    }),
+]);
+
 const entryCondition = z
     .strictObject({
         type: z.literal('entry'),
@@ -129,14 +153,6 @@ const entryCondition = z
         }
         checkEntryValue(value, ctx);
     });
-
-/**
- * One test an `entryCount` or `entriesWhere` applies to every entry. How many there are (1-8) is checked with the expressions, in
- * semantics.ts.
- */
-const entryPredicate = z
-    .strictObject({ field: entryField, op, value: z.union([finiteNumber, z.boolean()]) })
-    .superRefine(checkEntryValue);
 
 /**
  * A short text of an expression literal: plain, so a shared file cannot smuggle control characters into the logs.
@@ -237,6 +253,18 @@ const photoSource = z.union([z.literal('best'), z.strictObject({ memory: identif
     error: 'Use "best" or {"memory": "<slot>"}',
 });
 
+const settingKey = z.string().min(1).max(SCENARIO_CAPS.nameLength);
+
+/** A literal setting value as the configuration stores it: a flag, a number, a text or a list of texts. */
+const settingLiteral = z.union([
+    z.boolean(),
+    finiteNumber,
+    literalText,
+    z.array(literalText).max(SCENARIO_CAPS.conditionsPerList),
+]);
+
+const settingValue = z.union([expression, settingLiteral]);
+
 const action = z.discriminatedUnion('type', [
     z.strictObject({ type: z.literal('enterPhoto'), photo: photoSource, remember: identifier.optional() }),
     z.strictObject({
@@ -265,6 +293,20 @@ const action = z.discriminatedUnion('type', [
         type: z.literal('claimMissionReward'),
         missionId: z.string().regex(/^[\w.:-]{1,64}$/, 'Use letters, digits, ".", ":", "-" or "_" (max 64)'),
     }),
+    z.strictObject({ type: z.literal('earnTurbo') }),
+    // Which operations are available where is checked with the document (semantics.ts): join before joining, the rest while active.
+    z.strictObject({ type: z.literal('runAutomation'), operation: oneOf(vocabulary.AUTOMATION_OPERATIONS) }),
+    // A runtime phase patch: a literal in the setting's stored form, or an expression worked out when the action runs. Which
+    // keys a scope may patch, and what the value may be, is checked with the document (semantics.ts).
+    z.strictObject({ type: z.literal('setSetting'), key: settingKey, value: settingValue }),
+    z.strictObject({ type: z.literal('clearSetting'), key: settingKey }),
+    z.strictObject({
+        type: z.literal('useProfile'),
+        name: z.string().trim().min(1, 'Name a profile').max(MAX_PROFILE_NAME_LENGTH).nullable(),
+    }),
+    z.strictObject({ type: z.literal('pauseScenario'), reason: plainText(SCENARIO_CAPS.noticeLength).optional() }),
+    // Must be the last action of its rule (semantics.ts).
+    z.strictObject({ type: z.literal('handoffScenario'), to: scenarioName.nullable() }),
 ]);
 
 /** The stages of a rule: at least one, none twice. */

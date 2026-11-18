@@ -108,6 +108,7 @@ export const scenarioSubjectAvailable = challengeOverrides.scenarioSubjectAvaila
 export const scenarioSubjectReason = challengeOverrides.scenarioSubjectReason;
 export const scenarioOverlayStatus = challengeOverrides.scenarioOverlayStatus;
 export const prepareScenarioSnapshot = challengeOverrides.prepareScenarioSnapshot;
+export const checkPhaseProfile = challengeOverrides.checkPhaseProfile;
 export const ScenarioSettingUnavailableError = challengeOverrides.ScenarioSettingUnavailableError;
 // The installation scenario's settings (account policy, app and device preferences) as the code that acts on them reads them:
 // the saved value with the published phase over it, captured at the consumer's boundary. Saved values never change.
@@ -167,6 +168,7 @@ export const installationGeneration = scenarioLifecycle.installationGeneration;
 export const setInstallationScenario = scenarioLifecycle.setInstallationScenario;
 export const transferInstallationOwner = scenarioLifecycle.transferInstallationOwner;
 export const requestScenarioHandoff = scenarioLifecycle.requestScenarioHandoff;
+export const setScenarioPaused = scenarioLifecycle.setScenarioPaused;
 export const settleHandoff = scenarioLifecycle.settleHandoff;
 export const unresolvedScenarioWork = scenarioLifecycle.unresolvedWork;
 export const readStopFence = scenarioLifecycle.readStopFence;
@@ -177,6 +179,7 @@ export const isArmAllowed = scenarioLifecycle.isArmAllowed;
 export type ScenarioRefusal = scenarios.ScenarioRefusal;
 export type InstallationResult = scenarioLifecycle.InstallationResult;
 export type HandoffResult = scenarioLifecycle.HandoffResult;
+export type PauseResult = scenarioLifecycle.PauseResult;
 export type StopFenceRead = scenarioLifecycle.StopFenceRead;
 // What a scenario may read or write per configuration key: the serialized projection, and one key's capability.
 export const getScenarioCapabilities = scenarioCapabilities.getScenarioCapabilities;

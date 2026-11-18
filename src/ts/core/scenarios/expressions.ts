@@ -21,6 +21,7 @@ import type {
 } from '../types/scenario';
 import type { ScenarioValueDescriptor } from '../types/settings';
 import { FACTS, readScenarioFact } from './facts';
+import { compare } from './selectors';
 import { SCENARIO_CAPS } from './vocabulary';
 import { absent, allTruth, anyTruth, isKnown, known, notTruth, pending, unknownOf } from './valueState';
 
@@ -59,26 +60,6 @@ const numberValue = (value: number, quantity: Quantity): ExprValue => ({ kind: '
  */
 const numeric = (value: number, quantity: Quantity): ValueState<ExprValue> =>
     Number.isFinite(value) ? known(numberValue(value, quantity)) : unknownOf('not-finite', []);
-
-/**
- * The comparison of two values of one kind.
- */
-const compare = <T extends number | boolean | string>(a: T, op: ComparisonOp, b: T): boolean => {
-    switch (op) {
-        case '<':
-            return a < b;
-        case '<=':
-            return a <= b;
-        case '>':
-            return a > b;
-        case '>=':
-            return a >= b;
-        case '!=':
-            return a !== b;
-        default:
-            return a === b;
-    }
-};
 
 /**
  * The quantity an arithmetic node produces from two quantities, or null when they do not combine: an instant moves by a

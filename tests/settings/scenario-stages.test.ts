@@ -264,3 +264,295 @@ describe('the coin limit', () => {
         refuses(challengeDoc(rule, { limits: { coins: 1.5 } }), 'Invalid input');
     });
 });
+
+describe('the entry selectors added with the remaining actions', () => {
+    const boostWith = (entry: unknown) => challengeDoc({ do: [{ type: 'boost', entry }] });
+    const predicate = { field: 'votes', op: '>=', value: 5 };
+
+    test.each([
+        [{ by: 'id', id: 'photo-1' }],
+        [{ by: 'pinned', power: 'boost' }],
+        [{ by: 'pinned', power: 'turbo' }],
+        [{ by: 'pendingBoostTarget' }],
+        [{ by: 'newest', time: 'exact' }],
+        [{ by: 'oldest', time: 'observed' }],
+        [{ by: 'slowest' }],
+        [{ by: 'slowest', window: '2h', skipProtected: true }],
+        [{ by: 'matching', where: [predicate], order: 'votes', direction: 'desc' }],
+        [
+            {
+                by: 'matching',
+                where: [predicate, { field: 'boosted', op: '=', value: false }],
+                order: 'age',
+                direction: 'asc',
+            },
+        ],
+    ])('%j is accepted as an action target', (selector) => {
+        expect(accepts(boostWith(selector))).toBe(true);
+    });
+
+    test.each([
+        [{ by: 'id' }, 'phases.main.rules[0].do[0].entry.id'],
+        [{ by: 'id', id: 'a b' }, 'phases.main.rules[0].do[0].entry.id'],
+        [{ by: 'pinned', power: 'swap' }, 'phases.main.rules[0].do[0].entry.power'],
+        [{ by: 'newest' }, 'phases.main.rules[0].do[0].entry.time'],
+        [{ by: 'oldest', time: 'soon' }, 'phases.main.rules[0].do[0].entry.time'],
+        [{ by: 'slowest', window: 'soon' }, 'phases.main.rules[0].do[0].entry.window'],
+        [{ by: 'matching', where: [], order: 'votes', direction: 'asc' }, 'phases.main.rules[0].do[0].entry.where'],
+        [
+            { by: 'matching', where: Array.from({ length: 9 }, () => predicate), order: 'votes', direction: 'asc' },
+            'phases.main.rules[0].do[0].entry.where',
+        ],
+        [
+            { by: 'matching', where: [predicate], order: 'luck', direction: 'asc' },
+            'phases.main.rules[0].do[0].entry.order',
+        ],
+        [
+            { by: 'matching', where: [{ field: 'boosted', op: '<', value: 1 }], order: 'votes', direction: 'asc' },
+            'phases.main.rules[0].do[0].entry.where[0].op',
+        ],
+        [{ by: 'pendingBoostTarget', extra: 1 }, 'phases.main.rules[0].do[0].entry'],
+    ])('%j is refused', (selector, path) => {
+        expect(issuesOf(boostWith(selector)).map((issue) => issue.path)).toContain(path);
+    });
+
+    test('a selector is usable in an entry condition and in an expression fact', () => {
+        const condition = { type: 'entry', select: { by: 'newest', time: 'exact' }, field: 'votes', op: '>', value: 3 };
+        expect(accepts(challengeDoc({ if: [condition], do: [{ type: 'notify', message: 'hi' }] }))).toBe(true);
+        const fact = { kind: 'fact', name: 'entry.votes', select: { by: 'pinned', power: 'boost' } };
+        const compare = {
+            type: 'compare',
+            left: fact,
+            op: '>',
+            right: { kind: 'literal', value: 3, quantity: 'votes' },
+        };
+        expect(accepts(challengeDoc({ if: [compare], do: [{ type: 'notify', message: 'hi' }] }))).toBe(true);
+    });
+});
+
+describe('the remaining actions', () => {
+    const activeRule = (action: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
+        challengeDoc({ do: [action], ...extra });
+
+    describe('earnTurbo', () => {
+        test('is an active-stage action', () => {
+            expect(accepts(activeRule({ type: 'earnTurbo' }))).toBe(true);
+            refuses(
+                challengeDoc({ stages: ['preJoin'], do: [{ type: 'earnTurbo' }] }),
+                'earnTurbo is not available before a challenge is joined',
+            );
+            refuses(installationDoc({ do: [{ type: 'earnTurbo' }] }), 'earnTurbo is not available outside a challenge');
+            expect(issuesOf(activeRule({ type: 'earnTurbo', extra: 1 })).length).toBeGreaterThan(0);
+        });
+    });
+
+    describe('runAutomation', () => {
+        test.each(['submit', 'boost', 'turbo', 'unlockBoost', 'swap', 'fillExposure', 'vote'])(
+            '%s runs while the challenge is active',
+            (operation) => {
+                expect(accepts(activeRule({ type: 'runAutomation', operation }))).toBe(true);
+                refuses(
+                    challengeDoc({ stages: ['preJoin'], do: [{ type: 'runAutomation', operation }] }),
+                    `${operation} is an active-challenge operation`,
+                    'phases.main.rules[0].do[0].operation',
+                );
+            },
+        );
+
+        test('join runs before joining only', () => {
+            const action = { type: 'runAutomation', operation: 'join' };
+            expect(accepts(challengeDoc({ stages: ['preJoin'], do: [action] }))).toBe(true);
+            refuses(activeRule(action), 'join is a pre-join operation', 'phases.main.rules[0].do[0].operation');
+            refuses(
+                challengeDoc({ stages: ['preJoin', 'active'], do: [action] }),
+                'join is a pre-join operation: it is not available while a challenge is active',
+            );
+        });
+
+        test('is refused where no operation runs, and with an operation the app does not have', () => {
+            refuses(
+                installationDoc({ do: [{ type: 'runAutomation', operation: 'boost' }] }),
+                'runAutomation is not available outside a challenge',
+            );
+            refuses(
+                challengeDoc({ stages: ['postClose'], do: [{ type: 'runAutomation', operation: 'vote' }] }),
+                'runAutomation is not available after a challenge closes',
+            );
+            expect(issuesOf(activeRule({ type: 'runAutomation', operation: 'dance' })).length).toBeGreaterThan(0);
+        });
+    });
+
+    describe('setSetting and clearSetting', () => {
+        test('a challenge scenario patches a per-challenge setting with a literal or an expression of its type', () => {
+            expect(accepts(activeRule({ type: 'setSetting', key: 'autoBoost', value: true }))).toBe(true);
+            expect(accepts(activeRule({ type: 'setSetting', key: 'autoExposureFillBelow', value: 60 }))).toBe(true);
+            expect(accepts(activeRule({ type: 'setSetting', key: 'mustIncludeTags', value: ['sea'] }))).toBe(true);
+            const cap = { kind: 'literal', value: 30, quantity: 'coins' };
+            expect(accepts(activeRule({ type: 'setSetting', key: 'autoJoinMaxCoins', value: cap }))).toBe(true);
+            expect(accepts(activeRule({ type: 'clearSetting', key: 'autoBoost' }))).toBe(true);
+            expect(
+                accepts(
+                    challengeDoc({ stages: ['preJoin'], do: [{ type: 'setSetting', key: 'autoJoin', value: false }] }),
+                ),
+            ).toBe(true);
+        });
+
+        test('an installation scenario patches an installation setting', () => {
+            expect(
+                accepts(installationDoc({ do: [{ type: 'setSetting', key: 'missionJoinEarly', value: true }] })),
+            ).toBe(true);
+            expect(accepts(installationDoc({ do: [{ type: 'clearSetting', key: 'missionJoinEarly' }] }))).toBe(true);
+        });
+
+        test('a key the scope may not patch is refused with its reason', () => {
+            // a per-challenge setting from an installation scenario, and an installation setting from a challenge one
+            refuses(
+                installationDoc({ do: [{ type: 'setSetting', key: 'autoBoost', value: true }] }),
+                'Not a setting an installation scenario can change',
+                'phases.main.rules[0].do[0].key',
+            );
+            refuses(
+                activeRule({ type: 'setSetting', key: 'missionJoinEarly', value: true }),
+                'Not a per-challenge setting',
+                'phases.main.rules[0].do[0].key',
+            );
+            refuses(
+                activeRule({ type: 'clearSetting', key: 'scenario' }),
+                'scenario',
+                'phases.main.rules[0].do[0].key',
+            );
+            refuses(activeRule({ type: 'setSetting', key: 'manualPhotosOnly', value: false }), 'Manual Only');
+            refuses(activeRule({ type: 'setSetting', key: 'nonsense', value: 1 }), 'Not a per-challenge setting');
+        });
+
+        test('a key whose value has no literal or expression form cannot be set by an action', () => {
+            refuses(
+                activeRule({ type: 'setSetting', key: 'chosenPhotos', value: ['a'] }),
+                '"chosenPhotos" has no value an action can set',
+                'phases.main.rules[0].do[0].key',
+            );
+            refuses(activeRule({ type: 'clearSetting', key: 'chosenPhotos' }), 'has no value an action can set');
+        });
+
+        test('a value of the wrong type, or one the setting refuses, is refused', () => {
+            refuses(
+                activeRule({ type: 'setSetting', key: 'autoBoost', value: 'yes' }),
+                'autoBoost does not take this value',
+                'phases.main.rules[0].do[0].value',
+            );
+            refuses(
+                activeRule({ type: 'setSetting', key: 'autoExposureFillBelow', value: 5000 }),
+                '',
+                'phases.main.rules[0].do[0].value',
+            );
+            const text = { kind: 'literal', value: 'x' };
+            refuses(
+                activeRule({ type: 'setSetting', key: 'autoBoost', value: text }),
+                'This gives a string, but autoBoost takes a boolean',
+            );
+        });
+
+        test('an expression value may read facts of the rule stages, and is checked like any expression', () => {
+            const fact = { kind: 'fact', name: 'balance.coins' };
+            expect(accepts(activeRule({ type: 'setSetting', key: 'autoJoinMaxCoins', value: fact }))).toBe(true);
+            const reads = { kind: 'fact', name: 'entry.votes', select: { by: 'slot', index: 1 } };
+            refuses(
+                installationDoc({ do: [{ type: 'setSetting', key: 'missionJoinEarly', value: reads }] }),
+                'entry.votes is not available',
+            );
+            expect(
+                issuesOf(activeRule({ type: 'setSetting', key: 'autoBoost', value: { kind: 'nope' } })).length,
+            ).toBeGreaterThan(0);
+        });
+
+        test('are not available after a challenge closes', () => {
+            refuses(
+                challengeDoc({ stages: ['postClose'], do: [{ type: 'setSetting', key: 'autoBoost', value: true }] }),
+                'setSetting is not available after a challenge closes',
+            );
+        });
+    });
+
+    describe('useProfile', () => {
+        test('names a saved profile, or none; challenge stages only', () => {
+            expect(accepts(activeRule({ type: 'useProfile', name: 'Calm' }))).toBe(true);
+            expect(accepts(activeRule({ type: 'useProfile', name: null }))).toBe(true);
+            expect(accepts(challengeDoc({ stages: ['preJoin'], do: [{ type: 'useProfile', name: 'Calm' }] }))).toBe(
+                true,
+            );
+            refuses(
+                installationDoc({ do: [{ type: 'useProfile', name: 'Calm' }] }),
+                'useProfile is not available outside a challenge',
+            );
+            expect(issuesOf(activeRule({ type: 'useProfile', name: '' })).length).toBeGreaterThan(0);
+            expect(issuesOf(activeRule({ type: 'useProfile', name: 'x'.repeat(61) })).length).toBeGreaterThan(0);
+            expect(issuesOf(activeRule({ type: 'useProfile' })).length).toBeGreaterThan(0);
+        });
+
+        test('a saved profile that sets a key a phase may not write is refused; one not saved yet is not', () => {
+            const profiles = { Bad: { manualPhotosOnly: true }, Good: { autoBoost: true } };
+            const check = (name: string | null) =>
+                validateScenario(activeRule({ type: 'useProfile', name }), globalDefaults, profiles);
+            expect(check('Good').ok).toBe(true);
+            expect(check(null).ok).toBe(true);
+            expect(check('Later').ok).toBe(true);
+            const bad = check('Bad');
+            expect(bad.ok).toBe(false);
+            expect((bad as Refused).issues).toEqual(
+                expect.arrayContaining([expect.objectContaining({ path: 'phases.main.rules[0].do[0].name' })]),
+            );
+        });
+    });
+
+    describe('pauseScenario', () => {
+        test.each([
+            [undefined, challengeDoc({ do: [{ type: 'pauseScenario' }] })],
+            ['a reason', challengeDoc({ do: [{ type: 'pauseScenario', reason: 'cooling off' }] })],
+            ['preJoin', challengeDoc({ stages: ['preJoin'], do: [{ type: 'pauseScenario' }] })],
+            ['postClose', challengeDoc({ stages: ['postClose'], do: [{ type: 'pauseScenario' }] })],
+            ['the installation', installationDoc({ do: [{ type: 'pauseScenario', reason: 'asleep' }] })],
+        ])('%s is accepted', (_label, doc) => {
+            expect(accepts(doc)).toBe(true);
+        });
+
+        test('a reason is short plain text', () => {
+            expect(issuesOf(activeRule({ type: 'pauseScenario', reason: 'x'.repeat(121) })).length).toBeGreaterThan(0);
+            expect(issuesOf(activeRule({ type: 'pauseScenario', reason: 'a\nb' })).length).toBeGreaterThan(0);
+        });
+    });
+
+    describe('handoffScenario', () => {
+        test('names a scenario or none, and is the last action of its rule', () => {
+            const last = challengeDoc({
+                do: [
+                    { type: 'notify', message: 'hi' },
+                    { type: 'handoffScenario', to: 'Other' },
+                ],
+            });
+            expect(accepts(last)).toBe(true);
+            expect(accepts(activeRule({ type: 'handoffScenario', to: null }))).toBe(true);
+            expect(accepts(installationDoc({ do: [{ type: 'handoffScenario', to: 'Account two' }] }))).toBe(true);
+            expect(
+                accepts(challengeDoc({ stages: ['postClose'], do: [{ type: 'handoffScenario', to: 'Other' }] })),
+            ).toBe(true);
+        });
+
+        test('a handoff that is not the last action is refused', () => {
+            refuses(
+                challengeDoc({
+                    do: [
+                        { type: 'handoffScenario', to: 'Other' },
+                        { type: 'notify', message: 'hi' },
+                    ],
+                }),
+                'handoffScenario must be the last action of its rule',
+                'phases.main.rules[0].do[0]',
+            );
+        });
+
+        test('a name that is not a scenario name is refused', () => {
+            expect(issuesOf(activeRule({ type: 'handoffScenario', to: '' })).length).toBeGreaterThan(0);
+            expect(issuesOf(activeRule({ type: 'handoffScenario' })).length).toBeGreaterThan(0);
+        });
+    });
+});

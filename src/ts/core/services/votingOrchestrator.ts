@@ -240,7 +240,7 @@ const processChallenge = async (
         return null;
     }
 
-    await playAutoTurbo(challenge, now, pass);
+    if (!doneThisPass('earn')) await playAutoTurbo(challenge, now, pass);
 
     // Automatic key unlock and photo swap (opt-in per challenge/profile). They
     // run ahead of the deadline actions on purpose: an unlocked boost is then

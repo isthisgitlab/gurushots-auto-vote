@@ -42,6 +42,16 @@ type SwapPhoto = { id: string; member_id: string };
  */
 type ScenarioPass = PassContext & { currency: CurrencyPassDeps };
 
+/**
+ * What a settings action asks of the subject's published overlay: whether the settings of a candidate record (the record
+ * with a patch or a profile applied) can be prepared, and the overlay made again for the record as it now stands.
+ */
+type OverlayControl = {
+    /** Why the settings of `candidate` cannot be prepared (nothing is written), or null when they can. */
+    check: (candidate: ScenarioState) => Promise<string | null>;
+    republish: () => Promise<void>;
+};
+
 type RunnerBase = {
     /** The key of the subject's record in the progress ledger: a challenge id, or the installation's. */
     challengeId: string;
@@ -65,12 +75,22 @@ type RunnerBase = {
 };
 
 /** A joined challenge in the voting pass: the whole pass is at hand. */
-type ActiveContext = RunnerBase & { stage: 'active'; challenge: Challenge; pass: ScenarioPass };
+type ActiveContext = RunnerBase & {
+    stage: 'active';
+    challenge: Challenge;
+    pass: ScenarioPass;
+    /** Whether GuruShots sent a swap history for the challenge, as the pass read it (the automatic swap's cap branch). */
+    swapHistorySent: boolean;
+};
 
 /** What a candidate's join step may call: the join of that candidate, under the join pass's own decision and budget. */
 type JoinAttempt = { status: string; charged: number; maybeCharged: number };
 
-type ScenarioJoin = (maxCoins: number | null) => Promise<JoinAttempt>;
+/**
+ * A join of the candidate: `direct` (the default) is the scenario's own decision (no timing window, a price limit that only
+ * narrows the caps); `normal` is the Auto Join pass's own decision, under its enable, timing and selection policy.
+ */
+type ScenarioJoin = (maxCoins: number | null, policy?: 'direct' | 'normal') => Promise<JoinAttempt>;
 
 /** An open challenge the account has not joined, inside the join pass. */
 type PreJoinContext = RunnerBase & {
@@ -86,7 +106,7 @@ type ClaimPass = { deps: ClaimDeps };
 type PostCloseContext = RunnerBase & { stage: 'postClose'; completed: CompletedChallenge; claims: ClaimPass };
 
 /** The installation: no challenge. `republish` publishes the overlay again after a change of phase or progress. */
-type AccountContext = RunnerBase & { stage: 'account'; claims: ClaimPass; republish: () => Promise<void> };
+type AccountContext = RunnerBase & { stage: 'account'; claims: ClaimPass; overlay: OverlayControl };
 
 type RunnerContext = ActiveContext | PreJoinContext | PostCloseContext | AccountContext;
 
@@ -99,6 +119,9 @@ type ActedChallenge = Challenge & {
     member: ChallengeMember & { ranking: MemberRanking & { entries: RankingEntry[] } };
 };
 
+/** A subject whose settings overlay a settings action can change: a candidate, a joined challenge, the installation. */
+type OverlayContext = PreJoinContext | ActiveContext | AccountContext;
+
 /** The context an action's handler runs in: the stage the action belongs to. */
 type ContextOf<K extends ActionType> = K extends 'join'
     ? PreJoinContext
@@ -106,9 +129,15 @@ type ContextOf<K extends ActionType> = K extends 'join'
       ? PostCloseContext
       : K extends 'claimMissionReward'
         ? AccountContext
-        : K extends 'goto' | 'notify'
+        : K extends 'goto' | 'notify' | 'pauseScenario' | 'handoffScenario'
           ? RunnerContext
-          : ActiveContext;
+          : K extends 'runAutomation'
+            ? PreJoinContext | ActiveContext
+            : K extends 'setSetting' | 'clearSetting'
+              ? OverlayContext
+              : K extends 'useProfile'
+                ? PreJoinContext | ActiveContext
+                : ActiveContext;
 
 type ActionHandler<A extends ScenarioAction, C extends RunnerContext = RunnerContext> = (
     action: A,
@@ -129,6 +158,7 @@ export type {
     PreJoinContext,
     PostCloseContext,
     AccountContext,
+    OverlayContext,
     JoinAttempt,
     ScenarioJoin,
     ContextOf,

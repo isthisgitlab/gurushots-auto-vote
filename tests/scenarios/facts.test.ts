@@ -1118,3 +1118,65 @@ describe('photo candidates', () => {
         }
     });
 });
+
+describe('entry facts through the evidence-reading selectors', () => {
+    const readEntry = (select: ScenarioSelector, extra: Partial<Record<keyof FactSnapshot, unknown>> = {}) =>
+        readScenarioFact(invalid('entry.votes'), snapshot(undefined, extra), select);
+
+    test('id needs no evidence', () => {
+        expect(readEntry({ by: 'id', id: 'b' })).toEqual(known(50));
+        expect(readEntry({ by: 'id', id: 'zz' })).toEqual(absent('not-present'));
+    });
+
+    test('pinned reads the pinned photos, and is unknown while they are not loaded or unreadable', () => {
+        const pins = { readable: true, boost: 'b', turbo: 'a' };
+        expect(readEntry({ by: 'pinned', power: 'boost' }, { pins })).toEqual(known(50));
+        expect(readEntry({ by: 'pinned', power: 'turbo' }, { pins })).toEqual(known(10));
+        expect(readEntry({ by: 'pinned', power: 'turbo' })).toEqual(unknown('evidence-not-loaded', ['entry-pins']));
+        expect(
+            readEntry({ by: 'pinned', power: 'turbo' }, { pins: { readable: false, reason: 'pins-unreadable' } }),
+        ).toEqual(unknown('pins-unreadable', ['entry-pins']));
+    });
+
+    test('pendingBoostTarget reads the photo the boost waits on', () => {
+        expect(readEntry({ by: 'pendingBoostTarget' }, { pendingBoost: { readable: true, id: 'a' } })).toEqual(
+            known(10),
+        );
+        expect(readEntry({ by: 'pendingBoostTarget' })).toEqual(
+            unknown('evidence-not-loaded', ['entry-pending-boost']),
+        );
+    });
+
+    test('newest and oldest read the entry times', () => {
+        const entryAges = {
+            readable: true,
+            times: {
+                a: { at: NOW - 900, exact: true },
+                b: { at: NOW - 100, exact: true },
+                c: { at: NOW - 500, exact: false },
+            },
+        };
+        expect(readEntry({ by: 'newest', time: 'observed' }, { entryAges })).toEqual(known(50));
+        expect(readEntry({ by: 'oldest', time: 'observed' }, { entryAges })).toEqual(known(10));
+        expect(readEntry({ by: 'oldest', time: 'exact' }, { entryAges })).toEqual(
+            unknown('entry-age-unusable', ['entry-ages']),
+        );
+        expect(readEntry({ by: 'newest', time: 'exact' })).toEqual(unknown('evidence-not-loaded', ['entry-ages']));
+    });
+
+    test('matching reads each entry field through the registry', () => {
+        const select: ScenarioSelector = {
+            by: 'matching',
+            where: [{ field: 'votes', op: '>=', value: 10 }],
+            order: 'votes',
+            direction: 'desc',
+        };
+        expect(readEntry(select)).toEqual(known(50));
+    });
+
+    test('slowest reads the sampled vote history', () => {
+        const history = { a: [[NOW - 2 * H, 0]], b: [[NOW - 2 * H, 10]], c: [[NOW - 2 * H, 10]] };
+        const extra = { state: { phaseEnteredAt: NOW, memory: {}, history } };
+        expect(readEntry({ by: 'slowest' }, extra)).toEqual(known(10));
+    });
+});

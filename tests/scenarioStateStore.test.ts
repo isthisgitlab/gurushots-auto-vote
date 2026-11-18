@@ -129,6 +129,38 @@ describe('createStateLedger — the lifecycle fields', () => {
         }
     });
 
+    test('a record keeps a runtime phase patch and profile, and a malformed one makes the record unreadable', () => {
+        const fields = {
+            phasePatch: { exposure: 80, useTurbo: true, autoSwapMode: 'fewest', mustIncludeTags: ['sea', 'light'] },
+            phaseProfile: 'Calm',
+        };
+        const ledger = createMemoryStateLedger();
+        ledger.change('7', () => ({ ...state(), ...fields }));
+        expect(ledger.get(7).state).toMatchObject(fields);
+        ledger.change('8', () => ({ ...state(), phasePatch: {}, phaseProfile: null }));
+        expect(ledger.get(8).state).toMatchObject({ phasePatch: {}, phaseProfile: null });
+        const tooMany = Object.fromEntries(Array.from({ length: 21 }, (_, index) => [`k${index}`, index]));
+        for (const bad of [
+            { phasePatch: [] },
+            { phasePatch: 'x' },
+            { phasePatch: { '': 1 } },
+            { phasePatch: { exposure: null } },
+            { phasePatch: { exposure: Infinity } },
+            { phasePatch: { exposure: { nested: 1 } } },
+            { phasePatch: { tags: [1] } },
+            { phasePatch: { tags: Array.from({ length: 51 }, () => 'x') } },
+            { phasePatch: { text: 'x'.repeat(201) } },
+            { phasePatch: { ['k'.repeat(201)]: 1 } },
+            { phasePatch: tooMany },
+            { phaseProfile: '' },
+            { phaseProfile: 7 },
+            { phaseProfile: 'x'.repeat(61) },
+        ]) {
+            const raw = rawStore(JSON.stringify({ 7: { ...state(), ...bad } }));
+            expect(createStateLedger(raw).get(7).corrupt).toBe('record');
+        }
+    });
+
     test('a record that holds a handoff is never pruned, the installation record is never aged out', () => {
         const old = Date.now() - 40 * 24 * 3600 * 1000;
         const raw = rawStore(

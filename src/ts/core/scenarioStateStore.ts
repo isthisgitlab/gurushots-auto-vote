@@ -363,6 +363,12 @@ const scenarioStepLock = (challengeId: string | number): StateLock =>
 // and the scenario IPC handlers so a mock run is inspectable like a real one.
 const mockScenarioStateLedger = createMemoryStateLedger();
 
+/**
+ * The progress ledger of a mode: the in-memory one in mock mode, the persisted one otherwise. Mock mode never reads or
+ * writes the persisted `scenarioState` store.
+ */
+const ledgerFor = (mock: boolean) => (mock ? mockScenarioStateLedger : scenarioStateLedger);
+
 export const initializeScenarioStateAsync = async () => {
     await scenarioStateStore.initializeAsync();
     await scenarioResetsStore.initializeAsync();
@@ -386,6 +392,7 @@ export {
     scenarioStateLedger,
     scenarioStateLoaded,
     mockScenarioStateLedger,
+    ledgerFor,
     createStateLedger,
     createMemoryStateLedger,
     initialState,

@@ -32,7 +32,7 @@ import { invalid } from '../helpers/invalid';
 
 const settings = jest.mocked(settingsModule);
 const { scanFillCandidates } = jest.mocked(autoFillModule);
-const { loadScenarioSnapshot, passReads } =
+const { evidenceNeeded, loadScenarioSnapshot, loadSelectorEvidence, passReads } =
     require('../../src/ts/core/services/scenarioRunner/facts') as typeof loaderModule;
 const { FACTS } = require('../../src/ts/core/scenarios/facts') as typeof factsModule;
 
@@ -70,6 +70,7 @@ type Ledger = {
     refresh: jest.Mock<Promise<void>, []>;
     entryTimes: jest.Mock<Record<string, { at: number; exact: boolean }>, []>;
     isUncertain: jest.Mock<boolean, [string | number, string | number]>;
+    pending: jest.Mock<string | null, [string | number]>;
     health: jest.Mock<{ read: boolean; refresh: boolean }, []>;
 };
 
@@ -77,6 +78,7 @@ const makeLedger = (): Ledger => ({
     refresh: jest.fn(async () => undefined),
     entryTimes: jest.fn(() => ({ a: { at: NOW - 600, exact: true } })),
     isUncertain: jest.fn((_challengeId, imageId) => imageId === 'b'),
+    pending: jest.fn((_challengeId: string | number): string | null => null),
     health: jest.fn(() => ({ read: true, refresh: true })),
 });
 
@@ -450,6 +452,75 @@ describe('the entry-age ledger', () => {
         ledger?.refresh.mockRejectedValue('plain');
         await loadScenarioSnapshot(agesScenario, ctx());
         expect(warnings()[1]).toBe('[7] could not read the entry ages for the scenario: plain');
+    });
+});
+
+describe('the evidence the selectors read', () => {
+    const entryIs = (select: object) => ({ type: 'entry', select, field: 'votes', op: '>', value: 0 });
+    const needs = (select: object) => [...evidenceNeeded(scenario([entryIs(select)]))].sort();
+    const matching = (order: string) => ({
+        by: 'matching',
+        where: [{ field: 'votes', op: '>', value: 0 }],
+        order,
+        direction: 'asc',
+    });
+
+    test.each([
+        [{ by: 'pinned', power: 'boost' }, ['pins']],
+        [{ by: 'pendingBoostTarget' }, ['pendingBoost']],
+        [{ by: 'newest', time: 'exact' }, ['entryAges']],
+        [{ by: 'oldest', time: 'observed' }, ['entryAges']],
+        [matching('age'), ['entryAges']],
+        [matching('votes'), []],
+        [{ by: 'id', id: 'a' }, []],
+        [{ by: 'slowest' }, []],
+        [{ by: 'slot', index: 1 }, []],
+    ])('an entry condition on %j needs %j', (select, kinds) => {
+        expect(needs(select)).toEqual(kinds);
+    });
+
+    test('an expression fact reads the evidence of its selector too, besides the fact’s own', () => {
+        const compare = {
+            type: 'compare',
+            left: factRef('entry.votes', { by: 'pinned', power: 'turbo' }),
+            op: '>',
+            right: lit(1, 'votes'),
+        };
+        expect([...evidenceNeeded(scenario([compare]))]).toEqual(['pins']);
+        const age = { type: 'present', value: factRef('entry.minAge', { by: 'newest', time: 'observed' }) };
+        expect([...evidenceNeeded(scenario([age]))]).toEqual(['entryAges']);
+    });
+
+    test('the photo a fill-new boost waits on is the existing producer’s: the pending photo of the subject, or none', async () => {
+        const waiting = scenario([entryIs({ by: 'pendingBoostTarget' })]);
+        ledger?.pending.mockReturnValue('a');
+        await expect(loadScenarioSnapshot(waiting, ctx())).resolves.toEqual({
+            pendingBoost: { readable: true, id: 'a' },
+        });
+        expect(ledger?.pending).toHaveBeenCalledWith('7');
+        ledger?.pending.mockReturnValue(null);
+        await expect(loadScenarioSnapshot(waiting, ctx())).resolves.toEqual({
+            pendingBoost: { readable: true, id: null },
+        });
+        // not read for a scenario that does not ask for it
+        ledger?.pending.mockClear();
+        await loadScenarioSnapshot(scenario([entryIs({ by: 'newest', time: 'exact' })]), ctx());
+        expect(ledger?.pending).not.toHaveBeenCalled();
+    });
+
+    test('a ledger that cannot be read is unreadable for it too, never an empty one', async () => {
+        ledger?.health.mockReturnValue({ read: false, refresh: true });
+        await expect(loadScenarioSnapshot(scenario([entryIs({ by: 'pendingBoostTarget' })]), ctx())).resolves.toEqual({
+            pendingBoost: { readable: false, reason: 'entry-ages-unreadable' },
+        });
+    });
+
+    test('the evidence of one selector, fetched as an action runs', async () => {
+        await expect(loadSelectorEvidence({ by: 'pinned', power: 'boost' }, ctx())).resolves.toEqual({
+            pins: { readable: true, boost: 'a', turbo: null },
+        });
+        await expect(loadSelectorEvidence({ by: 'id', id: 'a' }, ctx())).resolves.toEqual({});
+        expect(getBankroll).not.toHaveBeenCalled();
     });
 });
 

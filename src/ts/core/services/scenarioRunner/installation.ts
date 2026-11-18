@@ -32,7 +32,8 @@ import type { ScenarioDocument } from '../../settings/scenarioSchema';
 import { evidenceNeeded, loadAccountEvidence } from './facts';
 import type { AccountReads } from './facts';
 import { withNotice } from './rule';
-import { advance, loadState, nextBindingInstant } from './step';
+import { advance, loadState } from './step';
+import { nextBindingInstant } from './overlay';
 import { log, nowSec } from './support';
 import type { AccountContext } from './types';
 
@@ -144,7 +145,7 @@ const publishLocked = async (
     const phaseEnteredAt = state?.phaseEnteredAt ?? now;
     if (!scenario.phases[phase]) return 'none';
 
-    const at = { phase, phaseEnteredAt, published: state?.published };
+    const at = { phase, phaseEnteredAt, published: state?.published, phasePatch: state?.phasePatch };
     const prepared = await prepare(pass, scenario, at, state, generation, now);
     return write(pass, scenario.name, at, prepared, generation, now);
 };
@@ -195,9 +196,17 @@ const stageLocked = async (
         reads: { subject: 'the installation', token: pass.token, ...pass.reads },
         operations: pass.operations,
         claims: { deps: pass.claims },
-        // The step lock is the caller's: the publication is made again under it, from the record as it now stands.
-        republish: async () => {
-            await publishLocked(pass, owned);
+        overlay: {
+            // The step lock is the caller's: the publication is made again under it, from the record as it now stands.
+            republish: async () => {
+                await publishLocked(pass, owned);
+            },
+            // The settings of a record with a patch applied, prepared and not written.
+            check: async (candidate) => {
+                const prepared = await prepare(pass, owned.scenario, candidate, candidate, owned.generation, nowSec());
+                if (prepared.ok) return null;
+                return prepared.key === null ? prepared.reason : `${prepared.key}: ${prepared.reason}`;
+            },
         },
     };
     // A progress record that exists gets the recovery a challenge's gets before anything is published: an interrupted
@@ -213,7 +222,7 @@ const stageLocked = async (
 const prepare = async (
     pass: InstallationPass,
     scenario: NonNullable<ReturnType<typeof settings.getScenario>>,
-    at: Pick<ScenarioState, 'phase' | 'phaseEnteredAt' | 'published'>,
+    at: Pick<ScenarioState, 'phase' | 'phaseEnteredAt' | 'published' | 'phasePatch'>,
     state: ScenarioState | null,
     generation: number,
     now: number,

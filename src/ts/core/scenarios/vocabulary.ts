@@ -123,16 +123,58 @@ const FACT_NAMES = [
 /** Selectors that pick an entry by comparing entries; `slot`, `memory` and `fastest` take an argument. */
 const RANKING_SELECTORS = ['mostVotes', 'fewestVotes', 'bestRank', 'worstRank', 'boosted', 'turbo'] as const;
 
+/** The powers an entry can be pinned for (`pinned` selector). */
+const PINNED_POWERS = ['boost', 'turbo'] as const;
+
+/** Which entry times `newest` / `oldest` compare: exact ones only, or the observed ones too (a first-seen time is a bound). */
+const ENTRY_TIME_MODES = ['exact', 'observed'] as const;
+
+/** What a `matching` selector orders the entries that match by. */
+const MATCH_ORDERS = ['votes', 'rank', 'age'] as const;
+
+const ORDER_DIRECTIONS = ['asc', 'desc'] as const;
+
+/** The normal operations `runAutomation` runs once: each under its normal enable, timing and selection policy. */
+const AUTOMATION_OPERATIONS = [
+    'submit',
+    'boost',
+    'turbo',
+    'unlockBoost',
+    'swap',
+    'fillExposure',
+    'vote',
+    'join',
+] as const;
+
 /** Actions that spend currency or a one-per-challenge power — listed in the import preview. */
-const SPENDING_ACTIONS = ['swap', 'unlockBoost', 'fillExposure', 'boost', 'turbo', 'join'] as const;
+const SPENDING_ACTIONS = [
+    'swap',
+    'unlockBoost',
+    'fillExposure',
+    'boost',
+    'turbo',
+    'join',
+    'earnTurbo',
+    'runAutomation',
+] as const;
 
 /**
  * The actions each stage of a subject's life offers. A rule declares the stages it runs in; every action it holds must be
  * available in every one of them. `active` keeps every action a rule had before stages existed.
  */
 const STAGE_ACTIONS = {
-    account: ['notify', 'goto', 'claimMissionReward'],
-    preJoin: ['notify', 'goto', 'join'],
+    account: ['notify', 'goto', 'claimMissionReward', 'setSetting', 'clearSetting', 'pauseScenario', 'handoffScenario'],
+    preJoin: [
+        'notify',
+        'goto',
+        'join',
+        'runAutomation',
+        'setSetting',
+        'clearSetting',
+        'useProfile',
+        'pauseScenario',
+        'handoffScenario',
+    ],
     active: [
         'enterPhoto',
         'swap',
@@ -145,8 +187,15 @@ const STAGE_ACTIONS = {
         'forget',
         'goto',
         'notify',
+        'earnTurbo',
+        'runAutomation',
+        'setSetting',
+        'clearSetting',
+        'useProfile',
+        'pauseScenario',
+        'handoffScenario',
     ],
-    postClose: ['notify', 'goto', 'claimChallengeReward'],
+    postClose: ['notify', 'goto', 'claimChallengeReward', 'pauseScenario', 'handoffScenario'],
 } as const;
 
 /** The stages each condition that reads a challenge is available in; every other condition is available in all of them. */
@@ -276,6 +325,29 @@ const VOCABULARY_REFERENCE = [
     ]),
     ['selector', 'memory', 'slot: name — the entry holding the remembered photo'],
     ['selector', 'fastest', 'window?: duration (default 1h), skipProtected? — most votes per hour'],
+    [
+        'selector',
+        'slowest',
+        'window?: duration (default 1h), skipProtected? — fewest votes per hour; unknown while any entry has no speed yet',
+    ],
+    ['selector', 'id', 'id: text — the entry with this id'],
+    ['selector', 'pinned', `power: ${PINNED_POWERS.join('|')} — the entry that power is pinned to`],
+    ['selector', 'pendingBoostTarget', '— the photo an earlier fill-new submitted that the Boost is still waiting on'],
+    [
+        'selector',
+        'newest',
+        `time: ${ENTRY_TIME_MODES.join('|')} — the entry that went in last (ties: the lowest id); unknown while an entry that could be newer has no usable time`,
+    ],
+    [
+        'selector',
+        'oldest',
+        `time: ${ENTRY_TIME_MODES.join('|')} — the entry that went in first (ties: the lowest id); unknown while an entry that could be older has no usable time`,
+    ],
+    [
+        'selector',
+        'matching',
+        `where: [{field, op, value}, …] (1-${SCENARIO_CAPS.entryPredicates}), order: ${MATCH_ORDERS.join('|')}, direction: ${ORDER_DIRECTIONS.join('|')} — the first entry that meets every predicate (ties: the lowest id)`,
+    ],
     ['action', 'enterPhoto', 'photo: "best" | {memory: name}, remember?: name — submits as a NEW entry'],
     [
         'action',
@@ -302,6 +374,33 @@ const VOCABULARY_REFERENCE = [
         '— after the challenge closed only: claims its rewards when they wait to be claimed',
     ],
     ['action', 'claimMissionReward', 'missionId: text — installation only: claims that mission when it can be claimed'],
+    ['action', 'earnTurbo', '— plays the Turbo mini-game once, under its mode, cooldown, model and cancellation rules'],
+    [
+        'action',
+        'runAutomation',
+        `operation: ${AUTOMATION_OPERATIONS.join('|')} (join before joining only, the rest while active) — runs that normal automation once, under its normal enable, timing and selection policy; when the policy says not now, the step completes and says so`,
+    ],
+    [
+        'action',
+        'setSetting',
+        'key: setting name, value: a literal or an expression — changes the setting for this scenario phase only (a challenge scenario: a per-challenge setting; an installation scenario: an installation setting); the saved settings are never written',
+    ],
+    ['action', 'clearSetting', 'key: setting name — undoes a setSetting of this phase'],
+    [
+        'action',
+        'useProfile',
+        "name: saved profile name | null — uses that profile for this phase instead of the phase's own (null: none); a challenge scenario only",
+    ],
+    [
+        'action',
+        'pauseScenario',
+        'reason?: text — pauses this scenario with its progress kept; only the user resumes it',
+    ],
+    [
+        'action',
+        'handoffScenario',
+        'to: scenario name | null — gives this subject to another scenario (null: none) at a safe point; the last action of its rule',
+    ],
     [
         'rule',
         'stages',
@@ -384,6 +483,11 @@ export {
     SCENARIO_STAGES,
     FACT_NAMES,
     RANKING_SELECTORS,
+    PINNED_POWERS,
+    ENTRY_TIME_MODES,
+    MATCH_ORDERS,
+    ORDER_DIRECTIONS,
+    AUTOMATION_OPERATIONS,
     SPENDING_ACTIONS,
     STAGE_ACTIONS,
     CONDITION_STAGES,

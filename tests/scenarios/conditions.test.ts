@@ -5,6 +5,7 @@
 
 import type * as conditionsModule from '../../src/ts/core/scenarios/conditions';
 import type * as selectorsModule from '../../src/ts/core/scenarios/selectors';
+import type { LegacySelector } from '../../src/ts/core/scenarios/selectors';
 import type * as wallClockModule from '../../src/ts/core/scheduling/wallClock';
 import type { Challenge, RankingEntry } from '../../src/ts/core/types/gurushots';
 import type {
@@ -231,7 +232,7 @@ describe('logical conditions', () => {
 
 describe('selectEntry', () => {
     const c = invalid<Challenge>(challenge());
-    const select = (selector: ScenarioSelector, memory: Record<string, string> = {}) =>
+    const select = (selector: LegacySelector, memory: Record<string, string> = {}) =>
         selectEntry(selector, c, { memory })?.id ?? null;
 
     test.each([
@@ -244,7 +245,7 @@ describe('selectEntry', () => {
         [{ by: 'slot', index: 0 }, 'c'],
         [{ by: 'slot', index: 2 }, 'b'],
         [{ by: 'mostVotes', skipProtected: true }, 'a'],
-    ] satisfies [ScenarioSelector, string][])('%p → %p', (selector, id) => {
+    ] satisfies [LegacySelector, string][])('%p → %p', (selector, id) => {
         expect(select(selector)).toBe(id);
     });
 
