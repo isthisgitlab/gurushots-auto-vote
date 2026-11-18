@@ -71,6 +71,7 @@ jest.mock('../../src/ts/core/services/autoClaim', () => ({
 }));
 jest.mock('../../src/ts/core/services/scenarioRunner/installation', () => ({
     publishInstallationOverlay: jest.fn(async () => 'none'),
+    runInstallationStage: jest.fn(async () => 'none'),
 }));
 jest.mock('../../src/ts/core/services/missions', () => ({
     loadMissionNeeds: jest.fn(async () => null),
@@ -120,7 +121,7 @@ const { runClaimPass } = jest.mocked(require('../../src/ts/core/services/autoCla
 const { loadMissionNeeds, registerMissionNeeds } = jest.mocked(
     require('../../src/ts/core/services/missions') as typeof missionsModule,
 );
-const { publishInstallationOverlay } = jest.mocked(
+const { publishInstallationOverlay, runInstallationStage } = jest.mocked(
     require('../../src/ts/core/services/scenarioRunner/installation') as typeof installationModule,
 );
 import rewardsModule = require('../../src/ts/core/api/rewards');
@@ -511,6 +512,8 @@ describe('fetchChallengesAndVote', () => {
             claimChallengeResources: rewards.claimChallengeResources,
             getMyMissions: rewards.getMyMissions,
             claimMissionPrize: rewards.claimMissionPrize,
+            // the cycle's record of what a scenario action already claimed
+            operations: expect.any(Object),
         });
     });
 
@@ -553,33 +556,40 @@ describe('fetchChallengesAndVote', () => {
         );
     });
 
-    test('the installation scenario settings are published first: before the mission read, the pre-steps and the pass', async () => {
+    test('the installation stage runs first: before the mission read, the pre-steps and the pass', async () => {
         runVotingPass.mockResolvedValue({ success: true });
 
         await fetchChallengesAndVote('tok');
 
-        // the persisted ledger and the cross-process step lock: this is the real run, not the mock one
-        expect(publishInstallationOverlay).toHaveBeenCalledTimes(1);
-        expect(publishInstallationOverlay).toHaveBeenCalledWith({
-            token: 'tok',
-            ledger: scenarioStateLedger,
-            lock: scenarioStepLock,
-            reads: {
-                getBankroll: join.getBankroll,
-                getMyMissions: rewards.getMyMissions,
-                getMyCompletedChallenges: rewards.getMyCompletedChallenges,
-            },
-        });
-        const published = publishInstallationOverlay.mock.invocationCallOrder[0]!;
+        // the persisted ledger and the cross-process step lock: this is the real run, not the mock one; a full pass also
+        // runs the installation's account rules
+        expect(runInstallationStage).toHaveBeenCalledTimes(1);
+        expect(runInstallationStage).toHaveBeenCalledWith(
+            expect.objectContaining({
+                token: 'tok',
+                ledger: scenarioStateLedger,
+                lock: scenarioStepLock,
+                reads: {
+                    getBankroll: join.getBankroll,
+                    getMyMissions: rewards.getMyMissions,
+                    getMyCompletedChallenges: rewards.getMyCompletedChallenges,
+                },
+                operations: expect.any(Object),
+            }),
+            { rules: true },
+        );
+        expect(publishInstallationOverlay).not.toHaveBeenCalled();
+        const published = runInstallationStage.mock.invocationCallOrder[0]!;
         expect(published).toBeLessThan(loadMissionNeeds.mock.invocationCallOrder[0]!);
         expect(published).toBeLessThan(runJoinPass.mock.invocationCallOrder[0]!);
         expect(published).toBeLessThan(runVotingPass.mock.invocationCallOrder[0]!);
     });
 
-    test("a single-challenge run publishes too: its reads need the owner's current settings", async () => {
+    test("a single-challenge run only publishes: its reads need the owner's current settings, and it runs no account work", async () => {
         runVotingPass.mockResolvedValue({ success: true });
         await fetchChallengesAndVote('tok', 9);
         expect(publishInstallationOverlay).toHaveBeenCalledTimes(1);
+        expect(runInstallationStage).not.toHaveBeenCalled();
     });
 
     test('reads the missions once and hands the same needs to the join pre-step and the pass', async () => {

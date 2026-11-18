@@ -14,10 +14,10 @@
  * They serve a challenge's scenario and the installation's (loadAccountEvidence).
  */
 
-import * as logger from '../../logger';
 import * as settings from '../../settings';
 import { errorMessage } from '../../errorMessage';
 import { exprReferences } from '../../scenarios/expressions';
+import { runsIn } from '../../scenarios/evaluate';
 import { FACTS } from '../../scenarios/facts';
 import { entriesOf } from '../../scenarios/selectors';
 import { scanFillCandidates } from '../autoFill';
@@ -29,9 +29,9 @@ import { baselineTransportPolicy } from '../../api/transportPolicy';
 import type { TransportPolicy } from '../../api/transportPolicy';
 import type { FactEvidence, Evidence } from '../../scenarios/facts';
 import type { Bankroll, CompletedChallenge, Mission } from '../../types/gurushots';
-import type { ScenarioCondition } from '../../types/scenario';
+import type { ScenarioCondition, ScenarioExpr, ScenarioStage } from '../../types/scenario';
 import type { ScenarioDocument } from '../../settings/scenarioSchema';
-import type { RunnerContext } from './types';
+import type { ActiveContext, RunnerContext, ScenarioPass } from './types';
 
 /** The evidence a fact can need beyond the current challenge and clock. */
 type EvidenceKind = keyof FactEvidence;
@@ -100,15 +100,34 @@ const collectExpressionEvidence = (
 };
 
 /**
+ * The evidence one expression reads (an action's parameter, worked out when the action runs).
+ */
+const expressionEvidence = (expr: ScenarioExpr): Set<EvidenceKind> => {
+    const needed = new Set<EvidenceKind>();
+    collectExpressionEvidence([expr], needed);
+    return needed;
+};
+
+/**
  * The evidence the rules and the bindings of a scenario read. Given `phase`, only those of that phase (the engine
  * evaluates one phase at a time); without it, every phase. `rules: false` leaves the rules out: the installation's
- * publication is worked out from its bindings alone.
+ * publication is worked out from its bindings alone. Given `stage`, only the rules that run in that stage count.
  */
-const evidenceNeeded = (scenario: ScenarioDocument, phase?: string, rules = true): Set<EvidenceKind> => {
+const evidenceNeeded = (
+    scenario: ScenarioDocument,
+    phase?: string,
+    rules = true,
+    stage?: ScenarioStage,
+): Set<EvidenceKind> => {
     const needed = new Set<EvidenceKind>();
     const phases = phase === undefined ? Object.values(scenario.phases) : [scenario.phases[phase]];
     for (const item of phases) {
-        if (rules) for (const rule of item?.rules ?? []) collectEvidence(rule.if, needed);
+        if (rules) {
+            for (const rule of item?.rules ?? []) {
+                // A rule of another stage is not evaluated in this one: its evidence is not fetched for it.
+                if (stage === undefined || runsIn(rule, scenario, stage)) collectEvidence(rule.if, needed);
+            }
+        }
         collectExpressionEvidence(Object.values(item?.bindings ?? {}), needed);
     }
     return needed;
@@ -222,13 +241,15 @@ const readLedger = async (
     ctx: RunnerContext,
     needed: ReadonlySet<EvidenceKind>,
 ): Promise<Pick<FactEvidence, 'entryAges' | 'uncertain'>> => {
-    const { entryAges: ledger } = ctx.pass;
     const out: Pick<FactEvidence, 'entryAges' | 'uncertain'> = {};
     const failed = (reason: string) => {
         if (needed.has('entryAges')) out.entryAges = unreadable(reason);
         if (needed.has('uncertain')) out.uncertain = unreadable(reason);
         return out;
     };
+    // Only a joined challenge in the voting pass has an entry-age ledger at hand.
+    if (ctx.stage !== 'active') return failed('entry-ages-unavailable');
+    const { entryAges: ledger } = ctx.pass;
     if (!ledger) return failed('entry-ages-unavailable');
     try {
         await ledger.refresh();
@@ -243,7 +264,7 @@ const readLedger = async (
         return out;
     } catch (error) {
         log().warning(
-            `${logger.challengeTag(ctx.challenge)} could not read the entry ages for the scenario: ${errorMessage(error) || error}`,
+            `${ctx.tag} could not read the entry ages for the scenario: ${errorMessage(error) || error}`,
             null,
         );
         return failed('entry-ages-unreadable');
@@ -251,7 +272,7 @@ const readLedger = async (
 };
 
 const readPins = (ctx: RunnerContext): Promise<NonNullable<FactEvidence['pins']>> =>
-    guarded(logger.challengeTag(ctx.challenge), 'the pinned photos', 'pins-unreadable', async () => {
+    guarded(ctx.tag, 'the pinned photos', 'pins-unreadable', async () => {
         const { boost, turbo } = settings.getEntryPins(ctx.challengeId);
         return { readable: true, boost, turbo };
     });
@@ -260,8 +281,8 @@ const readPins = (ctx: RunnerContext): Promise<NonNullable<FactEvidence['pins']>
  * The photo scan, with the tag settings the scheduled fill reads (settings resolved for this challenge): read-only, and
  * the same preparation a submission runs. It is the dearest read, so only a rule that reads a photo fact asks for it.
  */
-const readPhotoScan = (ctx: RunnerContext): Promise<NonNullable<FactEvidence['photoScan']>> =>
-    guarded(logger.challengeTag(ctx.challenge), 'the photo candidates', 'photo-scan-failed', async () => {
+const readPhotoScan = (ctx: ActiveContext): Promise<NonNullable<FactEvidence['photoScan']>> =>
+    guarded(ctx.tag, 'the photo candidates', 'photo-scan-failed', async () => {
         const { challenge } = ctx;
         const scan = await scanFillCandidates({
             challenge,
@@ -275,13 +296,15 @@ const readPhotoScan = (ctx: RunnerContext): Promise<NonNullable<FactEvidence['ph
     });
 
 /**
- * The account endpoints of a challenge's pass, as the account evidence reads them. Late-bound to the pass's endpoints, so a
- * replaced endpoint is the one that is called.
+ * The account endpoints of a pass, as the account evidence reads them. Late-bound to the pass's endpoints, so a replaced
+ * endpoint is the one that is called.
+ *
+ * @param subject - how a failed read names its subject in the log
  */
-const accountReadsOf = ({ pass, challenge }: RunnerContext): AccountReads => {
+const passReads = (pass: ScenarioPass, subject: string): AccountReads => {
     const { getMyMissions, getMyCompletedChallenges } = pass.api;
     return {
-        subject: logger.challengeTag(challenge),
+        subject,
         token: pass.token,
         getBankroll: (token, policy) => pass.currency.strategy.getBankroll(token, policy),
         ...(getMyMissions ? { getMyMissions: (token, policy) => getMyMissions(token, policy) } : {}),
@@ -310,16 +333,19 @@ const loadScenarioSnapshot = async (
     stage: EvidenceStage = 'all',
 ): Promise<FactEvidence> => {
     const needed = new Set(
-        [...evidenceNeeded(scenario, phase)].filter(
+        [...evidenceNeeded(scenario, phase, true, ctx.stage)].filter(
             (kind) => stage === 'all' || (stage === 'policy') === POLICY_EVIDENCE.has(kind),
         ),
     );
-    const evidence: FactEvidence = await loadAccountEvidence(needed, accountReadsOf(ctx));
+    const evidence: FactEvidence = await loadAccountEvidence(needed, ctx.reads);
     if (needed.has('entryAges') || needed.has('uncertain')) Object.assign(evidence, await readLedger(ctx, needed));
     if (needed.has('pins')) evidence.pins = await readPins(ctx);
-    if (needed.has('photoScan')) evidence.photoScan = await readPhotoScan(ctx);
+    if (needed.has('photoScan')) {
+        // The scan runs on a joined challenge, with the pass's fill endpoints; a candidate's photos are not scanned here.
+        evidence.photoScan = ctx.stage === 'active' ? await readPhotoScan(ctx) : unreadable('photo-scan-unavailable');
+    }
     return evidence;
 };
 
-export { evidenceNeeded, loadAccountEvidence, loadScenarioSnapshot };
+export { evidenceNeeded, expressionEvidence, loadAccountEvidence, loadScenarioSnapshot, passReads };
 export type { AccountReads, EvidenceKind, EvidenceStage };

@@ -19,12 +19,13 @@ import type { Challenge } from '../../types/gurushots';
 import type { ScenarioExpr } from '../../types/scenario';
 import type { ScenarioState } from '../../types/stores';
 import type { ExpressionContext } from '../../scenarios/expressions';
-import type { FactEvidence } from '../../scenarios/facts';
+import type { FactEvidence, FactSubject } from '../../scenarios/facts';
+import { createOperationRecord } from '../../scenarios/runtime';
 import type { PassContext } from '../votingOrchestrator';
 import { errorMessage } from '../../errorMessage';
-import type { RunnerContext, ScenarioAction, ScenarioPass } from './types';
+import type { ActiveContext, PreJoinContext, RunnerContext, ScenarioAction, ScenarioPass } from './types';
 import { log, nowSec } from './support';
-import { loadScenarioSnapshot } from './facts';
+import { loadScenarioSnapshot, passReads } from './facts';
 import { runRule, withNotice } from './rule';
 
 const NO_LOCK: StateLock = { ok: true, release: () => {} };
@@ -36,13 +37,32 @@ const corruptText = (kind: 'file' | 'record' | 'unloaded', challengeId: string) 
           ? 'scenario state is unreadable — reset the progress of every challenge (scenario-reset --all, or the Reset button on a challenge card) to start the plans again'
           : `scenario state of this challenge is unreadable — reset it (scenario-reset --challenge=${challengeId}, or the Reset button on its card) to start the plan again`;
 
+/** A step on a challenge the account has or can join: a candidate before the join, a joined challenge in the pass. */
+type ChallengeContext = ActiveContext | PreJoinContext;
+
+/**
+ * The subject the facts of a step are read on, with where it came from.
+ */
+const subjectOf = (ctx: RunnerContext): FactSubject => {
+    switch (ctx.stage) {
+        case 'active':
+            return { kind: 'active', challenge: ctx.challenge, provenance: 'active-list' };
+        case 'preJoin':
+            return { kind: 'candidate', challenge: ctx.challenge, provenance: 'open-list' };
+        case 'postClose':
+            return { kind: 'completed', challenge: ctx.completed, provenance: 'completed-list' };
+        default:
+            return { kind: 'installation' };
+    }
+};
+
 /**
  * A challenge with a handoff intent: finishes the handoff when the assignment is one the intent names, otherwise says
  * so. The step runs nothing this pass either way (a finished handoff starts the new scenario on the next one).
  */
 const heldByHandoff = (ctx: RunnerContext, state: ScenarioState): null => {
     const settled = settings.settleHandoff(ctx.challengeId, state);
-    const tag = logger.challengeTag(ctx.challenge);
+    const tag = ctx.tag;
     if (settled === 'conflict') {
         noteHalt(ctx, state, 'handoff-conflict');
         log().error(`${tag} scenario handoff conflicts with the assignment — nothing runs`, null);
@@ -63,14 +83,14 @@ const heldByHandoff = (ctx: RunnerContext, state: ScenarioState): null => {
 const loadState = (ctx: RunnerContext, now: number): ScenarioState | null => {
     const { corrupt, state, epoch } = ctx.ledger.get(ctx.challengeId);
     if (corrupt) {
-        log().error(`${logger.challengeTag(ctx.challenge)} ${corruptText(corrupt, ctx.challengeId)}`, null);
+        log().error(`${ctx.tag} ${corruptText(corrupt, ctx.challengeId)}`, null);
         return null;
     }
     // A handoff begun and not finished holds the challenge: it is finished (or reported) first, and nothing runs meanwhile.
     if (state?.handoff) return heldByHandoff(ctx, state);
     // A paused challenge runs no action and publishes nothing: its progress and its publication stay as they are.
     if (state?.paused) {
-        log().debug(`${logger.challengeTag(ctx.challenge)} scenario is paused — nothing runs`, null);
+        log().debug(`${ctx.tag} scenario is paused — nothing runs`, null);
         return null;
     }
     if (state && state.scenario.toLowerCase() === ctx.scenario.name.toLowerCase()) return state;
@@ -87,10 +107,7 @@ const loadState = (ctx: RunnerContext, now: number): ScenarioState | null => {
         epoch,
     };
     if (ctx.ledger.set(ctx.challengeId, fresh) !== 'saved') return null;
-    log().info(
-        `${logger.challengeTag(ctx.challenge)} scenario "${ctx.scenario.name}" started in phase ${fresh.phase}`,
-        null,
-    );
+    log().info(`${ctx.tag} scenario "${ctx.scenario.name}" started in phase ${fresh.phase}`, null);
     return fresh;
 };
 
@@ -172,7 +189,7 @@ const blockedText = (phase: string, key: string | null, reason: string): string 
  * the settings unavailable rather than the previous values), and the halt is recorded as a notice. No rule runs.
  */
 const blockPhase = (
-    ctx: RunnerContext,
+    ctx: ChallengeContext,
     state: ScenarioState,
     failure: { key: string | null; reason: string },
 ): void => {
@@ -180,7 +197,7 @@ const blockPhase = (
     if (cleared !== state && ctx.ledger.set(ctx.challengeId, cleared) !== 'saved') return;
     const halted = blockedText(state.phase, failure.key, failure.reason);
     noteHalt(ctx, cleared, halted);
-    log().error(`${logger.challengeTag(ctx.challenge)} scenario halted: ${halted}`, null);
+    log().error(`${ctx.tag} scenario halted: ${halted}`, null);
 };
 
 /**
@@ -190,7 +207,7 @@ const blockPhase = (
  * settings could not be prepared (the challenge is stopped) or the publication was not saved: no rule may run.
  */
 const prepareEvaluation = async (
-    ctx: RunnerContext,
+    ctx: ChallengeContext,
     state: ScenarioState,
 ): Promise<{ state: ScenarioState; evidence: FactEvidence; readSetting?: ExpressionContext['readSetting'] } | null> => {
     const { challenge, challengeId, scenario, timezone } = ctx;
@@ -234,30 +251,49 @@ const prepareEvaluation = async (
 };
 
 /**
- * Runs the rules of the challenge's scenario that are due, one after another, until none is or one stops.
+ * What one evaluation of a step reads: its overlay prepared and published for a challenge (a candidate's included), the
+ * evidence alone for the other subjects. Null when no rule may run.
+ */
+const prepare = (
+    ctx: RunnerContext,
+    state: ScenarioState,
+): Promise<{ state: ScenarioState; evidence: FactEvidence; readSetting?: ExpressionContext['readSetting'] } | null> =>
+    ctx.stage === 'active' || ctx.stage === 'preJoin'
+        ? prepareEvaluation(ctx, state)
+        : loadScenarioSnapshot(ctx.scenario, ctx, state.phase, 'all').then((evidence) => ({ state, evidence }));
+
+/**
+ * Runs the rules of the subject's scenario that run in this step's stage and are due, one after another, until none is or
+ * one stops.
  *
  * @param now - unix seconds
  */
 const advance = async (ctx: RunnerContext, now: number): Promise<void> => {
-    const { challenge, challengeId, scenario, timezone } = ctx;
+    const { challengeId, scenario, timezone } = ctx;
     let state = loadState(ctx, now);
     if (!state) return;
-    // One vote sample per pass feeds the speed conditions (scenarios/speed.ts).
-    state = { ...state, history: recordVoteSample(state.history, entriesOf(challenge), now) };
-    if (ctx.ledger.set(challengeId, state) !== 'saved') return;
+    // One vote sample per pass feeds the speed conditions (scenarios/speed.ts); only a joined challenge has votes.
+    if (ctx.stage === 'active') {
+        state = { ...state, history: recordVoteSample(state.history, entriesOf(ctx.challenge), now) };
+        if (ctx.ledger.set(challengeId, state) !== 'saved') return;
+    }
 
+    const subject = subjectOf(ctx);
+    const challenge = subject.kind === 'active' || subject.kind === 'candidate' ? subject.challenge : undefined;
     const firedThisPass: Set<string> = new Set();
     const visited = new Set([state.phase]);
     for (;;) {
         // The settings of this phase and the evidence its rules read, fetched fresh for each evaluation (the bankroll as
         // before). A phase with bindings or a profile is published here, again after every confirmed action and phase change.
-        const prepared = await prepareEvaluation(ctx, state);
+        const prepared = await prepare(ctx, state);
         if (!prepared) return;
         ({ state } = prepared);
         const decision = evaluateScenario({
             scenario,
             state,
             challenge,
+            subject,
+            stage: ctx.stage,
             now: nowSec(),
             timezone,
             evidence: prepared.evidence,
@@ -266,7 +302,7 @@ const advance = async (ctx: RunnerContext, now: number): Promise<void> => {
         });
         if (decision.halted) {
             noteHalt(ctx, state, decision.halted);
-            log().error(`${logger.challengeTag(challenge)} scenario halted: ${decision.halted}`, null);
+            log().error(`${ctx.tag} scenario halted: ${decision.halted}`, null);
             return;
         }
         if (!decision.fire) return;
@@ -278,7 +314,7 @@ const advance = async (ctx: RunnerContext, now: number): Promise<void> => {
             visited.add(state.phase);
         } else if (decision.fire.rule.do.some((action: ScenarioAction) => action.type === 'goto')) {
             log().warning(
-                `${logger.challengeTag(challenge)} scenario "${scenario.name}" came back to phase ${state.phase} in one pass — continuing next pass`,
+                `${ctx.tag} scenario "${scenario.name}" came back to phase ${state.phase} in one pass — continuing next pass`,
                 null,
             );
             return;
@@ -344,7 +380,9 @@ const runScenarioStep = async (challenge: Challenge, now: number, pass: PassCont
         }
         // Every host that runs scenarios passes the currency endpoints too.
         const scenarioPass = pass as ScenarioPass;
-        const ctx: RunnerContext = {
+        const tag = logger.challengeTag(challenge);
+        const ctx: ActiveContext = {
+            stage: 'active',
             challenge,
             challengeId,
             scenario,
@@ -353,6 +391,9 @@ const runScenarioStep = async (challenge: Challenge, now: number, pass: PassCont
             ledger: deps.ledger,
             stepLock: lock,
             beforeSpend: null,
+            tag,
+            reads: passReads(scenarioPass, tag),
+            operations: pass.operations ?? createOperationRecord(),
         };
         skippedPasses.delete(challengeId);
         try {
@@ -376,4 +417,12 @@ const runScenarioStep = async (challenge: Challenge, now: number, pass: PassCont
  */
 const backgroundServiceOwnsScenarios = () => platform().capabilities.backgroundServiceOwnsScenarios();
 
-export { runScenarioStep, backgroundServiceOwnsScenarios, nextBindingInstant };
+export {
+    runScenarioStep,
+    backgroundServiceOwnsScenarios,
+    nextBindingInstant,
+    advance,
+    loadState,
+    noteSkipped,
+    NO_LOCK,
+};

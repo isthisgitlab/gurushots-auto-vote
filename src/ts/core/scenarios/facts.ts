@@ -11,6 +11,7 @@
  */
 
 import type { Bankroll, Challenge, RankingEntry } from '../types/gurushots';
+import type { CompletedChallenge } from '../types/gurushots';
 import type { Duration, FactName, Quantity, ScenarioSelector, ScenarioStage } from '../types/scenario';
 import { isBoostWindowOpen, isKeyUnlockedBoost } from '../voting/boostWindow';
 import { isOneOf } from './vocabulary';
@@ -72,9 +73,23 @@ export interface PhotoScanEvidence {
     firstReason?: string;
 }
 
+/**
+ * What a snapshot's facts are read on, with where the subject came from. An installation has no challenge; a candidate
+ * is an open challenge not joined yet; an active one is joined and running; a completed one is a closed challenge as the
+ * completed-challenge listing gives it (a different shape from an active one, never cast to it).
+ */
+export type FactSubject =
+    | { kind: 'installation' }
+    | { kind: 'candidate'; challenge: Challenge; provenance: 'open-list' }
+    | { kind: 'active'; challenge: Challenge; provenance: 'active-list' }
+    | { kind: 'completed'; challenge: CompletedChallenge; provenance: 'completed-list' };
+
 /** What a fact reads from. */
 export interface FactSnapshot {
-    challenge: Challenge;
+    /** The subject, as its stage reads it. Absent: the active challenge in `challenge`. */
+    subject?: FactSubject;
+    /** The challenge a candidate or an active subject is: absent for an installation and a completed subject. */
+    challenge?: Challenge;
     state: { phaseEnteredAt: number; memory: Record<string, string>; history?: VoteHistory };
     /** unix seconds */
     now: number;
@@ -102,6 +117,23 @@ type FactKind = 'number' | 'boolean' | 'string' | 'list';
 type EntryFieldName = 'votes' | 'rank' | 'votesPerHour' | 'speedRatio' | 'boosted' | 'turbo' | 'boosting';
 
 type FactReader = (snapshot: FactSnapshot, select?: ScenarioSelector, window?: Duration) => ValueState<FactValue>;
+
+/** A snapshot whose subject has a challenge: a candidate or an active one. */
+type ChallengeSnapshot = FactSnapshot & { challenge: Challenge };
+
+type ChallengeReader = (
+    snapshot: ChallengeSnapshot,
+    select?: ScenarioSelector,
+    window?: Duration,
+) => ValueState<FactValue>;
+
+/**
+ * Whether the subject is one that has a challenge. A snapshot without a subject is an active challenge's, as it always was:
+ * the readers read a challenge that is missing or malformed defensively (it comes from a payload), so it stays theirs to
+ * answer for.
+ */
+const hasChallenge = (snapshot: FactSnapshot): snapshot is ChallengeSnapshot =>
+    snapshot.subject?.kind !== 'installation' && snapshot.subject?.kind !== 'completed';
 
 interface FactTraits {
     /** Whether the fact can be confirmed absent. */
@@ -144,6 +176,10 @@ const phaseStart = (snapshot: FactSnapshot): ValueState<number> => {
     const entered = finite(snapshot.state?.phaseEnteredAt);
     return entered === null ? unknownOf('phase-clock-unreadable', ['state.phaseEnteredAt']) : known(entered);
 };
+
+/** What a snapshot's subject says of itself: its id and title, whether it is a joined challenge or a completed listing row. */
+const identityOf = (snapshot: FactSnapshot): { id?: unknown; title?: unknown } | undefined =>
+    snapshot.subject?.kind === 'completed' ? snapshot.subject.challenge : snapshot.challenge;
 
 const startTime = (challenge: Challenge): ValueState<number> => {
     const start = finite(challenge?.start_time);
@@ -194,16 +230,21 @@ const balanceOf =
         return amount === null ? unknownOf('balance-malformed', ['bankroll']) : known(amount);
     };
 
+/** The entries of the snapshot's challenge: null when it has none to read (the subject has no challenge, or its list is unreadable). */
+const snapshotEntries = (snapshot: FactSnapshot): RankingEntry[] | null =>
+    snapshot.challenge === undefined ? null : readableEntries(snapshot.challenge);
+
 /**
  * The entry a selector picks. Unknown when the entry list cannot be read, when no selector was given, or when `fastest`
  * has no history to rank by; absent when the selector proves there is no such entry.
  */
 const selectedEntry = (snapshot: FactSnapshot, select?: ScenarioSelector): ValueState<RankingEntry> => {
-    const entries = readableEntries(snapshot.challenge);
-    if (entries === null) return unknownOf('entries-unreadable', ['member.ranking.entries']);
+    const { challenge } = snapshot;
+    const entries = snapshotEntries(snapshot);
+    if (challenge === undefined || entries === null) return unknownOf('entries-unreadable', ['member.ranking.entries']);
     if (!select) return unknownOf('selector-missing', []);
     const { memory, history } = snapshot.state;
-    const entry = selectEntry(select, snapshot.challenge, { memory, history, now: snapshot.now });
+    const entry = selectEntry(select, challenge, { memory, history, now: snapshot.now });
     if (entry) return known(entry);
     return select.by === 'fastest' && entries.length > 0
         ? unknownOf('insufficient-history', ['vote-history'])
@@ -232,7 +273,7 @@ const readEntryField = (
         const speed =
             field === 'votesPerHour'
                 ? votesPerHour(snapshot.state?.history, entry, now, seconds)
-                : speedRatio(snapshot.state?.history, entriesOf(snapshot.challenge), entry, now, seconds);
+                : speedRatio(snapshot.state?.history, snapshotEntries(snapshot) ?? [], entry, now, seconds);
         return speed === null ? unknownOf('insufficient-history', ['vote-history']) : known(speed);
     }
     return known(entry[field] === true);
@@ -333,7 +374,10 @@ const rewardLists = (
 const rewardsClaimable = (snapshot: FactSnapshot): ValueState<boolean> => {
     const lists = rewardLists(snapshot);
     if (lists.state !== 'known') return lists;
-    const id = snapshot.challenge?.id;
+    // Only a confirmed completed subject has rewards to claim: its listing row, never an active challenge.
+    const { subject } = snapshot;
+    if (subject?.kind !== 'completed') return unknownOf('subject-not-completed', ['challenge.id']);
+    const id = subject.challenge.id;
     if (typeof id !== 'string' && typeof id !== 'number') return unknownOf('id-unreadable', ['challenge.id']);
     const { claimable, listed, complete } = lists.value;
     if (claimable.includes(String(id))) return known(true);
@@ -493,26 +537,52 @@ const traits = (read: FactReader, options: FactOptions): FactTraits => ({
     read,
 });
 
-const fact = (kind: Exclude<FactKind, 'number'>, read: FactReader, options: FactOptions): FactDefinition => ({
+/**
+ * A fact that reads the challenge a candidate or an active subject is: any other subject has none, and the fact is unknown
+ * there (a completed challenge's listing carries its id and title only).
+ */
+const onChallenge =
+    (read: ChallengeReader, dependencies: readonly string[]): FactReader =>
+    (snapshot, select, window) =>
+        hasChallenge(snapshot) ? read(snapshot, select, window) : unknownOf('no-challenge', dependencies);
+
+/** A fact about the subject's challenge: unknown for a subject without one. */
+const fact = (kind: Exclude<FactKind, 'number'>, read: ChallengeReader, options: FactOptions): FactDefinition => ({
+    kind,
+    ...traits(onChallenge(read, options.dependencies), options),
+});
+
+const numberFact = (quantity: Quantity, read: ChallengeReader, options: FactOptions): FactDefinition => ({
+    kind: 'number',
+    quantity,
+    ...traits(onChallenge(read, options.dependencies), options),
+});
+
+/** A fact that reads whatever the subject is (the clock, the account, the subject's identity). */
+const subjectFact = (kind: Exclude<FactKind, 'number'>, read: FactReader, options: FactOptions): FactDefinition => ({
     kind,
     ...traits(read, options),
 });
 
-const numberFact = (quantity: Quantity, read: FactReader, options: FactOptions): FactDefinition => ({
+const subjectNumberFact = (quantity: Quantity, read: FactReader, options: FactOptions): FactDefinition => ({
     kind: 'number',
     quantity,
     ...traits(read, options),
 });
 
 const FACTS: Record<FactName, FactDefinition> = {
-    'clock.now': numberFact('instant', ({ now }) => (finite(now) === null ? clockUnreadable() : known(Number(now))), {
-        stages: ALL_STAGES,
-        dependencies: ['clock'],
-    }),
-    'phase.enteredAt': numberFact('instant', phaseStart, {
+    'clock.now': subjectNumberFact(
+        'instant',
+        ({ now }) => (finite(now) === null ? clockUnreadable() : known(Number(now))),
+        {
+            stages: ALL_STAGES,
+            dependencies: ['clock'],
+        },
+    ),
+    'phase.enteredAt': subjectNumberFact('instant', phaseStart, {
         dependencies: ['state.phaseEnteredAt'],
     }),
-    'phase.elapsed': numberFact(
+    'phase.elapsed': subjectNumberFact(
         'duration',
         (snapshot) => {
             const entered = phaseStart(snapshot);
@@ -521,20 +591,22 @@ const FACTS: Record<FactName, FactDefinition> = {
         { dependencies: ['clock', 'state.phaseEnteredAt'] },
     ),
 
-    'challenge.id': fact(
+    'challenge.id': subjectFact(
         'string',
-        ({ challenge }) =>
-            typeof challenge?.id === 'string' || typeof challenge?.id === 'number'
-                ? known(String(challenge.id))
-                : unknownOf('id-unreadable', ['challenge.id']),
+        (snapshot) => {
+            const id = identityOf(snapshot)?.id;
+            return typeof id === 'string' || typeof id === 'number'
+                ? known(String(id))
+                : unknownOf('id-unreadable', ['challenge.id']);
+        },
         { stages: CHALLENGE_STAGES, dependencies: ['challenge.id'] },
     ),
-    'challenge.title': fact(
+    'challenge.title': subjectFact(
         'string',
-        ({ challenge }) =>
-            typeof challenge?.title === 'string'
-                ? known(challenge.title)
-                : unknownOf('title-unreadable', ['challenge.title']),
+        (snapshot) => {
+            const title = identityOf(snapshot)?.title;
+            return typeof title === 'string' ? known(title) : unknownOf('title-unreadable', ['challenge.title']);
+        },
         { stages: CHALLENGE_STAGES, dependencies: ['challenge.title'] },
     ),
     'challenge.type': fact(
@@ -735,54 +807,54 @@ const FACTS: Record<FactName, FactDefinition> = {
         },
     ),
 
-    'balance.keys': numberFact('keys', balanceOf('keys'), {
+    'balance.keys': subjectNumberFact('keys', balanceOf('keys'), {
         stages: ALL_STAGES,
         dependencies: ['bankroll'],
     }),
-    'balance.swaps': numberFact('swaps', balanceOf('swaps'), {
+    'balance.swaps': subjectNumberFact('swaps', balanceOf('swaps'), {
         stages: ALL_STAGES,
         dependencies: ['bankroll'],
     }),
-    'balance.fills': numberFact('fills', balanceOf('fills'), {
+    'balance.fills': subjectNumberFact('fills', balanceOf('fills'), {
         stages: ALL_STAGES,
         dependencies: ['bankroll'],
     }),
-    'balance.coins': numberFact('coins', balanceOf('coins'), {
+    'balance.coins': subjectNumberFact('coins', balanceOf('coins'), {
         stages: ALL_STAGES,
         dependencies: ['bankroll'],
     }),
 
-    'missions.joinNeed': numberFact('count', missionNeed('join'), {
+    'missions.joinNeed': subjectNumberFact('count', missionNeed('join'), {
         stages: ACCOUNT_ACTIVE,
         dependencies: [MISSIONS],
     }),
-    'missions.fillNeed': numberFact('count', missionNeed('fill'), {
+    'missions.fillNeed': subjectNumberFact('count', missionNeed('fill'), {
         stages: ACCOUNT_ACTIVE,
         dependencies: [MISSIONS],
     }),
-    'missions.turboNeed': numberFact('count', missionNeed('turbo'), {
+    'missions.turboNeed': subjectNumberFact('count', missionNeed('turbo'), {
         stages: ACCOUNT_ACTIVE,
         dependencies: [MISSIONS],
     }),
-    'missions.boostNeed': numberFact('count', missionNeed('boost'), {
+    'missions.boostNeed': subjectNumberFact('count', missionNeed('boost'), {
         stages: ACCOUNT_ACTIVE,
         dependencies: [MISSIONS],
     }),
-    'missions.voteNeed': numberFact('count', missionNeed('vote'), {
+    'missions.voteNeed': subjectNumberFact('count', missionNeed('vote'), {
         stages: ACCOUNT_ACTIVE,
         dependencies: [MISSIONS],
     }),
-    'missions.nextExpiry': numberFact('instant', nextMissionExpiry, {
+    'missions.nextExpiry': subjectNumberFact('instant', nextMissionExpiry, {
         optional: true,
         stages: ACCOUNT_ACTIVE,
         dependencies: [MISSIONS],
     }),
 
-    'rewards.claimable': fact('boolean', rewardsClaimable, {
+    'rewards.claimable': subjectFact('boolean', rewardsClaimable, {
         stages: ['postClose'],
         dependencies: [REWARDS, 'challenge.id'],
     }),
-    'rewards.claimableCount': numberFact('count', rewardsClaimableCount, {
+    'rewards.claimableCount': subjectNumberFact('count', rewardsClaimableCount, {
         stages: ['account'],
         dependencies: [REWARDS],
     }),
@@ -903,12 +975,15 @@ const readNumericFact = (
     return result.state === 'known' ? known(Number(result.value)) : result;
 };
 
-const STAGE_PHRASE: Record<ScenarioStage, string> = {
+const STAGE_PHRASE: Readonly<Record<ScenarioStage, string>> = {
     account: 'outside a challenge',
     preJoin: 'before a challenge is joined',
     active: 'while a challenge is active',
     postClose: 'after a challenge closes',
 };
+
+/** A stage as a message words it ("after a challenge closes"). */
+const stagePhrase = (stage: ScenarioStage): string => STAGE_PHRASE[stage];
 
 /**
  * Why a fact cannot be read in a stage, as an issue at `path`: none when it can.
@@ -921,5 +996,15 @@ const factStageIssues = (
 ): Array<{ path: string; message: string }> =>
     facts[name].stages.includes(stage) ? [] : [{ path, message: `${name} is not available ${STAGE_PHRASE[stage]}` }];
 
-export { FACTS, readScenarioFact, readNumericFact, readEntryField, readEntryFact, factStageIssues, finite };
+export {
+    FACTS,
+    readScenarioFact,
+    readNumericFact,
+    readEntryField,
+    readEntryFact,
+    snapshotEntries,
+    factStageIssues,
+    stagePhrase,
+    finite,
+};
 export type { EntryFieldName };

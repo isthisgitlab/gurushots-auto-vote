@@ -258,7 +258,21 @@ const action = z.discriminatedUnion('type', [
         type: z.literal('notify'),
         message: plainText(SCENARIO_CAPS.noticeLength).min(1, 'Write the message'),
     }),
+    // Before joining: join this challenge now. The price limit, when given, can only narrow the caps the join already has.
+    z.strictObject({ type: z.literal('join'), maxCoins: expression.optional() }),
+    z.strictObject({ type: z.literal('claimChallengeReward') }),
+    z.strictObject({
+        type: z.literal('claimMissionReward'),
+        missionId: z.string().regex(/^[\w.:-]{1,64}$/, 'Use letters, digits, ".", ":", "-" or "_" (max 64)'),
+    }),
 ]);
+
+/** The stages of a rule: at least one, none twice. */
+const stages = z
+    .array(oneOf(vocabulary.SCENARIO_STAGES))
+    .min(1, 'Name at least one stage')
+    .max(vocabulary.SCENARIO_STAGES.length)
+    .refine((list) => new Set(list).size === list.length, 'A stage is named twice');
 
 const rule = z.strictObject({
     id: z
@@ -267,6 +281,8 @@ const rule = z.strictObject({
         .optional(),
     label: plainText(SCENARIO_CAPS.nameLength).optional(),
     repeat: oneOf(vocabulary.REPEAT_MODES).optional(),
+    // Where in a subject's life the rule runs; whether the document's scope allows them is checked with the document.
+    stages: stages.optional(),
     if: z.array(condition).max(SCENARIO_CAPS.conditionsPerList).optional(),
     do: z.array(action).min(1, 'A rule needs at least one action').max(SCENARIO_CAPS.actionsPerRule),
 });
@@ -293,7 +309,12 @@ export const scenarioDocument = z.strictObject({
     scope: z.enum(['challenge', 'installation']).optional(),
     start: identifier,
     limits: z
-        .strictObject({ swaps: limitCount.optional(), keys: limitCount.optional(), fills: limitCount.optional() })
+        .strictObject({
+            swaps: limitCount.optional(),
+            keys: limitCount.optional(),
+            fills: limitCount.optional(),
+            coins: limitCount.optional(),
+        })
         .optional(),
     phases: z
         .record(identifier, phase)

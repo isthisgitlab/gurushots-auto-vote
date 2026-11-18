@@ -2,13 +2,29 @@
  * Types shared by the scenario runner's modules.
  */
 
-import type { Challenge, ChallengeMember, MemberRanking, RankingEntry } from '../../types/gurushots';
+import type {
+    Challenge,
+    ChallengeMember,
+    CompletedChallenge,
+    MemberRanking,
+    RankingEntry,
+} from '../../types/gurushots';
 import type { ScenarioState, SpendAction } from '../../types/stores';
 import type { ScenarioStateLedger } from '../../types/votingPass';
 import type { StateLock } from '../../scenarioStateStore';
 import type { CurrencyPassDeps } from '../currencyAuto';
 import type { ScenarioDocument } from '../../settings/scenarioSchema';
 import type { PassContext } from '../votingOrchestrator';
+import type { ClaimDeps } from '../autoClaim';
+import type {
+    ActionEffects,
+    ActionOutcome,
+    DoneOutcome,
+    NotDoneOutcome,
+    OperationRecord,
+    SpendKind,
+} from '../../scenarios/runtime';
+import type { AccountReads } from './facts';
 
 type ScenarioRule = NonNullable<ScenarioDocument['phases'][string]['rules']>[number];
 
@@ -18,8 +34,6 @@ type ScenarioAction = ScenarioRule['do'][number];
 
 type ActionType = ScenarioAction['type'];
 
-type SpendKind = 'swaps' | 'keys' | 'fills';
-
 type SwapPhoto = { id: string; member_id: string };
 
 /**
@@ -28,14 +42,13 @@ type SwapPhoto = { id: string; member_id: string };
  */
 type ScenarioPass = PassContext & { currency: CurrencyPassDeps };
 
-type RunnerContext = {
-    challenge: Challenge;
+type RunnerBase = {
+    /** The key of the subject's record in the progress ledger: a challenge id, or the installation's. */
     challengeId: string;
     scenario: ScenarioDocument;
     timezone: string;
-    pass: ScenarioPass;
     ledger: ScenarioStateLedger;
-    /** The cross-process lock of the challenge's steps that this step runs under (none where one process runs them). */
+    /** The cross-process lock of the subject's steps that this step runs under (none where one process runs them). */
     stepLock?: StateLock;
     /**
      * Set by the rule for the step it is running: writes the spend down just before its request is made (the
@@ -43,7 +56,39 @@ type RunnerContext = {
      * spend (a retry only looks): a spend asked for with none is refused, never made without its marker.
      */
     beforeSpend: ((action: SpendAction) => boolean) | null;
+    /** How the subject is named in the log: a challenge's tag, or the installation. */
+    tag: string;
+    /** The account reads the subject's evidence is worked out from. */
+    reads: AccountReads;
+    /** What the pass (a scenario action or the normal automation) already did for which subject. */
+    operations: OperationRecord;
 };
+
+/** A joined challenge in the voting pass: the whole pass is at hand. */
+type ActiveContext = RunnerBase & { stage: 'active'; challenge: Challenge; pass: ScenarioPass };
+
+/** What a candidate's join step may call: the join of that candidate, under the join pass's own decision and budget. */
+type JoinAttempt = { status: string; charged: number; maybeCharged: number };
+
+type ScenarioJoin = (maxCoins: number | null) => Promise<JoinAttempt>;
+
+/** An open challenge the account has not joined, inside the join pass. */
+type PreJoinContext = RunnerBase & {
+    stage: 'preJoin';
+    challenge: Challenge;
+    join: ScenarioJoin;
+};
+
+/** The claim endpoints a reward step uses, and the needs it counts down. */
+type ClaimPass = { deps: ClaimDeps };
+
+/** A closed challenge as the completed listing gives it. */
+type PostCloseContext = RunnerBase & { stage: 'postClose'; completed: CompletedChallenge; claims: ClaimPass };
+
+/** The installation: no challenge. `republish` publishes the overlay again after a change of phase or progress. */
+type AccountContext = RunnerBase & { stage: 'account'; claims: ClaimPass; republish: () => Promise<void> };
+
+type RunnerContext = ActiveContext | PreJoinContext | PostCloseContext | AccountContext;
 
 /**
  * A challenge an action has just acted on: the action's own reads (the entry
@@ -54,36 +99,20 @@ type ActedChallenge = Challenge & {
     member: ChallengeMember & { ranking: MemberRanking & { entries: RankingEntry[] } };
 };
 
-/**
- * What an action did: its effects on the scenario state when done, or why not.
- */
-type ActionEffects = {
-    remember?: Record<string, string>;
-    forget?: string;
-    spent?: SpendKind;
-    goto?: string;
-    notice?: string;
-};
+/** The context an action's handler runs in: the stage the action belongs to. */
+type ContextOf<K extends ActionType> = K extends 'join'
+    ? PreJoinContext
+    : K extends 'claimChallengeReward'
+      ? PostCloseContext
+      : K extends 'claimMissionReward'
+        ? AccountContext
+        : K extends 'goto' | 'notify'
+          ? RunnerContext
+          : ActiveContext;
 
-type DoneOutcome = { status: 'done' } & ActionEffects;
-
-// `unclear`: the spend of the step got no answer, so it may have gone through and is never spent again; `spent` is
-// what the run counts against its limit for it (conservatively); `halt` ends the rule instead of resuming at the step.
-type NotDoneOutcome = {
-    status: 'skipped' | 'failed' | 'deferred';
-    message: string;
-    spent?: SpendKind;
-    unclear?: SpendAction;
-    halt?: true;
-    /** `pending`: the rule is stopped from a marker written before the spend, not from a spend that got no answer. */
-    origin?: 'pending';
-};
-
-type ActionOutcome = DoneOutcome | NotDoneOutcome;
-
-type ActionHandler<A extends ScenarioAction> = (
+type ActionHandler<A extends ScenarioAction, C extends RunnerContext = RunnerContext> = (
     action: A,
-    ctx: RunnerContext,
+    ctx: C,
     state: ScenarioState,
 ) => Promise<ActionOutcome>;
 
@@ -96,6 +125,13 @@ export type {
     SwapPhoto,
     ScenarioPass,
     RunnerContext,
+    ActiveContext,
+    PreJoinContext,
+    PostCloseContext,
+    AccountContext,
+    JoinAttempt,
+    ScenarioJoin,
+    ContextOf,
     ActedChallenge,
     ActionEffects,
     DoneOutcome,

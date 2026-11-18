@@ -10,7 +10,10 @@
  * the saved settings and the raw account evidence under the saved transport policy (loadAccountEvidence): that evidence is
  * what a binding is worked out from, so it cannot wait for the policy the binding may overlay.
  *
- * Nothing here runs a rule, changes a phase or spends anything: that is the installation runner's (a later package).
+ * The installation stage (runInstallationStage) runs on top of it: under the same ownership and the same step lock it starts
+ * the progress at the start phase, finishes an interrupted handoff, publishes, and then runs the scenario's account rules
+ * (the rules whose stage is `account`) through the shared runner, publishing again after each confirmed action and phase
+ * change. A scoped Run of one challenge only publishes (publishInstallationOverlay): it never runs account work.
  */
 
 import * as settings from '../../settings';
@@ -20,15 +23,18 @@ import { effectiveTimezone } from '../../settings/uiDefaults';
 import { evaluateExpression } from '../../scenarios/expressions';
 import { INSTALLATION_KEY, initialState } from '../../scenarioStateStore';
 import type { StateLock } from '../../scenarioStateStore';
-import type { Challenge } from '../../types/gurushots';
 import type { ExpressionContext } from '../../scenarios/expressions';
+import type { OperationRecord } from '../../scenarios/runtime';
 import type { ScenarioPublication, ScenarioState } from '../../types/stores';
 import type { ScenarioStateLedger } from '../../types/votingPass';
+import type { ClaimDeps } from '../autoClaim';
+import type { ScenarioDocument } from '../../settings/scenarioSchema';
 import { evidenceNeeded, loadAccountEvidence } from './facts';
 import type { AccountReads } from './facts';
 import { withNotice } from './rule';
-import { nextBindingInstant } from './step';
+import { advance, loadState, nextBindingInstant } from './step';
 import { log, nowSec } from './support';
+import type { AccountContext } from './types';
 
 const NO_LOCK: StateLock = { ok: true, release: () => {} };
 
@@ -63,19 +69,6 @@ type InstallationPublishStatus =
     | 'cleared'
     | 'failed';
 
-/**
- * The challenge the installation has in the fact snapshot an expression reads: an installation scenario reads no challenge
- * (the registry offers it only account facts), so this is the shape the snapshot needs and nothing else.
- */
-const NO_CHALLENGE: Challenge = {
-    id: INSTALLATION_KEY,
-    title: '',
-    start_time: 0,
-    close_time: 0,
-    entries: 0,
-    players: 0,
-};
-
 const withoutPublication = (state: ScenarioState): ScenarioState => {
     const rest = { ...state };
     delete rest.published;
@@ -103,36 +96,118 @@ const publishInstallationOverlay = async (pass: InstallationPass): Promise<Insta
     }
 };
 
-const publishUnderOwnership = async (pass: InstallationPass): Promise<InstallationPublishStatus> => {
+/** The scenario the installation runs and the generation it runs under, once this runtime is known to be its owner. */
+type Owned = { scenario: ScenarioDocument; generation: number };
+
+/**
+ * The installation scenario this runtime owns, or the status that says why not.
+ */
+const ownedScenario = (): { owned: Owned } | { status: InstallationPublishStatus } => {
     // The assignment first: an installation with none costs nothing, and the progress record is not read.
     const assignment = settings.getInstallationScenario();
-    if (!assignment) return 'none';
-    if (platform().capabilities.executor !== assignment.executor) return 'not-owner';
+    if (!assignment) return { status: 'none' };
+    if (platform().capabilities.executor !== assignment.executor) return { status: 'not-owner' };
     const scenario = settings.getScenario(assignment.scenario);
-    if (!scenario || scenario.scope !== 'installation') return 'none';
+    if (!scenario || scenario.scope !== 'installation') return { status: 'none' };
     const generation = settings.installationGeneration();
     // A generation the assignment has not reached (a change that was begun and not finished) is not one to publish under.
-    if (generation === null) return 'unreadable';
-    if (generation !== assignment.generation) return 'stale';
+    if (generation === null) return { status: 'unreadable' };
+    if (generation !== assignment.generation) return { status: 'stale' };
+    return { owned: { scenario, generation } };
+};
 
+const publishUnderOwnership = async (pass: InstallationPass): Promise<InstallationPublishStatus> => {
+    const own = ownedScenario();
+    if ('status' in own) return own.status;
     const lock = pass.lock ? pass.lock(INSTALLATION_KEY) : NO_LOCK;
     if (!lock.ok) return 'busy';
     try {
-        const { corrupt, state } = pass.ledger.get(INSTALLATION_KEY);
-        if (corrupt) return 'unreadable';
-        if (state?.paused || state?.handoff) return 'held';
-        if (state && state.scenario.toLowerCase() !== scenario.name.toLowerCase()) return 'stale';
-        const now = nowSec();
-        const phase = state?.phase ?? scenario.start;
-        const phaseEnteredAt = state?.phaseEnteredAt ?? now;
-        if (!scenario.phases[phase]) return 'none';
-
-        const at = { phase, phaseEnteredAt, published: state?.published };
-        const prepared = await prepare(pass, scenario, at, state, generation, now);
-        return write(pass, scenario.name, at, prepared, generation, now);
+        return await publishLocked(pass, own.owned);
     } finally {
         lock.release();
     }
+};
+
+/**
+ * The publication itself, with the installation's step lock already held by the caller.
+ */
+const publishLocked = async (
+    pass: InstallationPass,
+    { scenario, generation }: Owned,
+): Promise<InstallationPublishStatus> => {
+    const { corrupt, state } = pass.ledger.get(INSTALLATION_KEY);
+    if (corrupt) return 'unreadable';
+    if (state?.paused || state?.handoff) return 'held';
+    if (state && state.scenario.toLowerCase() !== scenario.name.toLowerCase()) return 'stale';
+    const now = nowSec();
+    const phase = state?.phase ?? scenario.start;
+    const phaseEnteredAt = state?.phaseEnteredAt ?? now;
+    if (!scenario.phases[phase]) return 'none';
+
+    const at = { phase, phaseEnteredAt, published: state?.published };
+    const prepared = await prepare(pass, scenario, at, state, generation, now);
+    return write(pass, scenario.name, at, prepared, generation, now);
+};
+
+/** What the installation stage needs of the cycle beyond the publication: the claim endpoints, and the record of what was done. */
+type InstallationStagePass = InstallationPass & { claims: ClaimDeps; operations: OperationRecord };
+
+/**
+ * The installation stage of one cycle, when this runtime owns the installation scenario: starts or recovers its progress,
+ * publishes its overlay, and (with `rules`) runs its account rules. Never throws. Run before the mission read and the join
+ * and claim pre-steps. The step lock is held for the whole stage; the storage lock is not (the ledger takes it per write).
+ */
+const runInstallationStage = async (
+    pass: InstallationStagePass,
+    { rules }: { rules: boolean },
+): Promise<InstallationPublishStatus> => {
+    try {
+        const own = ownedScenario();
+        if ('status' in own) return own.status;
+        const lock = pass.lock ? pass.lock(INSTALLATION_KEY) : NO_LOCK;
+        if (!lock.ok) return 'busy';
+        try {
+            return await stageLocked(pass, own.owned, lock, rules);
+        } finally {
+            lock.release();
+        }
+    } catch (error) {
+        log().error(`the installation stage failed: ${errorMessage(error) || error}`, null);
+        return 'failed';
+    }
+};
+
+const stageLocked = async (
+    pass: InstallationStagePass,
+    owned: Owned,
+    lock: StateLock,
+    rules: boolean,
+): Promise<InstallationPublishStatus> => {
+    const ctx: AccountContext = {
+        stage: 'account',
+        challengeId: INSTALLATION_KEY,
+        scenario: owned.scenario,
+        timezone: effectiveTimezone(settings.getSetting('timezone')),
+        ledger: pass.ledger,
+        stepLock: lock,
+        beforeSpend: null,
+        tag: 'the installation scenario',
+        reads: { subject: 'the installation', token: pass.token, ...pass.reads },
+        operations: pass.operations,
+        claims: { deps: pass.claims },
+        // The step lock is the caller's: the publication is made again under it, from the record as it now stands.
+        republish: async () => {
+            await publishLocked(pass, owned);
+        },
+    };
+    // A progress record that exists gets the recovery a challenge's gets before anything is published: an interrupted
+    // handoff is finished, a paused installation is held, a record of another scenario is started over at the start phase.
+    // One that does not exist yet is made by the publication below, at the start phase under the generation the assignment
+    // is at.
+    if (pass.ledger.get(INSTALLATION_KEY).state !== null) loadState(ctx, nowSec());
+    const status = await publishLocked(pass, owned);
+    if (rules && (status === 'published' || status === 'cleared')) await advance(ctx, nowSec());
+    return status;
 };
 
 const prepare = async (
@@ -157,7 +232,7 @@ const prepare = async (
         at,
         (readBase) => {
             const facts: ExpressionContext = {
-                challenge: NO_CHALLENGE,
+                subject: { kind: 'installation' },
                 state: { phaseEnteredAt: at.phaseEnteredAt, memory: state?.memory ?? {}, history: state?.history },
                 now,
                 timezone,
@@ -225,5 +300,5 @@ const write = (
     return 'failed';
 };
 
-export { publishInstallationOverlay };
-export type { InstallationPass, InstallationPublishStatus };
+export { publishInstallationOverlay, runInstallationStage };
+export type { InstallationPass, InstallationPublishStatus, InstallationStagePass };

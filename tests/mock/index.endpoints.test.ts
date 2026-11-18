@@ -19,6 +19,7 @@ jest.mock('../../src/ts/core/services/joinChallenges', () => ({
 }));
 jest.mock('../../src/ts/core/services/scenarioRunner/installation', () => ({
     publishInstallationOverlay: jest.fn(async () => 'none'),
+    runInstallationStage: jest.fn(async () => 'none'),
 }));
 jest.mock('../../src/ts/core/services/missions', () => ({
     loadMissionNeeds: jest.fn(async () => null),
@@ -64,7 +65,7 @@ const { runJoinPass, joinChallengeSingle, forgetUnconfirmedPayment } = jest.mock
 const { loadMissionNeeds, registerMissionNeeds } = jest.mocked(
     require('../../src/ts/core/services/missions') as typeof missionsModule,
 );
-const { publishInstallationOverlay } = jest.mocked(
+const { publishInstallationOverlay, runInstallationStage } = jest.mocked(
     require('../../src/ts/core/services/scenarioRunner/installation') as typeof installationModule,
 );
 const { mockApiClient, clearSessionCache } = require('../../src/ts/core/mock/index') as typeof indexModule;
@@ -831,23 +832,35 @@ describe('fetchChallengesAndVote — join pre-step', () => {
         expect(cat.warning).toHaveBeenCalledWith('Mock join pass errored: boom', null);
     });
 
-    test('the installation scenario settings are published first, over the in-memory ledger only and the mock endpoints', async () => {
+    test('the installation stage runs first, over the in-memory ledger only and the mock endpoints', async () => {
         await mockApiClient.fetchChallengesAndVote('tok');
 
-        expect(publishInstallationOverlay).toHaveBeenCalledTimes(1);
-        // the mock ledger and no cross-process lock: a mock run never touches the real progress file
-        expect(publishInstallationOverlay).toHaveBeenCalledWith({
-            token: 'tok',
-            ledger: mockScenarioStateLedger,
-            reads: {
-                getBankroll: mockApiClient.getBankroll,
-                getMyMissions: mockApiClient.getMyMissions,
-                getMyCompletedChallenges: mockApiClient.getMyCompletedChallenges,
-            },
-        });
-        const published = publishInstallationOverlay.mock.invocationCallOrder[0]!;
+        expect(runInstallationStage).toHaveBeenCalledTimes(1);
+        // the mock ledger and no cross-process lock: a mock run never touches the real progress file; a full pass also
+        // runs the installation's account rules
+        expect(runInstallationStage).toHaveBeenCalledWith(
+            expect.objectContaining({
+                token: 'tok',
+                ledger: mockScenarioStateLedger,
+                reads: {
+                    getBankroll: mockApiClient.getBankroll,
+                    getMyMissions: mockApiClient.getMyMissions,
+                    getMyCompletedChallenges: mockApiClient.getMyCompletedChallenges,
+                },
+                operations: expect.any(Object),
+            }),
+            { rules: true },
+        );
+        expect(runInstallationStage.mock.calls[0][0]).not.toHaveProperty('lock');
+        const published = runInstallationStage.mock.invocationCallOrder[0]!;
         expect(published).toBeLessThan(loadMissionNeeds.mock.invocationCallOrder[0]!);
         expect(published).toBeLessThan(runJoinPass.mock.invocationCallOrder[0]!);
+    });
+
+    test('a single-challenge run only publishes: it runs no account rule', async () => {
+        await mockApiClient.fetchChallengesAndVote('tok', 9);
+        expect(publishInstallationOverlay).toHaveBeenCalledTimes(1);
+        expect(runInstallationStage).not.toHaveBeenCalled();
     });
 
     test('reads the missions over the mock endpoint and hands the same needs to the join pass and the vote', async () => {

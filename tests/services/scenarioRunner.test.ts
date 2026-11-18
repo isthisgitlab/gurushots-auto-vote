@@ -71,6 +71,7 @@ import type * as scenarioRunnerModule from '../../src/ts/core/services/scenarioR
 import type * as ruleModule from '../../src/ts/core/services/scenarioRunner/rule';
 import type * as supportModule from '../../src/ts/core/services/scenarioRunner/support';
 import type * as scenarioStateStoreModule from '../../src/ts/core/scenarioStateStore';
+import { createOperationRecord } from '../../src/ts/core/scenarios/runtime';
 import type { Challenge, ChallengeMember, MemberRanking, RankingEntry } from '../../src/ts/core/types/gurushots';
 import type { ScenarioDocument } from '../../src/ts/core/settings/scenarioSchema';
 import type { CategoryLogger } from '../../src/ts/core/logger';
@@ -931,7 +932,17 @@ describe('a rule resumed past its first step without any marker (the state was e
         const validated = { ...doc.phases.main.rules![0], id: 'r1' };
         const outcome = await runRule(
             { ruleId: 'r1', rule: invalid(validated), startIndex: 1 },
-            invalid({ challenge: challenge(), challengeId: '7', scenario: doc, timezone: 'UTC', pass, ledger }),
+            invalid({
+                stage: 'active',
+                challenge: challenge(),
+                challengeId: '7',
+                tag: '[7]',
+                scenario: doc,
+                timezone: 'UTC',
+                pass,
+                ledger,
+                operations: createOperationRecord(),
+            }),
             state,
         );
         expect(outcome.completed).toBe(false);

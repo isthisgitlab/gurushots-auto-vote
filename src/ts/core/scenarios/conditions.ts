@@ -33,8 +33,7 @@ import {
     known,
     unknownOf,
 } from './expressions';
-import { finite, readEntryFact, readEntryField, readNumericFact, readScenarioFact } from './facts';
-import { readableEntries } from './selectors';
+import { finite, readEntryFact, readEntryField, readNumericFact, readScenarioFact, snapshotEntries } from './facts';
 import { pending } from './valueState';
 
 import type { ExpressionContext } from './expressions';
@@ -214,7 +213,7 @@ const evaluateEntriesWhere = (
     condition: Extract<ScenarioCondition, { type: 'entriesWhere' }>,
     ctx: ConditionContext,
 ): Verdict => {
-    const entries = readableEntries(ctx.challenge);
+    const entries = snapshotEntries(ctx);
     if (entries === null) return unknownOf('entries-unreadable', ['member.ranking.entries']);
     const verdicts = entries.map((entry) => entryMeets(entry, condition.where, ctx));
     return condition.quantifier === 'any' ? anyTruth(verdicts) : allTruth(verdicts);
@@ -228,7 +227,7 @@ const evaluateEntryCount = (
     condition: Extract<ScenarioCondition, { type: 'entryCount' }>,
     ctx: ConditionContext,
 ): Verdict => {
-    const entries = readableEntries(ctx.challenge);
+    const entries = snapshotEntries(ctx);
     if (entries === null) return unknownOf('entries-unreadable', ['member.ranking.entries']);
     const verdicts = entries.map((entry) => entryMeets(entry, condition.where, ctx));
     const low = verdicts.filter((verdict) => verdict.state === 'known' && verdict.value).length;

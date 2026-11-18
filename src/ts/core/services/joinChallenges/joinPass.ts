@@ -25,6 +25,8 @@ import {
 import { performJoin } from './performJoin';
 import { claimOf, pruneClosedClaims, refreshClaims } from './unlockMarker';
 import { isMarkedChallenge } from '../../challengeMarks';
+import type { PreJoinHook } from '../scenarioRunner/lifecycle';
+import type { JoinAttempt } from '../scenarioRunner/types';
 
 /**
  * One balance read for the whole pass. A throw here (or a null return) means
@@ -206,25 +208,48 @@ const claimWhateverCost = async (challenge: { id?: string | number }, deps: Join
     return claimOf(deps.joinStateStore, challenge.id) !== null;
 };
 
+/** A join with no spend: only its status. */
+const attemptOf = (status: string): JoinAttempt => ({ status, charged: 0, maybeCharged: 0 });
+
+/**
+ * How a join its candidate's scenario decided differs from the pass's own: no timing window (the scenario's conditions are
+ * the timing), and a price limit that can only narrow the configured cap (`null`: no narrower limit).
+ */
+type ScenarioJoinMode = { maxCoins: number | null };
+
+const scenarioConfig = (cfg: ReturnType<typeof resolveCandidateConfig>, mode: ScenarioJoinMode | null) =>
+    mode === null
+        ? cfg
+        : {
+              ...cfg,
+              joinImmediately: false,
+              joinWithinSec: 0,
+              joinAfterPercentElapsed: 0,
+              joinAfterSecFromStart: 0,
+              maxCoins: mode.maxCoins === null ? cfg.maxCoins : Math.min(cfg.maxCoins, mode.maxCoins),
+          };
+
 /**
  * Decide and (when due) perform one candidate's join, keeping the pass's
- * balance and budget in step with what it spent.
+ * balance and budget in step with what it spent. The one path for the pass's own joins and for a join a scenario asks for
+ * (`scenario`): the same decision, photo-first preparation, paid-unlock protection and cycle budget.
  *
- * @returns the candidate's result status
+ * @returns the candidate's result status, and the coins spent (or possibly spent) on it
  */
 const joinCandidate = async (
     challenge: Challenge,
     token: string,
     deps: JoinDeps,
     pass: JoinPassState,
-): Promise<string> => {
-    const gateRefusal = joinCandidateGateRefusal(challenge);
+    scenario: ScenarioJoinMode | null = null,
+): Promise<JoinAttempt> => {
+    const gateRefusal = joinCandidateGateRefusal(challenge, scenario !== null);
     if (gateRefusal === 'skipped:manual-photos-only') {
         await noteUnenteredPaidJoin(challenge, deps);
     }
-    if (gateRefusal !== null) return gateRefusal;
+    if (gateRefusal !== null) return attemptOf(gateRefusal);
     const alreadyPaid = await paidAlready(challenge, deps);
-    const cfg = resolveCandidateConfig(challenge, pass.shortChallengesImmediately);
+    const cfg = scenarioConfig(resolveCandidateConfig(challenge, pass.shortChallengesImmediately), scenario);
     const decision = decideCandidateJoin(challenge, cfg, pass, alreadyPaid);
     noteAfterStartClamp(challenge, cfg, decision, pass);
     let submitOnly = alreadyPaid;
@@ -236,11 +261,11 @@ const joinCandidate = async (
             // With a claim the join goes ahead as the paid retry does: submit only, never an unlock.
             if (!(await claimWhateverCost(challenge, deps))) {
                 noteJoinSafetySkip(challenge, decision.reason, cfg.hasProfileMatch);
-                return `skipped:${decision.reason}`;
+                return attemptOf(`skipped:${decision.reason}`);
             }
             submitOnly = true;
         } else {
-            return `skipped:${decision.reason}`;
+            return attemptOf(`skipped:${decision.reason}`);
         }
     }
     // Guard each candidate: one bad candidate (unexpected throw) must not
@@ -256,7 +281,7 @@ const joinCandidate = async (
         });
     } catch (error) {
         cat().warning(`join failed for ${logger.challengeTag(challenge)}: ${errorMessage(error) || error}`, null);
-        return 'error';
+        return attemptOf('error');
     }
     // An unlock that got no answer may have charged: it counts against the pass as if it had.
     const spent = outcome.charged + (outcome.maybeCharged ?? 0);
@@ -268,7 +293,7 @@ const joinCandidate = async (
         const bankroll = pass.bankroll as Bankroll;
         bankroll.coins = Number(bankroll.coins) - spent;
     }
-    return outcome.status;
+    return { status: outcome.status, charged: outcome.charged, maybeCharged: outcome.maybeCharged ?? 0 };
 };
 
 /**
@@ -279,6 +304,32 @@ const joinCandidate = async (
  */
 const rememberOpenList = (candidates: Array<Challenge | null>): void => {
     settings.rememberOpenChallengeIds?.(candidates.flatMap((c) => (c?.id == null ? [] : [c.id])));
+};
+
+/**
+ * One candidate's join in the pass: its scenario's pre-join rules decide first (a join they make is the candidate's one
+ * decision this cycle), then the pass's own gates. An operation record keeps the second from repeating what the first did.
+ */
+const joinOne = async (
+    challenge: Challenge,
+    token: string,
+    deps: JoinDeps,
+    pass: JoinPassState,
+    preJoin: PreJoinHook | null,
+): Promise<string> => {
+    const subject = String(challenge?.id);
+    // What was joined this cycle is not decided again, by either.
+    if (preJoin?.operations.has('join', subject)) return 'skipped:done-this-pass';
+    const viaScenario = await preJoin?.run(challenge, (maxCoins) =>
+        joinCandidate(challenge, token, deps, pass, { maxCoins }),
+    );
+    if (viaScenario) {
+        preJoin?.operations.mark('join', subject);
+        return viaScenario.status;
+    }
+    const { status } = await joinCandidate(challenge, token, deps, pass);
+    if (status === 'joined') preJoin?.operations.mark('join', subject);
+    return status;
 };
 
 /**
@@ -311,6 +362,7 @@ const runJoinPass = async (
     missions: MissionNeeds | null = null,
 ): Promise<{ ran: boolean; joined: number; results: Array<{ id: string | number | undefined; status: string }> }> => {
     const empty = { ran: false, joined: 0, results: [] };
+    const preJoin = deps.preJoin ?? null;
     if (!token) return empty;
     // The master autoJoin is only the default; a title profile can enable joining
     // for its title even when the master is off (resolved master → profile — an
@@ -323,7 +375,8 @@ const runJoinPass = async (
     // profile turns autoJoin ON for its title. Check that precisely (a tag-only
     // title rule — an auto-fill tag rule — carries no profile and can never
     // enable joining, so it must NOT keep the pass alive every cycle).
-    if (!masterOn && !anyTitleRuleEnablesAutoJoin()) {
+    // A candidate whose scenario has pre-join rules is decided before these gates, so such a scenario keeps the pass alive.
+    if (!masterOn && !anyTitleRuleEnablesAutoJoin() && !preJoin?.armed()) {
         return empty;
     }
 
@@ -408,7 +461,7 @@ const runJoinPass = async (
             cat().warning('join pass cancelled by user', null);
             break;
         }
-        const status = await joinCandidate(challenge, token, deps, pass);
+        const status = await joinOne(challenge, token, deps, pass, preJoin);
         if (status === 'joined') {
             joined += 1;
             pass.earlyJoins -= 1;

@@ -12,17 +12,23 @@
 import { occurrencesOf } from '../scheduling/wallClock';
 
 import type { Bankroll, Challenge } from '../types/gurushots';
-import type { ScenarioEngineState } from '../types/scenario';
+import type { ScenarioEngineState, ScenarioStage } from '../types/scenario';
+import { DEFAULT_STAGES } from './vocabulary';
 import type { ScenarioDocument, ScenarioRule } from '../settings/scenarioSchema';
 import { firstFailing } from './conditions';
 import type { ExpressionContext } from './expressions';
-import type { FactEvidence } from './facts';
+import type { FactEvidence, FactSubject } from './facts';
 import { nextWakeAt } from './nextWake';
 
 export interface EvaluateInput {
     scenario: ScenarioDocument;
     state: ScenarioEngineState;
-    challenge: Challenge;
+    /** The challenge a candidate or an active subject is; absent for an installation and a completed subject. */
+    challenge?: Challenge;
+    /** What the facts are read on (absent: the active challenge). */
+    subject?: FactSubject;
+    /** The stage being evaluated: only the rules that run in it are tried (absent: the scenario's default stage). */
+    stage?: ScenarioStage;
     /** unix seconds */
     now: number;
     timezone: string;
@@ -36,6 +42,21 @@ export interface EvaluateInput {
     /** false for a plan that has not started: it has no phase clock, so no in-phase bound is a wake (nextWake.ts) */
     phaseClock?: boolean;
 }
+
+/**
+ * The stage a scenario's rules run in when the caller names none: a challenge scenario's active stage, an installation's
+ * account stage.
+ */
+const defaultStage = (scenario: ScenarioDocument): ScenarioStage =>
+    scenario.scope === 'installation' ? 'account' : 'active';
+
+/**
+ * Whether a rule runs in a stage: the stages it declares, else its scenario's default.
+ */
+const runsIn = (rule: ScenarioRule, scenario: ScenarioDocument, stage: ScenarioStage): boolean => {
+    const stages: readonly ScenarioStage[] = rule.stages ?? DEFAULT_STAGES[scenario.scope ?? 'challenge'];
+    return stages.includes(stage);
+};
 
 /**
  * Identity of the local calendar day `now` falls in: the instant of its
@@ -77,6 +98,12 @@ const firedRecord = (state: ScenarioEngineState, now: number, timezone: string) 
     phaseEnteredAt: state.phaseEnteredAt,
 });
 
+/**
+ * When the engine next needs to look: only a subject with a challenge has clock boundaries to predict.
+ */
+const wakeOf = (input: EvaluateInput): number | null =>
+    input.challenge === undefined ? null : nextWakeAt({ ...input, challenge: input.challenge });
+
 const evaluateScenario = (
     input: EvaluateInput,
 ): {
@@ -93,10 +120,12 @@ const evaluateScenario = (
     if (!phase) {
         return { ...base, halted: `Phase "${state.phase}" no longer exists in scenario "${scenario.name}"` };
     }
-    const rules = phase.rules ?? [];
+    const stage = input.stage ?? defaultStage(scenario);
+    const allRules = phase.rules ?? [];
+    const rules = allRules.filter((candidate) => runsIn(candidate, scenario, stage));
 
     if (state.inFlight) {
-        const rule = rules.find((candidate) => candidate.id === state.inFlight?.ruleId);
+        const rule = allRules.find((candidate) => candidate.id === state.inFlight?.ruleId);
         if (!rule || state.inFlight.actionIndex >= rule.do.length) {
             return {
                 ...base,
@@ -104,24 +133,27 @@ const evaluateScenario = (
             };
         }
         const resume = { ruleId: rule.id, rule, startIndex: state.inFlight.actionIndex };
+        // An interrupted rule resumes in its own stage: another stage's evaluation leaves it as it is.
+        const own = runsIn(rule, scenario, stage);
         return {
             ...base,
             halted: null,
-            fire: skip.has(rule.id) ? null : resume,
+            fire: skip.has(rule.id) || !own ? null : resume,
             explain: [
                 {
                     ruleId: rule.id,
                     label: rule.label ?? rule.id,
                     status: 'ready',
-                    reason: 'resuming an interrupted rule',
+                    reason: own ? 'resuming an interrupted rule' : 'an interrupted rule of another stage',
                 },
             ],
-            nextWakeAt: nextWakeAt(input),
+            nextWakeAt: wakeOf(input),
         };
     }
 
     const ctx = {
         challenge: input.challenge,
+        subject: input.subject,
         state,
         now,
         timezone,
@@ -159,7 +191,7 @@ const evaluateScenario = (
         });
         fire ??= { ruleId: rule.id, rule, startIndex: 0 };
     }
-    return { ...base, halted: null, fire, explain, nextWakeAt: nextWakeAt(input) };
+    return { ...base, halted: null, fire, explain, nextWakeAt: wakeOf(input) };
 };
 
 /**
@@ -176,4 +208,4 @@ const startState = (scenario: ScenarioDocument, now: number): ScenarioEngineStat
     inFlight: null,
 });
 
-export { evaluateScenario, firedRecord, localDayOf, startState };
+export { evaluateScenario, firedRecord, localDayOf, runsIn, startState };

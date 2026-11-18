@@ -622,6 +622,15 @@ describe('expression conditions', () => {
             expect(verdict(where('all', [{ field: 'rank', op: '<=', value: 99 }]))).toBe('U');
         });
 
+        test('a subject with no challenge (an installation, a closed challenge) has no entries to read: unknown', () => {
+            const none = { challenge: undefined, subject: { kind: 'installation' } };
+            expect(truthOf(where('any', [{ field: 'votes', op: '>=', value: 0 }]), none)).toEqual({
+                state: 'unknown',
+                reason: 'entries-unreadable',
+                dependencies: ['member.ranking.entries'],
+            });
+        });
+
         test('an unreadable entry list is unknown; an empty one has no entry (any false, all true)', () => {
             const predicates: Predicate[] = [{ field: 'votes', op: '>=', value: 0 }];
             expect(truthOf(where('any', predicates), NOT_READABLE)).toEqual({

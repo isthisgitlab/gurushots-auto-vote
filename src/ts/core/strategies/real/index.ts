@@ -39,7 +39,7 @@ import {
     refreshScenarioStateAsync,
 } from '../../scenarioStateStore';
 import { backgroundServiceOwnsScenarios } from '../../services/scenarioRunner';
-import { publishInstallationOverlay } from '../../services/scenarioRunner/installation';
+import { createLifecycle } from '../../services/scenarioRunner/lifecycle';
 import { sleep, getRandomDelay } from '../../timing';
 import * as logger from '../../logger';
 import * as settings from '../../settings';
@@ -275,14 +275,20 @@ const fetchChallengesAndVote = async (
     token: string,
     challengeIdFilter: string | number | null = null,
 ): Promise<{ success: boolean; message?: string; error?: string; challenges?: Challenge[] }> => {
-    // The installation scenario's settings for this cycle, published by its owner before anything reads them (never
-    // thrown: a runtime that is not the owner only reads what the owner published).
-    await publishInstallationOverlay({
+    // One coordinator routes this cycle's scenario work through the stages of a subject's life (see
+    // services/scenarioRunner/lifecycle.ts). The installation stage comes first: its settings are published by its owner
+    // before anything reads them, and its account rules run (never thrown: a runtime that is not the owner only reads what
+    // the owner published). A single-challenge Run only publishes; it runs no account, pre-join or post-close work.
+    const lifecycle = createLifecycle({
         token,
         ledger: scenarioStateLedger,
         lock: scenarioStepLock,
         reads: { getBankroll, getMyMissions, getMyCompletedChallenges },
+        claims: claimDeps,
+        // The Android window leaves scenarios to the background service.
+        enabled: () => !backgroundServiceOwnsScenarios(),
     });
+    await lifecycle.installation({ rules: challengeIdFilter === null });
     // What the active missions still need — read only while a mission setting is
     // on, shared by the join pre-step and the pass, which count it down.
     const missions = await loadMissionNeeds(token, Date.now(), { getMyMissions });
@@ -304,7 +310,7 @@ const fetchChallengesAndVote = async (
             // claims file would overwrite each other's unlock markers.
             if (!backgroundServiceOwnsScenarios()) {
                 try {
-                    await runJoinPass(token, Date.now(), joinDeps, missions);
+                    await runJoinPass(token, Date.now(), { ...joinDeps, preJoin: lifecycle.preJoin }, missions);
                 } catch (error) {
                     logger
                         .withCategory('join')
@@ -314,7 +320,7 @@ const fetchChallengesAndVote = async (
             // Prize-claim pre-step: gated by the default-off `autoClaimPrizes`
             // setting and throttled to once an hour inside runClaimPass.
             try {
-                await runClaimPass(token, Date.now(), claimDeps);
+                await runClaimPass(token, Date.now(), { ...claimDeps, operations: lifecycle.operations });
             } catch (error) {
                 logger
                     .withCategory('claim')
@@ -325,8 +331,9 @@ const fetchChallengesAndVote = async (
         // re-read its state so this pass's phase-settings overlay is current. Also while the app's cache of it was
         // never filled (a start-up read failed): until it is, plans stay paused.
         if (backgroundServiceOwnsScenarios() || !scenarioStateLoaded()) await refreshScenarioStateAsync();
-        return await runVotingPass(token, challengeIdFilter, {
+        const result = await runVotingPass(token, challengeIdFilter, {
             api: votingPassApi(),
+            operations: lifecycle.operations,
             cleanupStaleMetadata,
             // Real mode persists new-entry snapshots to metadata.json, where
             // cleanupStaleMetadata prunes them alongside their challenge.
@@ -360,6 +367,9 @@ const fetchChallengesAndVote = async (
                 ? () => loadMissionNeeds(token, Date.now(), { getMyMissions })
                 : null,
         });
+        // Closed challenges last: their rewards and post-close rules (a single-challenge Run has none).
+        if (challengeIdFilter === null) await lifecycle.postClose();
+        return result;
     } finally {
         unregisterMissionNeeds?.();
     }

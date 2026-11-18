@@ -29,7 +29,8 @@ import { mockSwapBackLedger } from '../swapBackStore';
 import { createMemoryAutoSpendLedger } from '../currencyAutoStore';
 import { createMemoryEntryAgeLedger } from '../entryAgeStore';
 import { mockScenarioStateLedger } from '../scenarioStateStore';
-import { publishInstallationOverlay } from '../services/scenarioRunner/installation';
+import { createLifecycle } from '../services/scenarioRunner/lifecycle';
+import type { Lifecycle } from '../services/scenarioRunner/lifecycle';
 import { mockMethod } from './simulate';
 
 import type { MissionNeeds } from '../services/missions';
@@ -65,16 +66,24 @@ const mockJoinDeps = (client: MockEndpoints): JoinDeps => ({
  * The auto-join and hourly prize-claim pre-steps, mirroring the real strategy.
  * Neither aborts voting.
  */
-const runPreSteps = async (client: MockEndpoints, token: string, missions: MissionNeeds | null) => {
+const runPreSteps = async (
+    client: MockEndpoints,
+    token: string,
+    missions: MissionNeeds | null,
+    lifecycle: Lifecycle,
+) => {
     // Auto-join pre-step (gated by the default-off autoJoin setting).
     try {
-        await runJoinPass(token, Date.now(), mockJoinDeps(client), missions);
+        await runJoinPass(token, Date.now(), { ...mockJoinDeps(client), preJoin: lifecycle.preJoin }, missions);
     } catch (error) {
         logger.withCategory('join').warning(`Mock join pass errored: ${errorMessage(error) || error}`, null);
     }
     // Hourly prize-claim pre-step (default-off autoClaimPrizes), as in real.
     try {
-        await runClaimPass(token, Date.now(), pickEndpoints(client, CLAIM_ENDPOINTS));
+        await runClaimPass(token, Date.now(), {
+            ...pickEndpoints(client, CLAIM_ENDPOINTS),
+            operations: lifecycle.operations,
+        });
     } catch (error) {
         logger.withCategory('claim').warning(`Mock claim pass errored: ${errorMessage(error) || error}`, null);
     }
@@ -88,8 +97,14 @@ const runPreSteps = async (client: MockEndpoints, token: string, missions: Missi
  * ones — running cleanup here would purge the user's real voting
  * metadata.
  */
-const mockVotingPassDeps = (client: MockEndpoints, token: string, missions: MissionNeeds | null): VotingPassDeps => ({
+const mockVotingPassDeps = (
+    client: MockEndpoints,
+    token: string,
+    missions: MissionNeeds | null,
+    lifecycle: Lifecycle,
+): VotingPassDeps => ({
     api: pickEndpoints(client, VOTING_PASS_ENDPOINTS),
+    operations: lifecycle.operations,
     cleanupStaleMetadata: null,
     // In-memory for the same reason cleanupStaleMetadata is null: the
     // metadata store is shared and un-namespaced, and mock challenge ids
@@ -174,8 +189,9 @@ const createMockStrategy = (client: MockEndpoints) => {
             // completes empty. Log the condition but keep the same contract.
             logger.withCategory('authentication').error('No token provided, voting pass will find no challenges', null);
         }
-        // The installation scenario's settings, published by its owner first, as in real (over the in-memory ledger).
-        await publishInstallationOverlay({
+        // The coordinator of this cycle's scenario work, as in real (over the in-memory ledger, with no cross-process lock):
+        // the installation stage first, its settings published by its owner and its account rules run.
+        const lifecycle = createLifecycle({
             token,
             ledger: mockScenarioStateLedger,
             reads: {
@@ -183,14 +199,22 @@ const createMockStrategy = (client: MockEndpoints) => {
                 getMyMissions: client.getMyMissions,
                 getMyCompletedChallenges: client.getMyCompletedChallenges,
             },
+            claims: pickEndpoints(client, CLAIM_ENDPOINTS),
         });
+        await lifecycle.installation({ rules: challengeIdFilter === null });
         // Mission read (only while a mission setting is on), as in real.
         const missions = await loadMissionNeeds(token, Date.now(), { getMyMissions: client.getMyMissions });
         const unregisterMissionNeeds = registerMissionNeeds(token, missions);
         try {
             // Skipped for a single-challenge run.
-            if (challengeIdFilter === null) await runPreSteps(client, token, missions);
-            return await runVotingPass(token, challengeIdFilter, mockVotingPassDeps(client, token, missions));
+            if (challengeIdFilter === null) await runPreSteps(client, token, missions, lifecycle);
+            const result = await runVotingPass(
+                token,
+                challengeIdFilter,
+                mockVotingPassDeps(client, token, missions, lifecycle),
+            );
+            if (challengeIdFilter === null) await lifecycle.postClose();
+            return result;
         } finally {
             unregisterMissionNeeds?.();
         }

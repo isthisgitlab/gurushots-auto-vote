@@ -28,7 +28,7 @@ import * as settings from '../settings';
 import type { Challenge, Mission } from '../types/gurushots';
 import { errorMessage } from '../errorMessage';
 
-type MissionKind = 'join' | 'fill' | 'turbo' | 'boost' | 'vote';
+export type MissionKind = 'join' | 'fill' | 'turbo' | 'boost' | 'vote';
 
 /**
  * A "Use Fill" mission the pass can spend on: its server progress when the pass read it, what it still needs (counted

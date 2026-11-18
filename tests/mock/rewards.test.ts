@@ -97,6 +97,8 @@ describe('mock fetchChallengesAndVote claim pre-step', () => {
             claimChallengeResources: mockApiClient.claimChallengeResources,
             getMyMissions: mockApiClient.getMyMissions,
             claimMissionPrize: mockApiClient.claimMissionPrize,
+            // the cycle's record of what a scenario action already claimed
+            operations: expect.any(Object),
         });
         expect(runClaimPass.mock.invocationCallOrder[0]).toBeLessThan(runVotingPass.mock.invocationCallOrder[0]);
     });

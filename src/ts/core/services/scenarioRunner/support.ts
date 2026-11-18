@@ -12,9 +12,9 @@ import type { ScenarioState } from '../../types/stores';
 import type { SpendOutcome } from '../currencyActions';
 import type {
     ActionEffects,
+    ActiveContext,
     DoneOutcome,
     NotDoneOutcome,
-    RunnerContext,
     ScenarioAction,
     SpendAction,
     SpendKind,
@@ -95,7 +95,7 @@ const unclearHalted = (actionType: SpendAction, from: Retry): NotDoneOutcome => 
  * have dropped it (deferred: the step stops its rule and is retried on the next pass, never on data the boundary
  * could not vouch for).
  */
-const refreshLive = async (ctx: RunnerContext): Promise<NotDoneOutcome | null> => {
+const refreshLive = async (ctx: ActiveContext): Promise<NotDoneOutcome | null> => {
     const refresh = await refreshChallengeState(
         ctx.challenge,
         ctx.pass.token,
@@ -128,7 +128,7 @@ const noAnswer = (actionType: SpendAction, spent: boolean): NotDoneOutcome => ({
  */
 const spendAllowed = async (
     actionType: SpendAction,
-    ctx: RunnerContext,
+    ctx: ActiveContext,
     state: ScenarioState,
 ): Promise<string | null> => {
     const spend = SPEND[actionType];
@@ -161,7 +161,7 @@ const TRANSIENT_OUTCOMES: ReadonlySet<string> = new Set([
  */
 const lockedCurrencySpend = async (
     actionType: SpendAction,
-    ctx: RunnerContext,
+    ctx: ActiveContext,
     spend: (request: SpendRequest) => Promise<SpendOutcome>,
 ): Promise<NotDoneOutcome | null> => {
     // The only way a spend's request is made: the marker is written down first, and a request whose marker could not
@@ -191,7 +191,7 @@ const lockedCurrencySpend = async (
     return result.outcome === undefined || TRANSIENT_OUTCOMES.has(result.outcome) ? failed(message) : skipped(message);
 };
 
-const currencyDeps = (ctx: RunnerContext) => ({ strategy: ctx.pass.currency.strategy, logger, settings });
+const currencyDeps = (ctx: ActiveContext) => ({ strategy: ctx.pass.currency.strategy, logger, settings });
 
 /**
  * What entry selectors read: remembered photos, and vote history for `fastest`.

@@ -32,7 +32,8 @@ import { invalid } from '../helpers/invalid';
 
 const settings = jest.mocked(settingsModule);
 const { scanFillCandidates } = jest.mocked(autoFillModule);
-const { loadScenarioSnapshot } = require('../../src/ts/core/services/scenarioRunner/facts') as typeof loaderModule;
+const { loadScenarioSnapshot, passReads } =
+    require('../../src/ts/core/services/scenarioRunner/facts') as typeof loaderModule;
 const { FACTS } = require('../../src/ts/core/scenarios/facts') as typeof factsModule;
 
 type CategoryMock = { warning: jest.MockedFunction<CategoryLogger['warning']> };
@@ -85,21 +86,26 @@ const getMyCompletedChallenges = jest.fn();
 let ledger: Ledger | null;
 let api: Record<string, unknown>;
 
-const ctx = () =>
-    invalid<RunnerContext>({
+const ctx = () => {
+    const pass = {
+        token: 'tok',
+        api,
+        fillDeps: { marker: 'fill-deps' },
+        entryAges: ledger,
+        currency: { strategy: { getBankroll } },
+    };
+    return invalid<RunnerContext>({
+        stage: 'active',
         challenge: {
             id: 7,
             member: { ranking: { entries: [{ id: 'a' }, { id: 'b' }] } },
         },
         challengeId: '7',
-        pass: {
-            token: 'tok',
-            api,
-            fillDeps: { marker: 'fill-deps' },
-            entryAges: ledger,
-            currency: { strategy: { getBankroll } },
-        },
+        tag: '[7]',
+        pass,
+        reads: passReads(invalid(pass), '[7]'),
     });
+};
 
 const mission = (name: string, current: number, required: number, over: Record<string, unknown> = {}) =>
     invalid<Mission>({

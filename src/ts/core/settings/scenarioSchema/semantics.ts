@@ -11,7 +11,7 @@ import {
     exprTypeOfDescriptor,
     listIssue,
 } from '../../scenarios/expressions';
-import { FACTS, factStageIssues } from '../../scenarios/facts';
+import { FACTS, factStageIssues, stagePhrase } from '../../scenarios/facts';
 import * as vocabulary from '../../scenarios/vocabulary';
 import { challengeValueSetIsValid } from '../defaults';
 import { schemaEntry, validateSetting, getValidationError } from '../schema';
@@ -61,17 +61,34 @@ const phaseRefusal = (key: string, scope: ScenarioScope = 'challenge'): string |
  */
 const stageOf = (scope: ScenarioScope): ScenarioStage => (scope === 'installation' ? 'account' : 'active');
 
-// The conditions that read the challenge a scenario runs on: an installation scenario has none.
-const CHALLENGE_CONDITIONS: ReadonlySet<string> = new Set([
-    'beforeEnd',
-    'afterStart',
-    'elapsedPercent',
-    ...vocabulary.NUMERIC_CONDITIONS,
-    ...vocabulary.STATE_CONDITIONS,
-    'entry',
-    'entriesWhere',
-    'entryCount',
-]);
+/** The stages each condition that reads a challenge is available in (the others are available everywhere). */
+const CONDITION_STAGES: Readonly<Record<string, readonly ScenarioStage[] | undefined>> = vocabulary.CONDITION_STAGES;
+
+/** The stages each stage offers its rules as actions. */
+const STAGE_ACTIONS: Readonly<Record<ScenarioStage, readonly string[]>> = vocabulary.STAGE_ACTIONS;
+
+/**
+ * The stages a rule runs in: the ones it declares, else its scope's default.
+ */
+const ruleStages = (declared: readonly ScenarioStage[] | undefined, scope: ScenarioScope): readonly ScenarioStage[] =>
+    declared ?? vocabulary.DEFAULT_STAGES[scope];
+
+/**
+ * Why a condition is not available in some stage of a rule: one issue per such stage.
+ */
+const conditionStageIssues = (type: string, path: string, stages: readonly ScenarioStage[]): ScenarioIssue[] => {
+    const allowed = CONDITION_STAGES[type];
+    if (!allowed) return [];
+    return stages
+        .filter((stage) => !allowed.includes(stage))
+        .map((stage) => ({
+            path,
+            message:
+                stage === 'account'
+                    ? `${type} reads a challenge: an installation scenario cannot use it`
+                    : `${type} is not available ${stagePhrase(stage)}`,
+        }));
+};
 
 /**
  * Whether a value is one a non-schema setting's descriptor accepts (the keys the schema does not hold have no validator
@@ -154,17 +171,19 @@ const settingExprType: SettingTypeLookup = (key) => {
 
 /**
  * One expression slot of a condition: its own issues, then (when it is sound) that every fact it reads is available
- * in the stage the scenario runs in.
+ * in every stage the rule runs in.
  */
 const expressionIssues = (
     expr: ScenarioExpr,
     path: string,
-    stage: ScenarioStage,
+    stages: readonly ScenarioStage[],
 ): { type: ExprType | null; issues: ScenarioIssue[] } => {
     const checked = checkExpression(expr, settingExprType, path);
     const unavailable = checked.issues.length
         ? []
-        : exprReferences(expr).facts.flatMap(({ name }) => factStageIssues(name, stage, path));
+        : exprReferences(expr).facts.flatMap(({ name }) =>
+              stages.flatMap((stage) => factStageIssues(name, stage, path)),
+          );
     return { type: checked.type, issues: [...checked.issues, ...unavailable] };
 };
 
@@ -175,26 +194,25 @@ const expressionIssues = (
 const conditionExpressionIssues = (
     condition: ScenarioCondition,
     path: string,
-    stage: ScenarioStage,
+    stages: readonly ScenarioStage[],
 ): ScenarioIssue[] => {
-    if (stage === 'account' && CHALLENGE_CONDITIONS.has(condition.type)) {
-        return [{ path, message: `${condition.type} reads a challenge: an installation scenario cannot use it` }];
-    }
+    const refused = conditionStageIssues(condition.type, path, stages);
+    if (refused.length) return refused;
     switch (condition.type) {
         case 'compare': {
-            const left = expressionIssues(condition.left, `${path}.left`, stage);
-            const right = expressionIssues(condition.right, `${path}.right`, stage);
+            const left = expressionIssues(condition.left, `${path}.left`, stages);
+            const right = expressionIssues(condition.right, `${path}.right`, stages);
             const relation = left.type && right.type ? compareIssue(condition.op, left.type, right.type) : null;
             return [...left.issues, ...right.issues, ...(relation ? [{ path, message: relation }] : [])];
         }
         case 'present':
         case 'absent':
-            return expressionIssues(condition.value, `${path}.value`, stage).issues;
+            return expressionIssues(condition.value, `${path}.value`, stages).issues;
         case 'contains':
         case 'containsAny':
         case 'containsAll': {
-            const list = expressionIssues(condition.list, `${path}.list`, stage);
-            const value = expressionIssues(condition.value, `${path}.value`, stage);
+            const list = expressionIssues(condition.list, `${path}.list`, stages);
+            const value = expressionIssues(condition.value, `${path}.value`, stages);
             const relation = list.type && value.type ? listIssue(condition.type, list.type, value.type) : null;
             return [...list.issues, ...value.issues, ...(relation ? [{ path, message: relation }] : [])];
         }
@@ -209,10 +227,10 @@ const conditionExpressionIssues = (
         case 'all':
         case 'any':
             return condition.of.flatMap((item, index) =>
-                conditionExpressionIssues(item, `${path}.of[${index}]`, stage),
+                conditionExpressionIssues(item, `${path}.of[${index}]`, stages),
             );
         case 'not':
-            return conditionExpressionIssues(condition.condition, `${path}.condition`, stage);
+            return conditionExpressionIssues(condition.condition, `${path}.condition`, stages);
         default:
             return [];
     }
@@ -295,7 +313,7 @@ const bindingIssues = (
     // phaseRefusal returned nothing: the key has a capability a phase of this scope may write.
     const target = exprTypeOfDescriptor((scenarioCapability(key) as { value: ScenarioValueDescriptor }).value);
     if (target === null) return [{ path, message: `"${key}" has no value an expression can set` }];
-    const checked = expressionIssues(expr, path, stageOf(scope));
+    const checked = expressionIssues(expr, path, [stageOf(scope)]);
     const issues = [...checked.issues];
     if (checked.type && !sameType(checked.type, target)) {
         issues.push({
@@ -350,6 +368,17 @@ const profileIssue = (name: string, path: string, profiles: Record<string, unkno
 };
 
 /**
+ * The issues of a join's price limit: a sound expression, available in the rule's stages, that gives an amount of coins.
+ */
+const priceLimitIssues = (expr: ScenarioExpr, stepPath: string, stages: readonly ScenarioStage[]): ScenarioIssue[] => {
+    const checked = expressionIssues(expr, `${stepPath}.maxCoins`, stages);
+    const coins = checked.type?.kind === 'number' && checked.type.quantity === 'coins';
+    return checked.type && !coins
+        ? [...checked.issues, { path: `${stepPath}.maxCoins`, message: 'The price limit is an amount of coins' }]
+        : checked.issues;
+};
+
+/**
  * Rule ids unique across the scenario (the engine keys its "already fired"
  * records by them). Missing ids are generated as `<phase>-<n>`.
  */
@@ -391,7 +420,6 @@ export const semanticIssues = (
 ): ScenarioIssue[] => {
     const issues = [];
     const scope: ScenarioScope = doc.scope ?? 'challenge';
-    const stage = stageOf(scope);
     const phaseNames = new Set(Object.keys(doc.phases));
     if (!phaseNames.has(doc.start)) issues.push({ path: 'start', message: `No phase named "${doc.start}"` });
 
@@ -428,6 +456,16 @@ export const semanticIssues = (
                     issues.push({ path: `${rulePath}.id`, message: `Duplicate rule id "${item.id}"` });
                 ruleIds.add(item.id);
             }
+            const scopeStages: readonly ScenarioStage[] = vocabulary.SCOPE_STAGES[scope];
+            for (const declared of item.stages ?? []) {
+                if (!scopeStages.includes(declared)) {
+                    issues.push({
+                        path: `${rulePath}.stages`,
+                        message: `${declared} is not a stage of ${scope === 'installation' ? 'an installation' : 'a challenge'} scenario: use ${scopeStages.join(', ')}`,
+                    });
+                }
+            }
+            const stages = ruleStages(item.stages, scope);
             const conditions = item.if ?? [];
             if (conditionDepth(conditions) > SCENARIO_CAPS.conditionDepth) {
                 issues.push({
@@ -436,7 +474,7 @@ export const semanticIssues = (
                 });
             }
             conditions.forEach((condition, conditionIndex) =>
-                issues.push(...conditionExpressionIssues(condition, `${rulePath}.if[${conditionIndex}]`, stage)),
+                issues.push(...conditionExpressionIssues(condition, `${rulePath}.if[${conditionIndex}]`, stages)),
             );
             const conditionReads = new Set<string>();
             collectConditionReads(conditions, conditionReads);
@@ -446,6 +484,16 @@ export const semanticIssues = (
                 if (step.type === 'goto' && !phaseNames.has(step.phase)) {
                     issues.push({ path: `${stepPath}.phase`, message: `No phase named "${step.phase}"` });
                 }
+                for (const stage of stages) {
+                    if (!STAGE_ACTIONS[stage].includes(step.type)) {
+                        issues.push({
+                            path: `${stepPath}.type`,
+                            message: `${step.type} is not available ${stagePhrase(stage)}`,
+                        });
+                    }
+                }
+                if (step.type === 'join' && step.maxCoins)
+                    issues.push(...priceLimitIssues(step.maxCoins, stepPath, stages));
                 const memory = vocabulary.actionMemory(step);
                 for (const slot of memory.reads) reads.push({ slot, path: stepPath });
                 for (const slot of memory.writes) writes.add(slot);

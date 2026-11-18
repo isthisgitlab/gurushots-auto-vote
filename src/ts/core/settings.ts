@@ -192,6 +192,8 @@ export const setEntryPin = entryPins.setEntryPin;
 export const isPinnableImageId = entryPins.isPinnableImageId;
 // Cleanup functions
 export const cleanupStaleChallengeSetting = staleChallengeCleanup.cleanupStaleChallengeSetting;
+// What the last complete post-close pass found in the completed listing (null: forget it), for cleanup to go by.
+export const rememberPostCloseListing = staleChallengeCleanup.rememberPostCloseListing;
 // The open (joinable) challenge ids cleanupStaleChallengeSetting spares chosen-photo entries for
 export const rememberOpenChallengeIds = openChallenges.rememberOpenChallengeIds;
 export const getOpenChallengeIds = openChallenges.getOpenChallengeIds;

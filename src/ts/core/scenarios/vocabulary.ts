@@ -124,7 +124,56 @@ const FACT_NAMES = [
 const RANKING_SELECTORS = ['mostVotes', 'fewestVotes', 'bestRank', 'worstRank', 'boosted', 'turbo'] as const;
 
 /** Actions that spend currency or a one-per-challenge power — listed in the import preview. */
-const SPENDING_ACTIONS = ['swap', 'unlockBoost', 'fillExposure', 'boost', 'turbo'] as const;
+const SPENDING_ACTIONS = ['swap', 'unlockBoost', 'fillExposure', 'boost', 'turbo', 'join'] as const;
+
+/**
+ * The actions each stage of a subject's life offers. A rule declares the stages it runs in; every action it holds must be
+ * available in every one of them. `active` keeps every action a rule had before stages existed.
+ */
+const STAGE_ACTIONS = {
+    account: ['notify', 'goto', 'claimMissionReward'],
+    preJoin: ['notify', 'goto', 'join'],
+    active: [
+        'enterPhoto',
+        'swap',
+        'boost',
+        'turbo',
+        'unlockBoost',
+        'fillExposure',
+        'vote',
+        'remember',
+        'forget',
+        'goto',
+        'notify',
+    ],
+    postClose: ['notify', 'goto', 'claimChallengeReward'],
+} as const;
+
+/** The stages each condition that reads a challenge is available in; every other condition is available in all of them. */
+const CONDITION_STAGES = {
+    beforeEnd: ['preJoin', 'active'],
+    afterStart: ['preJoin', 'active'],
+    elapsedPercent: ['preJoin', 'active'],
+    entries: ['preJoin', 'active'],
+    freeSlots: ['preJoin', 'active'],
+    exposure: ['preJoin', 'active'],
+    challengeRank: ['preJoin', 'active'],
+    challengeVotes: ['preJoin', 'active'],
+    boostState: ['active'],
+    turboState: ['active'],
+    entry: ['active'],
+    entryCount: ['active'],
+    entriesWhere: ['active'],
+} as const;
+
+/** The stages a rule runs in when it declares none: a challenge scenario's rules are active-only, an installation's are account rules. */
+const DEFAULT_STAGES = { challenge: ['active'], installation: ['account'] } as const;
+
+/** The stages a document of each scope may declare. */
+const SCOPE_STAGES = {
+    challenge: ['preJoin', 'active', 'postClose'],
+    installation: ['account'],
+} as const;
 
 /** Currency caps a scenario may set on itself (`limits`). */
 const LIMIT_KEYS = ['swaps', 'keys', 'fills'] as const;
@@ -242,6 +291,27 @@ const VOCABULARY_REFERENCE = [
     ['action', 'forget', 'slot: name'],
     ['action', 'goto', 'phase: name'],
     ['action', 'notify', 'message: text (max 120) — an OS notification on the desktop app and the CLI scheduler'],
+    [
+        'action',
+        'join',
+        'maxCoins?: coins expression — before joining only: joins this challenge now, whatever the Auto Join switch and timing say; the price limit can only be narrowed, never widened',
+    ],
+    [
+        'action',
+        'claimChallengeReward',
+        '— after the challenge closed only: claims its rewards when they wait to be claimed',
+    ],
+    ['action', 'claimMissionReward', 'missionId: text — installation only: claims that mission when it can be claimed'],
+    [
+        'rule',
+        'stages',
+        'a challenge scenario: any of preJoin, active, postClose (default active); an installation scenario: account (default); every action must be available in each stage',
+    ],
+    [
+        'scenario',
+        'limits',
+        'swaps?, keys?, fills?, coins?: a cap on what the scenario spends in all (coins: what its joins spend)',
+    ],
     ['rule', 'repeat', `${REPEAT_MODES.join('|')} (default always = every pass the conditions hold)`],
     ['rule', 'op', COMPARISON_OPS.join(' ')],
     ['rule', 'duration', 'seconds or "5d", "90m", "1d 6h"'],
@@ -315,6 +385,10 @@ export {
     FACT_NAMES,
     RANKING_SELECTORS,
     SPENDING_ACTIONS,
+    STAGE_ACTIONS,
+    CONDITION_STAGES,
+    DEFAULT_STAGES,
+    SCOPE_STAGES,
     LIMIT_KEYS,
     SCENARIO_CAPS,
     VOCABULARY_REFERENCE,

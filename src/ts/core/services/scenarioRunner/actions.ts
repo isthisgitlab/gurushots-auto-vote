@@ -13,16 +13,22 @@ import { selectEntry, entriesOf } from '../../scenarios/selectors';
 import { isGuruPicked } from '../../voting/currencyAuto';
 import { isKeyUnlockedBoost } from '../../voting/boostWindow';
 import { isKnownTurboMode } from '../../voting/turboMode';
+import { claimChallengeReward, claimMissionReward } from '../autoClaim';
+import { evaluateExpression } from '../../scenarios/expressions';
 import type {
     ActedChallenge,
     ActionHandler,
     ActionOutcome,
     ActionType,
-    RunnerContext,
+    ActiveContext,
+    ContextOf,
+    PreJoinContext,
     ScenarioAction,
     SpendAction,
     SwapPhoto,
 } from './types';
+import type { ScenarioExpr } from '../../types/scenario';
+import { expressionEvidence, loadAccountEvidence } from './facts';
 import type { ScenarioState } from '../../types/stores';
 import {
     BOOST_APPLICABLE,
@@ -39,6 +45,7 @@ import {
     spendAllowed,
     unclearHalted,
     limitOf,
+    nowSec,
 } from './support';
 import type { Retry } from './support';
 
@@ -49,7 +56,7 @@ import type { Retry } from './support';
 // skipped step for good.
 const MANUAL_PHOTOS_SKIP = 'Manual Only is on';
 
-const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type: K }>> } = {
+const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type: K }>, ContextOf<K>> } = {
     enterPhoto: async (action, ctx, state) => {
         const { challenge, pass } = ctx;
         if (isManualPhotosOnly(settings, challenge.id)) return skipped(MANUAL_PHOTOS_SKIP);
@@ -224,6 +231,92 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
     goto: async (action) => done({ goto: action.phase }),
 
     notify: async (action) => done({ notice: action.message }),
+
+    join: async (action, ctx, state) => {
+        // What the scenario may still spend on joins, and its price limit worked out now: each can only narrow the caps
+        // the join already has, never widen them. A limit that cannot be worked out defers: nothing is joined on a guess.
+        let cap = coinsLeft(ctx, state);
+        if (action.maxCoins) {
+            const limit = await priceLimit(action.maxCoins, ctx, state);
+            if (limit === null) return deferred('the price limit cannot be worked out yet');
+            cap = cap === null ? limit : Math.min(cap, limit);
+        }
+        const attempt = await ctx.join(cap);
+        const coins = attempt.charged + attempt.maybeCharged;
+        if (attempt.status === 'joined') return done({ coins });
+        // Paid for (or possibly paid for) and not entered: the step is retried, and the claim on file makes the retry
+        // submit only — it never unlocks again. The coins count against the limit as spent.
+        if (attempt.status === 'charged-pending-submit') {
+            return {
+                ...failed('the join is paid for but not completed yet; it is retried without paying again'),
+                coins,
+                resume: true,
+            };
+        }
+        const message = `the join was not made (${attempt.status})`;
+        if (attempt.status === 'busy') return deferred(message);
+        return attempt.status === 'failed-no-charge' || attempt.status === 'error' ? failed(message) : skipped(message);
+    },
+
+    claimChallengeReward: async (action, ctx) => {
+        const result = await claimChallengeReward(ctx.reads.token, ctx.challengeId, ctx.claims.deps);
+        return claimOutcome(result, 'the rewards of this challenge');
+    },
+
+    claimMissionReward: async (action, ctx) => {
+        const result = await claimMissionReward(ctx.reads.token, action.missionId, ctx.claims.deps);
+        return result === 'unknown'
+            ? skipped(`there is no mission ${action.missionId}`)
+            : claimOutcome(result, `mission ${action.missionId}`);
+    },
+};
+
+/**
+ * What a reward claim came to, as a rule's step: sent and confirmed is done; a read that failed, or a claim sent and not
+ * confirmed, is worth retrying (a claim is safe to send again); nothing waiting is a skip.
+ */
+const claimOutcome = (
+    result: Exclude<Awaited<ReturnType<typeof claimChallengeReward>>, never>,
+    what: string,
+): ActionOutcome => {
+    switch (result) {
+        case 'claimed':
+            return done();
+        case 'nothing':
+            return skipped(`${what} is not waiting to be claimed`);
+        case 'failed':
+            return failed(`the claim of ${what} was not confirmed`);
+        case 'throttled':
+            return deferred(
+                `the claim of ${what} waits: claims are sent at most once an hour, as the automatic ones are`,
+            );
+        default:
+            return deferred(`${what} cannot be claimed now (the list could not be read, or the claim was cancelled)`);
+    }
+};
+
+/**
+ * What the scenario may still spend on joins (its coin limit less what it spent): null with no limit.
+ */
+const coinsLeft = (ctx: PreJoinContext, state: ScenarioState): number | null => {
+    const limit = ctx.scenario.limits?.coins;
+    return limit === undefined ? null : Math.max(0, limit - (state.spent.coins ?? 0));
+};
+
+/**
+ * A join's price limit, worked out now from fresh evidence: the coins, or null when the value is unknown or absent.
+ */
+const priceLimit = async (expr: ScenarioExpr, ctx: PreJoinContext, state: ScenarioState): Promise<number | null> => {
+    const evidence = await loadAccountEvidence(expressionEvidence(expr), ctx.reads);
+    const value = evaluateExpression(expr, {
+        challenge: ctx.challenge,
+        subject: { kind: 'candidate', challenge: ctx.challenge, provenance: 'open-list' },
+        state: { phaseEnteredAt: state.phaseEnteredAt, memory: state.memory, history: state.history },
+        now: nowSec(),
+        timezone: ctx.timezone,
+        ...evidence,
+    });
+    return value.state === 'known' && value.value.kind === 'number' ? Math.max(0, value.value.value) : null;
 };
 
 /**
@@ -234,7 +327,7 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
  */
 const spendLanded = async (
     action: ScenarioAction & { type: SpendAction },
-    ctx: RunnerContext,
+    ctx: ActiveContext,
     state: ScenarioState,
 ): Promise<{ landed: boolean; remember: Record<string, string> }> => {
     const none = { landed: false, remember: {} };
@@ -264,7 +357,7 @@ const spendLanded = async (
  */
 const settleUnclearSpend = async (
     action: ScenarioAction & { type: SpendAction },
-    ctx: RunnerContext,
+    ctx: ActiveContext,
     state: ScenarioState,
     from: Retry,
 ): Promise<ActionOutcome> => {

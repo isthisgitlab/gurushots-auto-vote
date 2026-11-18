@@ -35,6 +35,7 @@ import type { createStateLedger as CreateScenarioStateLedger } from '../scenario
 import type { EntryTracker } from '../services/newEntryTracker';
 import type { EntryAgeLedger } from './stores';
 import type { MissionNeeds } from '../services/missions';
+import type { OperationRecord } from '../scenarios/runtime';
 
 /** The endpoint set runVotingPass reads off `deps.api`. */
 export interface VotingPassApi {
@@ -94,6 +95,8 @@ export interface VotingPassDeps {
     scenarios?: ScenarioDeps | null;
     /** What the active missions still need (services/missions.ts); counted down as the pass lands them. */
     missions?: MissionNeeds | null;
+    /** The cycle's record of what scenario actions and the normal automation already did, kept across the pre-steps and the pass. */
+    operations?: OperationRecord;
     /** Headless Android refreshes server progress before spending a saved Turbo. */
     refreshMissionNeeds?: (() => Promise<MissionNeeds | null>) | null;
 }

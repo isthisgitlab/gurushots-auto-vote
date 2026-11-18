@@ -7,7 +7,7 @@ import type * as factsModule from '../../src/ts/core/scenarios/facts';
 import type * as selectorsModule from '../../src/ts/core/scenarios/selectors';
 import type * as vocabularyModule from '../../src/ts/core/scenarios/vocabulary';
 import type { Challenge } from '../../src/ts/core/types/gurushots';
-import type { ScenarioSelector } from '../../src/ts/core/types/scenario';
+import type { FactName, ScenarioSelector } from '../../src/ts/core/types/scenario';
 import { invalid } from '../helpers/invalid';
 import type { FactSnapshot, FactValue } from '../../src/ts/core/scenarios/facts';
 import type { ValueState } from '../../src/ts/core/scenarios/expressions';
@@ -626,7 +626,7 @@ describe('entry facts', () => {
         expect(readEntryField('rank', entries()[2], snap)).toEqual(absent('not-present'));
         expect(readEntryField('boosted', second, snap)).toEqual(known(true));
         expect(readEntryField('votesPerHour', first, snap)).toEqual(unknown('insufficient-history', ['vote-history']));
-        expect(readableEntries(snap.challenge)).toHaveLength(3);
+        expect(readableEntries(invalid<Challenge>(snap.challenge))).toHaveLength(3);
         expect(readableEntries(invalid<Challenge>({}))).toBeNull();
     });
 });
@@ -845,6 +845,45 @@ describe('missions', () => {
     });
 });
 
+describe('the subject of a snapshot', () => {
+    const installation = { challenge: undefined, subject: { kind: 'installation' } };
+    const closed = {
+        challenge: undefined,
+        subject: { kind: 'completed', challenge: { id: 9, title: 'Done' }, provenance: 'completed-list' },
+    };
+
+    test.each(['challenge.entries', 'boost.state', 'challenge.end', 'challenge.type'])(
+        'a fact about the challenge, %s, is unknown for a subject that has none',
+        (name) => {
+            // the answer names the evidence the fact declares, as every unknown answer does
+            const declared = [...FACTS[invalid<FactName>(name)].dependencies];
+            expect(read(name, undefined, installation)).toEqual(unknown('no-challenge', declared));
+            expect(read(name, undefined, closed)).toEqual(unknown('no-challenge', declared));
+        },
+    );
+
+    test('the identity of a closed challenge is what its listing row gives; the clock and the account read as ever', () => {
+        expect(read('challenge.id', undefined, closed)).toEqual(known('9'));
+        expect(read('challenge.title', undefined, closed)).toEqual(known('Done'));
+        expect(read('clock.now', undefined, closed)).toEqual(known(NOW));
+        expect(read('balance.coins', undefined, installation)).toEqual(known(100));
+        // an installation has no identity
+        expect(read('challenge.id', undefined, installation)).toEqual(unknown('id-unreadable', ['challenge.id']));
+    });
+
+    test('an entry’s own reading of its speed needs the challenge’s entries: with none to read, the history is not enough', () => {
+        const entry = entries()[0];
+        expect(readEntryField('speedRatio', entry, snapshot(undefined, installation))).toEqual(
+            unknown('insufficient-history', ['vote-history']),
+        );
+    });
+
+    test('a snapshot that names no subject is an active challenge’s, as it always was', () => {
+        expect(read('challenge.id')).toEqual(known('7'));
+        expect(read('challenge.entries')).toEqual(known(3));
+    });
+});
+
 describe('rewards', () => {
     const rewards = (over: Record<string, unknown> = {}) => ({
         readable: true,
@@ -854,26 +893,39 @@ describe('rewards', () => {
         ...over,
     });
 
+    // The subject of a post-close read: a completed challenge as the completed listing gives it.
+    const completed = (id: unknown) => ({
+        subject: { kind: 'completed', challenge: { id }, provenance: 'completed-list' },
+    });
+
     test('claimable: true when the read lists the subject as claimable', () => {
-        expect(read('rewards.claimable', undefined, { rewards: rewards() })).toEqual(known(true));
+        expect(read('rewards.claimable', undefined, { rewards: rewards(), ...completed(7) })).toEqual(known(true));
     });
 
     test('claimable: false when the read lists the subject as not claimable, or the finished listing lacks it', () => {
-        expect(read('rewards.claimable', { ...baseChallenge(), id: 30 }, { rewards: rewards() })).toEqual(known(false));
-        expect(read('rewards.claimable', { ...baseChallenge(), id: 99 }, { rewards: rewards() })).toEqual(known(false));
+        expect(read('rewards.claimable', undefined, { rewards: rewards(), ...completed(30) })).toEqual(known(false));
+        expect(read('rewards.claimable', undefined, { rewards: rewards(), ...completed(99) })).toEqual(known(false));
     });
 
     test('claimable: unknown when a capped listing never reached the subject', () => {
         expect(
-            read('rewards.claimable', { ...baseChallenge(), id: 99 }, { rewards: rewards({ complete: false }) }),
+            read('rewards.claimable', undefined, { rewards: rewards({ complete: false }), ...completed(99) }),
         ).toEqual(unknown('rewards-list-incomplete', ['rewards']));
         // a lower bound still proves a claimable subject
-        expect(read('rewards.claimable', undefined, { rewards: rewards({ complete: false }) })).toEqual(known(true));
+        expect(
+            read('rewards.claimable', undefined, { rewards: rewards({ complete: false }), ...completed(7) }),
+        ).toEqual(known(true));
     });
 
     test('claimable: unknown for a subject with no readable id', () => {
-        expect(read('rewards.claimable', without('id'), { rewards: rewards() })).toEqual(
+        expect(read('rewards.claimable', undefined, { rewards: rewards(), ...completed(undefined) })).toEqual(
             unknown('id-unreadable', ['challenge.id']),
+        );
+    });
+
+    test('claimable: unknown for a subject that is not a completed challenge (an active one is never cast to one)', () => {
+        expect(read('rewards.claimable', undefined, { rewards: rewards() })).toEqual(
+            unknown('subject-not-completed', ['challenge.id']),
         );
     });
 
