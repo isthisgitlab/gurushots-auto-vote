@@ -20,6 +20,7 @@
  *   scenarioSchema.ts     validation of user-defined scenario documents (scenarioSchema/)
  *   scenarios.ts          stored scenarios, JSON import/export
  *   scenarioOverlay.ts    the active scenario phase's settings layer
+ *   scenarioCapabilities.ts what a scenario may read or write per configuration key (the phase gate, the projection)
  *   reset.ts              reset helpers and "modified" checks
  */
 
@@ -51,6 +52,7 @@ import * as profiles from './settings/profiles';
 import * as titlePins from './settings/titlePins';
 import * as entryPins from './settings/entryPins';
 import * as scenarios from './settings/scenarios';
+import * as scenarioCapabilities from './settings/scenarioCapabilities';
 import * as reset from './settings/reset';
 
 /**
@@ -134,6 +136,9 @@ export const importScenario = scenarios.importScenario;
 export const exportScenario = scenarios.exportScenario;
 export const exportScenarioWithNotes = scenarios.exportScenarioWithNotes;
 export const MAX_SCENARIOS = scenarios.MAX_SCENARIOS;
+// What a scenario may read or write per configuration key: the serialized projection, and one key's capability.
+export const getScenarioCapabilities = scenarioCapabilities.getScenarioCapabilities;
+export const scenarioCapability = scenarioCapabilities.scenarioCapability;
 // First-seen challenge-title pins (internal cache — no IPC wiring).
 // MAX_TITLE_LENGTH is exported so challengeTitlePin.ts bounds incoming
 // titles with the same cap mergeTitlePins accepts.

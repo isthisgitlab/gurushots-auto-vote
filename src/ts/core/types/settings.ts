@@ -23,6 +23,77 @@ export type ChallengeValues = Record<string, unknown>;
  */
 export type SettingValueOf<K extends string> = K extends SettingKey ? SettingValues[K] : unknown;
 
+/** Where a scenario phase overlay may write a setting: one challenge, or the whole installation. */
+export type ScenarioScope = 'challenge' | 'installation';
+
+/** The one class every named configuration key belongs to. */
+export type SettingDisposition =
+    | 'challengePolicy'
+    | 'accountPolicy'
+    | 'appPreference'
+    | 'devicePreference'
+    | 'lifecycleControl'
+    | 'internalState';
+
+/** Who may change a setting outside a scenario overlay. */
+type SettingCapabilityOwner =
+    | 'challenge'
+    | 'installation'
+    | 'device'
+    | 'controller'
+    | 'window'
+    | 'onboarding'
+    | 'updates'
+    | 'authentication';
+
+/**
+ * What a scenario may do with one setting. `read` is the value itself or a restricted projection of it,
+ * `phaseWrite` the scopes a phase overlay may write (none: no overlay may), and `restriction` the plain reason
+ * when none may.
+ */
+export type ScenarioSettingCapability = {
+    disposition: SettingDisposition;
+    read: 'value' | 'projection';
+    phaseWrite: readonly ScenarioScope[];
+    owner: SettingCapabilityOwner;
+    restriction?: string;
+};
+
+/**
+ * The keys of the `app` block that are not schema keys: the form settings of the shared UI defaults, plus the mock
+ * switch, the onboarding flag and the window geometry. Listed out because `keyof ConfigApp` carries an index
+ * signature that cannot check coverage.
+ */
+export type AppExtraKey =
+    | 'theme'
+    | 'language'
+    | 'timezone'
+    | 'customTimezones'
+    | 'stayLoggedIn'
+    | 'apiTimeout'
+    | 'checkFrequencyMin'
+    | 'checkFrequencyMax'
+    | 'apiMaxRetries'
+    | 'apiRetryBaseDelayMs'
+    | 'mock'
+    | 'onboardingCompleted'
+    | 'windowBounds';
+
+/** Every named configuration key: the schema keys and the app keys outside the schema. */
+export type CapabilityKey = SettingKey | AppExtraKey;
+
+/** One row of the serialized capability projection. */
+export type ScenarioCapabilityRow = ScenarioSettingCapability & { key: CapabilityKey };
+
+/**
+ * The capability catalogue as plain JSON: one row per key, sorted by key, and the remote-access switch described
+ * apart because it is not a configuration key. It never carries key material.
+ */
+export type ScenarioCapabilityProjection = {
+    settings: ScenarioCapabilityRow[];
+    remoteEnabled: ScenarioSettingCapability;
+};
+
 /** A challenge id as callers hold it: the API's string, or a number from older paths. */
 export type ChallengeIdInput = string | number | null | undefined;
 

@@ -7,6 +7,7 @@
 import * as vocabulary from '../../scenarios/vocabulary';
 import { challengeValueSetIsValid } from '../defaults';
 import { schemaEntry, validateSetting, getValidationError } from '../schema';
+import { scenarioCapability } from '../scenarioCapabilities';
 
 import type { ScenarioCondition } from '../../types/scenario';
 import type { ParsedScenarioDocument, ScenarioDocument, ScenarioPhase } from './shapes';
@@ -27,14 +28,17 @@ const SETTING_PAIRS = [
 ];
 
 /**
- * Setting keys a phase may never overlay, each with its refusal. A phase overlay sits above every
- * layer, the per-challenge override included, so a phase setting `manualPhotosOnly: false` would
- * turn automatic photo entry back on against the user's own switch.
+ * Why a phase may not overlay a key, or undefined when it may (its capability allows a challenge write). A phase
+ * overlay sits above every layer, the per-challenge override included, so a phase setting `manualPhotosOnly: false`
+ * would turn automatic photo entry back on against the user's own switch: a per-challenge key a phase may not write
+ * is refused with the reason its capability states. Any other key, an unknown one included, is not a per-challenge
+ * setting.
  */
-const PHASE_FORBIDDEN_KEYS = new Map([
-    ['scenario', 'A phase cannot change the scenario assignment itself'],
-    ['manualPhotosOnly', 'A phase cannot change Manual Only'],
-]);
+const phaseRefusal = (key: string): string | undefined => {
+    const capability = scenarioCapability(key);
+    if (capability?.phaseWrite.includes('challenge')) return undefined;
+    return (schemaEntry(key)?.perChallenge ? capability?.restriction : undefined) ?? 'Not a per-challenge setting';
+};
 
 /**
  * Nesting depth of a condition list (a flat list is depth 1).
@@ -75,11 +79,9 @@ const phaseSettingsIssues = (
     const context = { ...globalDefaults, ...values };
     for (const [key, value] of Object.entries(values)) {
         const path = `${basePath}.${key}`;
-        const forbidden = PHASE_FORBIDDEN_KEYS.get(key);
-        if (forbidden !== undefined) {
-            issues.push({ path, message: forbidden });
-        } else if (!schemaEntry(key)?.perChallenge) {
-            issues.push({ path, message: 'Not a per-challenge setting' });
+        const refusal = phaseRefusal(key);
+        if (refusal !== undefined) {
+            issues.push({ path, message: refusal });
         } else if (!validateSetting(key, value, context)) {
             issues.push({ path, message: String(getValidationError(key, value, context)) });
         }
