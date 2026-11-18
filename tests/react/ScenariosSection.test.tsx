@@ -299,7 +299,7 @@ describe('import', () => {
             invalid({ success: true, scenarios: { Plan: plan }, revision: null, templates: [template] }),
         );
         jest.mocked(window.api.previewScenarioImport).mockResolvedValue(invalid(preview()));
-        jest.mocked(window.api.importScenario).mockResolvedValue({ success: true, name: 'Shared' });
+        jest.mocked(window.api.importScenario).mockResolvedValue({ success: true, name: 'Shared', unboundPools: [] });
         await openImport();
         click('app.scenarioPreview');
         expect(await screen.findByText('From a friend')).toBeTruthy();
@@ -314,7 +314,7 @@ describe('import', () => {
 
     test('check shows what it does; import stores it and closes the panel', async () => {
         jest.mocked(window.api.previewScenarioImport).mockResolvedValue(invalid(preview()));
-        jest.mocked(window.api.importScenario).mockResolvedValue({ success: true, name: 'Shared' });
+        jest.mocked(window.api.importScenario).mockResolvedValue({ success: true, name: 'Shared', unboundPools: [] });
         await openImport();
         expect(screen.getByRole<HTMLButtonElement>('button', { name: 'app.scenarioImportConfirm' }).disabled).toBe(
             true,

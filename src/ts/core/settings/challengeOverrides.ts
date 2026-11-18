@@ -21,13 +21,20 @@ import {
     checkPhaseProfileIn,
     overlaysInstallation,
     overlaySources,
+    photoPoolView,
+    poolViewOfRecord,
     prepareInstallationOverlay,
     prepareOverlay,
     readInstallationLayer,
     readLayer,
     readOverlay,
+    readPhotoPool,
+    reconcilePoolProgress,
+    recordPoolEvents,
     subjectLayer,
 } from './scenarioOverlay';
+import { getEntryPins as getStoredEntryPins, mergeEntryPins } from './entryPins';
+import { hasStoredScenarios } from './scenarios';
 import { getScenarioCapabilities, scenarioCapability } from './scenarioCapabilities';
 import { JOIN_KEPT_KEYS } from './staleChallengeCleanup';
 import { isActiveChallengeId, challengeTargetForId } from './challengeFacts';
@@ -41,9 +48,9 @@ import type { ExprValue } from '../scenarios/expressions';
 import type { ValueState } from '../scenarios/valueState';
 import type { ConfigApp, ConfigV2 } from '../types/config';
 import type { SettingView } from '../types/scenario';
-import type { ChallengeIdInput, ChallengeValues, SettingValueOf } from '../types/settings';
+import type { ChallengeIdInput, ChallengeValues, EntryPins, SettingValueOf } from '../types/settings';
 import type { ScenarioPublication, ScenarioState } from '../types/stores';
-import type { InstallationLayer, ResolvedOverlay, SubjectLayer } from './scenarioOverlay';
+import type { InstallationLayer, PhotoPoolView, ResolvedOverlay, SubjectLayer } from './scenarioOverlay';
 import type { ScenarioDocument } from './scenarioSchema';
 
 /**
@@ -470,7 +477,11 @@ const getEffectiveSetting = <K extends string>(
         if (unavailable !== null && _phaseWritesKey(settingKey)) {
             throw new ScenarioSettingUnavailableError(settingKey, String(challengeId), unavailable);
         }
-        const found = subject.kind === 'phase' ? readLayer(subject.layer, settingKey) : null;
+        // A phase's photo pool stands in for its Chosen Photos settings; the runtime patch is above it.
+        const found =
+            subject.kind === 'phase'
+                ? (readPhotoPool(settings, subject.layer, settingKey) ?? readLayer(subject.layer, settingKey))
+                : null;
         if (found) return found.value as SettingValueOf<K>;
     }
     return _resolveEffectiveSetting(settings, settingKey, challengeId) as SettingValueOf<K>;
@@ -629,6 +640,60 @@ const scenarioOverlayStatus = (challengeId: ChallengeIdInput): ScenarioOverlaySt
  * Whether a saved profile can be a phase's profile (the `useProfile` action's check): the name as saved, or why not.
  */
 const checkPhaseProfile = (name: string) => checkPhaseProfileIn(loadSettings(), name);
+
+/**
+ * The photos a challenge's Boost and Turbo are pinned to now: the runtime pin of its scenario phase entry, else the phase's
+ * pin, else the pin the user saved (null: none; an explicit null in a tier suppresses the lower ones). The one reader the
+ * Boost and Turbo picks, the `pinned` selector, the status and the facts use. A scenario's pins are never written to the
+ * saved ones; a subject with no readable phase reads the saved pins. See entryPins mergeEntryPins.
+ */
+const getEffectiveEntryPins = (challengeId: string | number): EntryPins => {
+    const stored = getStoredEntryPins(challengeId);
+    const subject = _subjectLayer(loadSettings(), challengeId);
+    if (subject.kind !== 'phase') return stored;
+    const { phase, state } = subject.layer;
+    return mergeEntryPins(stored, phase.pins, state.phasePins);
+};
+
+/**
+ * The photo pool the challenge's phase draws from, as the picks read it (null: the phase has none). A challenge whose
+ * progress cannot be read is unavailable, as for any phase that needs it (scenarioSubjectAvailable).
+ */
+const getChosenPoolView = (challengeId: string | number): PhotoPoolView | null => {
+    const settings = loadSettings();
+    const subject = _subjectLayer(settings, challengeId);
+    return subject.kind === 'phase' ? photoPoolView(settings, subject.layer) : null;
+};
+
+/**
+ * The photo pool of the phase a challenge's progress record is in, for a subject the overlay does not resolve by id: an
+ * un-joined candidate, whose scenario is the one its rules (or its own override) give, named by the caller. Null: no record
+ * of that scenario, or a phase with no pool.
+ */
+const getPoolViewFor = (challengeId: string | number, scenarioName: string): PhotoPoolView | null =>
+    poolViewOfRecord(loadSettings(), String(challengeId), scenarioName);
+
+/**
+ * Records a submit's or a swap's effect on the photos of the pool of the phase the challenge's progress record is in (see
+ * recordPoolEvents), whether the challenge is joined or still a candidate. Nothing is read or written without a stored
+ * scenario. Not for use inside a scenario step, which hands the events to its reducer.
+ */
+const recordPhotoPoolEvents = (
+    challengeId: string | number,
+    events: { consume: readonly string[]; reserve: readonly string[] },
+): boolean => {
+    const settings = loadSettings();
+    return hasStoredScenarios(settings) && recordPoolEvents(settings, String(challengeId), events);
+};
+
+/**
+ * Settles the challenge's pool progress against its full, fresh entry list (see reconcilePoolProgress): reserved photos
+ * that are entered are consumed, those that are not are released. Nothing is read without a stored scenario.
+ */
+const reconcilePhotoPool = (challengeId: string | number, entryIds: readonly string[]): boolean => {
+    const settings = loadSettings();
+    return hasStoredScenarios(settings) && reconcilePoolProgress(settings, String(challengeId), entryIds);
+};
 
 /** What the runner holds for one evaluation of a phase: what to publish, and how to read settings in it. */
 type ScenarioSnapshot = {
@@ -880,7 +945,14 @@ const consumeChosenPhotos = (challengeId: string | number, enteredIds: readonly 
     return true;
 };
 
-export type { BindingResolution, InstallationCapture, InstallationValueOf, ScenarioOverlayStatus, ScenarioSnapshot };
+export type {
+    BindingResolution,
+    InstallationCapture,
+    InstallationValueOf,
+    PhotoPoolView,
+    ScenarioOverlayStatus,
+    ScenarioSnapshot,
+};
 export { ScenarioSettingUnavailableError };
 
 export {
@@ -898,6 +970,11 @@ export {
     assignScenarioIn,
     writeAssignmentAware,
     getEffectiveSetting,
+    getEffectiveEntryPins,
+    getChosenPoolView,
+    getPoolViewFor,
+    recordPhotoPoolEvents,
+    reconcilePhotoPool,
     getScenarioBaseSettings,
     readScenarioSetting,
     scenarioSubjectAvailable,

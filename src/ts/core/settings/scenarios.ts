@@ -11,7 +11,7 @@
  */
 
 import * as logger from '../logger';
-import { SCENARIO_CAPS, SPENDING_ACTIONS, isOneOf } from '../scenarios/vocabulary';
+import { SCENARIO_CAPS, SPENDING_ACTIONS, isOneOf, isPoolName } from '../scenarios/vocabulary';
 import { loadSettings, saveSettings } from './persistence';
 import { globalChallengeValues } from './defaults';
 import { normalizeProfileName, profileNameForLog, findProfileKey } from './profileStore';
@@ -46,11 +46,27 @@ type ScenarioRefusal =
 type ScenarioFailure = { ok: false; issues: ScenarioIssue[]; reason?: ScenarioRefusal };
 
 type ScenarioSaveResult = { ok: true; name: string } | ScenarioFailure;
+/** What a store answers inside this module: the saved document too, for the import to read what it names. */
+type ScenarioStoreResult = { ok: true; name: string; scenario: ScenarioDocument } | ScenarioFailure;
+/** The store's answer as the public save and rename give it. */
+const withoutDocument = (result: ScenarioStoreResult): ScenarioSaveResult =>
+    result.ok ? { ok: true, name: result.name } : result;
 type ScenarioDeleteResult = { ok: true } | { ok: false; reason: ScenarioRefusal | 'not-found' | 'not-saved' };
 type ScenarioLibrary = { scenarios: Record<string, ScenarioDocument>; revision: number | null };
+/**
+ * `unboundPools`: the photo pools the scenario names that this account does not have saved: a binding the user still has to
+ * make, not an error (the scenario is stored, and a pool-only phase waits until the pool exists).
+ */
 type ScenarioImportPreview =
-    | { ok: true; scenario: ScenarioDocument; preview: ReturnType<typeof describeScenario>; exists: boolean }
+    | {
+          ok: true;
+          scenario: ScenarioDocument;
+          preview: ReturnType<typeof describeScenario>;
+          exists: boolean;
+          unboundPools: string[];
+      }
     | { ok: false; issues: ScenarioIssue[] };
+type ScenarioImportResult = { ok: true; name: string; unboundPools: string[] } | ScenarioFailure;
 
 const MAX_SCENARIOS = SCENARIO_CAPS.scenarios;
 
@@ -187,7 +203,7 @@ const storeScenario = (
         expectedDefinitionRevision?: number;
         rename?: string | null;
     },
-): ScenarioSaveResult => {
+): ScenarioStoreResult => {
     // An invalid document is told as it is, without the gate.
     const early = loadSettings();
     const checked = validateScenario(doc, globalChallengeValues(early), early.profiles);
@@ -200,7 +216,7 @@ const storeScenario = (
         Object.keys(settings.scenarios).filter((name) => [target, replaced].includes(normalizeProfileName(name)));
     const gated = runGated(
         (settings) => ({ names: affected(settings) }),
-        (settings, subjects): ScenarioSaveResult => {
+        (settings, subjects): ScenarioStoreResult => {
             const revision = definitionsRevision(settings);
             if (revision === null) return refusal('revision-unreadable');
             const stored = settings.scenarios;
@@ -256,7 +272,7 @@ const storeScenario = (
                 return failure([{ path: '', message: NOT_SAVED }]);
             }
             log().info(`Scenario saved: "${profileNameForLog(scenario.name)}"`, null);
-            return { ok: true, name: scenario.name };
+            return { ok: true, name: scenario.name, scenario };
         },
     );
     return gated.ok ? gated.value : refusal(gated.reason);
@@ -265,7 +281,7 @@ const storeScenario = (
 const saveScenario = (
     doc: unknown,
     { overwrite = true, expectedDefinitionRevision }: { overwrite?: boolean; expectedDefinitionRevision?: number } = {},
-): ScenarioSaveResult => storeScenario(doc, { overwrite, expectedDefinitionRevision });
+): ScenarioSaveResult => withoutDocument(storeScenario(doc, { overwrite, expectedDefinitionRevision }));
 
 /**
  * Rename a stored scenario and every assignment of it. The new name must be
@@ -279,9 +295,11 @@ const renameScenario = (
     const existing = getScenario(oldName);
     if (!existing) return failure([{ path: 'name', message: `No scenario named "${profileNameForLog(oldName)}"` }]);
     const sameName = normalizeProfileName(oldName) === normalizeProfileName(newName);
-    return storeScenario(
-        { ...existing, name: newName },
-        { overwrite: sameName, rename: existing.name, expectedDefinitionRevision },
+    return withoutDocument(
+        storeScenario(
+            { ...existing, name: newName },
+            { overwrite: sameName, rename: existing.name, expectedDefinitionRevision },
+        ),
     );
 };
 
@@ -340,9 +358,63 @@ const deleteScenario = (
     return gated.ok ? gated.value : { ok: false, reason: gated.reason };
 };
 
+/** Why a photo pool change was not made: the gate's reasons, `not-found`, `exists` (a rename onto a name in use), `invalid`, `not-saved`. */
+type PhotoPoolChange =
+    | { ok: true }
+    | {
+          ok: false;
+          reason: 'busy' | 'unresolved-work' | 'state-unreadable' | 'not-found' | 'exists' | 'invalid' | 'not-saved';
+      };
+
+/** The stored scenarios (their names as stored) any phase of which draws from the pool `name`. */
+const scenariosUsingPool = (settings: ConfigV2, name: string): string[] => {
+    const defaults = globalChallengeValues(settings);
+    return Object.entries(settings.scenarios).flatMap(([stored, raw]) => {
+        const checked = validateStored(raw, defaults);
+        return checked.ok && poolNamesOf(checked.scenario).includes(name) ? [stored] : [];
+    });
+};
+
+/**
+ * Deletes a saved photo pool (`rename` names the pool it is renamed to: the photos move to that name instead). A pool a
+ * stored scenario draws from goes through the same gate as a change of an assignment: refused (nothing written) while a plan
+ * that uses such a scenario has unresolved work. The scenarios themselves are never rewritten: one that names a pool the
+ * account no longer has is unbound, and its photo-pool phases wait (and `only` ones block) until the name is bound again.
+ */
+const changePhotoPool = (name: unknown, rename: string | null): PhotoPoolChange => {
+    if (!isPoolName(name) || (rename !== null && !isPoolName(rename))) return { ok: false, reason: 'invalid' };
+    const gated = runGated(
+        (settings) => ({ names: scenariosUsingPool(settings, name) }),
+        (settings): PhotoPoolChange => {
+            const pools = { ...settings.photoPools };
+            if (!Object.hasOwn(pools, name)) return { ok: false, reason: 'not-found' };
+            if (rename !== null && Object.hasOwn(pools, rename)) return { ok: false, reason: 'exists' };
+            if (rename !== null) pools[rename] = pools[name];
+            delete pools[name];
+            settings.photoPools = pools;
+            return saveSettings(settings) ? { ok: true } : { ok: false, reason: 'not-saved' };
+        },
+    );
+    return gated.ok ? gated.value : { ok: false, reason: gated.reason };
+};
+
+const deletePhotoPool = (name: unknown): PhotoPoolChange => changePhotoPool(name, null);
+
+const renamePhotoPool = (from: unknown, to: unknown): PhotoPoolChange =>
+    isPoolName(to) ? changePhotoPool(from, to) : { ok: false, reason: 'invalid' };
+
 /** The phase settings worth pointing out in one phase's keys (FLAGGED_PHASE_SETTINGS). */
 const flaggedIn = (phase: string, keys: string[]) =>
     FLAGGED_PHASE_SETTINGS.filter((key) => keys.includes(key)).map((key) => ({ phase, key }));
+
+/** The names of the photo pools a scenario's phases draw from, each once, in phase order. A document holds names, never photo ids. */
+const poolNamesOf = (scenario: ScenarioDocument): string[] => [
+    ...new Set(Object.values(scenario.phases).flatMap((phase) => (phase.photoPool ? [phase.photoPool.name] : []))),
+];
+
+/** The pools a scenario names that the account has not saved. */
+const unboundPoolsOf = (settings: ConfigV2, scenario: ScenarioDocument): string[] =>
+    poolNamesOf(scenario).filter((name) => !Object.hasOwn(settings.photoPools ?? {}, name));
 
 /**
  * What a scenario will do, for the import confirmation: its phases, every
@@ -373,6 +445,7 @@ const describeScenario = (scenario: ScenarioDocument) => {
         phases,
         spending,
         flagged,
+        pools: poolNamesOf(scenario),
         limits: scenario.limits ?? {},
     };
 };
@@ -406,6 +479,7 @@ const previewScenarioImport = (text: unknown): ScenarioImportPreview => {
         scenario: result.scenario,
         preview: describeScenario(result.scenario),
         exists: getScenario(result.scenario.name) !== null,
+        unboundPools: unboundPoolsOf(settings, result.scenario),
     };
 };
 
@@ -418,10 +492,13 @@ const importScenario = (
         overwrite = false,
         expectedDefinitionRevision,
     }: { overwrite?: boolean; expectedDefinitionRevision?: number } = {},
-): ScenarioSaveResult => {
+): ScenarioImportResult => {
     const parsed = parseScenarioJson(text);
     if (!parsed.ok) return failure(parsed.issues);
-    return storeScenario(renameV1ScenarioDocument(parsed.value), { overwrite, expectedDefinitionRevision });
+    const saved = storeScenario(renameV1ScenarioDocument(parsed.value), { overwrite, expectedDefinitionRevision });
+    if (!saved.ok) return saved;
+    // The stored document: its pool names are what this account still has to bind.
+    return { ok: true, name: saved.name, unboundPools: unboundPoolsOf(loadSettings(), saved.scenario) };
 };
 
 /**
@@ -466,5 +543,7 @@ export {
     importScenario,
     exportScenario,
     exportScenarioWithNotes,
+    deletePhotoPool,
+    renamePhotoPool,
 };
 export type { ScenarioRefusal };

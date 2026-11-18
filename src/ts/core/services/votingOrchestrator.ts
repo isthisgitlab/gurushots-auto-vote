@@ -63,7 +63,7 @@ import * as cancellation from '../voting/cancellation';
 import { beginVotingPass, isVotingPassRunning } from '../voting/passActivity';
 import { failureText } from '../format/logSafe';
 import { errorKind, errorMessage } from '../errorMessage';
-import { consumeChosenPhotos, scenarioSubjectAvailable, scenarioSubjectReason } from '../settings';
+import { consumeChosenPhotos, reconcilePhotoPool, scenarioSubjectAvailable, scenarioSubjectReason } from '../settings';
 import { isMarkedChallenge } from '../challengeMarks';
 import { getEntries } from './autoFill/challengeState';
 import { buildFillDeps, cancelPass } from './votingOrchestrator/context';
@@ -200,10 +200,11 @@ const processChallenge = async (
     // Manual Only skip on purpose, so a Manual Only challenge's external
     // entries are consumed too.
     try {
-        consumeChosenPhotos(
-            challenge.id,
-            getEntries(challenge).map((entry) => String(entry?.id)),
-        );
+        const enteredIds = getEntries(challenge).map((entry) => String(entry?.id));
+        consumeChosenPhotos(challenge.id, enteredIds);
+        // The same read settles a scenario phase's photo pool: a photo that went out unanswered and shows as entered
+        // landed (consumed), one that does not show did not (released). Before the scenario's own step, never inside it.
+        reconcilePhotoPool(challenge.id, enteredIds);
     } catch (error) {
         logger
             .withCategory('voting')

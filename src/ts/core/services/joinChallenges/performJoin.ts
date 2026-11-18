@@ -176,7 +176,9 @@ const noPhotoOutcome = (reason: JoinPick['reason'], owedClaim: Claim | null): Jo
             ? pendingOutcome(owedClaim, 0)
             : { status: 'charged-pending-submit', charged: 0, reason: 'no-photo' };
     }
-    return { status: reason === 'no-chosen' ? 'skipped-no-chosen' : 'skipped-no-photo', charged: 0 };
+    // Nothing chosen could be entered (Submit Only, or a photo pool with nothing left): no photo was picked on purpose.
+    const onPurpose = reason === 'no-chosen' || reason === 'pool-unbound' || reason === 'pool-exhausted';
+    return { status: onPurpose ? 'skipped-no-chosen' : 'skipped-no-photo', charged: 0 };
 };
 
 /**

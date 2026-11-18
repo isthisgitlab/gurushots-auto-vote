@@ -189,10 +189,25 @@ export const scenarioCapability = scenarioCapabilities.scenarioCapability;
 // titles with the same cap mergeTitlePins accepts.
 export const getTitlePins = titlePins.getTitlePins;
 export const mergeTitlePins = titlePins.mergeTitlePins;
-// The photo a challenge's Boost and Turbo are pinned to (IPC: get-entry-pins / set-entry-pin).
-export const getEntryPins = entryPins.getEntryPins;
+// The photo a challenge's Boost and Turbo are pinned to. `getEntryPins` is what is in force for the challenge now (its
+// scenario phase's runtime pin, then the phase's pin, then the saved one: what the Boost and Turbo picks, the status and the
+// scenario facts read); `getStoredEntryPins` is what the user saved, which only `setEntryPin` writes (IPC: get-entry-pins /
+// set-entry-pin).
+export const getEntryPins = challengeOverrides.getEffectiveEntryPins;
+export const getStoredEntryPins = entryPins.getEntryPins;
 export const setEntryPin = entryPins.setEntryPin;
 export const isPinnableImageId = entryPins.isPinnableImageId;
+// The account's named photo pools, which a scenario phase draws photos from; what a phase has given out of one is in the
+// scenario ledger (getChosenPoolView). A delete or a rename of a pool a stored scenario uses goes through the lifecycle gate.
+export const getPhotoPools = entryPins.getPhotoPools;
+export const setPhotoPool = entryPins.setPhotoPool;
+export const deletePhotoPool = scenarios.deletePhotoPool;
+export const renamePhotoPool = scenarios.renamePhotoPool;
+export const getChosenPoolView = challengeOverrides.getChosenPoolView;
+export const getPoolViewFor = challengeOverrides.getPoolViewFor;
+export const recordPhotoPoolEvents = challengeOverrides.recordPhotoPoolEvents;
+export const reconcilePhotoPool = challengeOverrides.reconcilePhotoPool;
+export type PhotoPoolView = challengeOverrides.PhotoPoolView;
 // Cleanup functions
 export const cleanupStaleChallengeSetting = staleChallengeCleanup.cleanupStaleChallengeSetting;
 // What the last complete post-close pass found in the completed listing (null: forget it), for cleanup to go by.

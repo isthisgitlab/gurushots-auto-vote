@@ -224,7 +224,7 @@ describe('import-scenario', () => {
     test('with --yes it imports', async () => {
         h['get-scenarios'].mockResolvedValue(invalid({ success: true, scenarios: {}, revision: 4 }));
         h['preview-scenario-import'].mockResolvedValue(preview());
-        h['import-scenario'].mockResolvedValue({ success: true, name: 'Plan' });
+        h['import-scenario'].mockResolvedValue({ success: true, name: 'Plan', unboundPools: [] });
         await expect(cmd.importScenarioCmd('plan.json', { yes: true, overwrite: true })).resolves.toBe(0);
         expect(h['import-scenario']).toHaveBeenCalledWith(null, '{"name":"Plan"}', {
             overwrite: true,
@@ -235,7 +235,7 @@ describe('import-scenario', () => {
 
     test('an overwrite states the revision of the scenarios it read; a plain import reads nothing', async () => {
         h['preview-scenario-import'].mockResolvedValue(preview());
-        h['import-scenario'].mockResolvedValue({ success: true, name: 'Plan' });
+        h['import-scenario'].mockResolvedValue({ success: true, name: 'Plan', unboundPools: [] });
         h['get-scenarios'].mockClear();
         await cmd.importScenarioCmd('plan.json', { yes: true });
         expect(h['get-scenarios']).not.toHaveBeenCalled();

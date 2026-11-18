@@ -16,6 +16,7 @@ import { isGuruPicked } from '../../voting/currencyAuto';
 import { isKeyUnlockedBoost } from '../../voting/boostWindow';
 import { isKnownTurboMode } from '../../voting/turboMode';
 import { claimChallengeReward, claimMissionReward } from '../autoClaim';
+import { collectPoolEvents } from '../entryTimes';
 import { evaluateExpression } from '../../scenarios/expressions';
 import type {
     ActedChallenge,
@@ -26,6 +27,7 @@ import type {
     ContextOf,
     NotDoneOutcome,
     PreJoinContext,
+    RunnerContext,
     ScenarioAction,
     SpendAction,
     SwapPhoto,
@@ -116,6 +118,8 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
             if (filled.reason === 'data-incomplete') return deferred('challenge data cannot be read');
             if (filled.reason === 'no-eligible') return skipped('no eligible photo to enter');
             if (filled.reason === 'no-chosen') return skipped('no chosen photo can be entered');
+            // The phase's photo pool has nothing to give: its reason as the code says it (never another photo instead).
+            if (filled.reason === 'pool-unbound' || filled.reason === 'pool-exhausted') return skipped(filled.reason);
             if (!filled.ok) return failed(`no photo was entered (${filled.reason})`);
             enteredId = String(filled.imageId);
         } else {
@@ -240,6 +244,21 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
         member.turbo = { ...member.turbo, state: 'USED' };
         return done();
     },
+
+    // A pin of this phase entry, written to the subject's progress and never to the saved pins. With no entry to pin the
+    // step waits (a skipped selection of the other actions would pass the step over for good).
+    setPin: async (action, ctx, state) => {
+        const picked = await pickTarget(action.entry, ctx, state, {
+            none: 'no entry matches the pin target',
+            what: 'pin',
+        });
+        if ('outcome' in picked) {
+            return picked.outcome.status === 'skipped' ? deferred(picked.outcome.message) : picked.outcome;
+        }
+        return done({ pin: { power: action.power, id: String(picked.entry.id) } });
+    },
+
+    clearPin: async (action) => done({ pin: { power: action.power, id: null } }),
 
     unlockBoost: async (action, ctx, state) => {
         const blocked = await spendAllowed('unlockBoost', ctx, state);
@@ -424,4 +443,22 @@ const settleUnclearSpend = async (
     return unclearHalted(spend, from);
 };
 
-export { ACTIONS, settleUnclearSpend };
+/**
+ * What a step's submits and swaps did to the photos of the phase's pool, as the effects its reducer applies: only photos the
+ * pool lists. The step runs with the progress write held back (collectPoolEvents), so the runner's own write is not refused
+ * as changed behind it. Both outcomes carry them: a submit that got no answer ends the step as a failure with its photo reserved.
+ */
+const withPoolReport = async (
+    ctx: RunnerContext,
+    state: ScenarioState,
+    run: () => Promise<ActionOutcome>,
+): Promise<ActionOutcome> => {
+    const { result, events } = await collectPoolEvents(ctx.challengeId, run);
+    const pool = ctx.scenario.phases[state.phase]?.photoPool;
+    const listed = pool ? (settings.getPhotoPools()[pool.name] ?? []) : [];
+    const consume = events.consume.filter((id) => listed.includes(id));
+    const reserve = events.reserve.filter((id) => listed.includes(id));
+    return consume.length > 0 || reserve.length > 0 ? { ...result, pool: { consume, reserve } } : result;
+};
+
+export { ACTIONS, settleUnclearSpend, withPoolReport };

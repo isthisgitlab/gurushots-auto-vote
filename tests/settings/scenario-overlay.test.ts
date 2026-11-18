@@ -33,6 +33,7 @@ jest.mock('../../src/ts/core/logger', () => {
         isSourceCode: jest.fn(() => true),
         getAppName: jest.fn(() => 'gurushots-auto-vote-dev'),
         withCategory: jest.fn(() => category),
+        challengeTag: jest.fn((id: string | number) => `[${id}]`),
     };
 });
 
@@ -148,6 +149,66 @@ describe('scenario phase-settings overlay', () => {
         mockScenarioStateLedger.set(7, initialState('Plan', 'buildup', 1));
         expect(settings.getEffectiveSetting('exposure', '7')).toBe(10);
         await mockScenarioStateLedger.remove(7);
+    });
+});
+
+describe('a scenario phase with a photo pool', () => {
+    let store: MemoryStore;
+    const pool = {
+        name: 'Plan',
+        version: 1,
+        start: 'feed',
+        phases: { feed: { photoPool: { name: 'Wall', only: true } }, done: {} },
+    };
+
+    beforeEach(() => {
+        store = installHeadlessStore();
+        settings.rememberChallengeTitles([{ id: 7, title: 'Big show', type: 'exhibition' }]);
+        expect(settings.saveScenario(pool)).toMatchObject({ ok: true });
+        settings.setChallengeOverride('scenario', '7', 'Plan');
+        settings.setPhotoPool('Wall', ['p1', 'p2']);
+        scenarioStateLedger.set(7, initialState('Plan', 'feed', 1000));
+    });
+
+    afterEach(() => {
+        removeHeadlessStore();
+        settings.rememberChallengeTitles([]);
+    });
+
+    test('the pool is above the challenge’s own Chosen Photos, which stay stored and untouched', () => {
+        settings.setChallengeOverride('chosenPhotos', '7', ['own1']);
+        settings.setChallengeOverride('chosenPhotosInOrder', '7', true);
+        expect(settings.getEffectiveSetting('chosenPhotos', '7')).toEqual(['p1', 'p2']);
+        expect(settings.getEffectiveSetting('chosenPhotosOnly', '7')).toBe(true);
+        expect(settings.getEffectiveSetting('chosenPhotosInOrder', '7')).toBe(false);
+        expect(settings.getChallengeOverrides('7')).toMatchObject({
+            chosenPhotos: ['own1'],
+            chosenPhotosInOrder: true,
+        });
+        scenarioStateLedger.set(7, initialState('Plan', 'done', 1000));
+        expect(settings.getEffectiveSetting('chosenPhotos', '7')).toEqual(['own1']);
+    });
+
+    test('the challenge’s own list is consumed as it always was, whatever the pool says', () => {
+        settings.setChallengeOverride('chosenPhotos', '7', ['own1', 'own2']);
+        expect(settings.consumeChosenPhotos('7', ['own1'])).toBe(true);
+        expect(settings.getChallengeOverride('chosenPhotos', '7')).toEqual(['own2']);
+        expect(settings.getEffectiveSetting('chosenPhotos', '7')).toEqual(['p1', 'p2']);
+    });
+
+    test('a pool phase never reads the progress of another phase', () => {
+        scenarioStateLedger.set(7, {
+            ...initialState('Plan', 'feed', 1000),
+            poolProgress: { done: { consumed: ['p1', 'p2'], reserved: [] } },
+        });
+        expect(settings.getEffectiveSetting('chosenPhotos', '7')).toEqual(['p1', 'p2']);
+    });
+
+    test('the pool is the account’s: saving it again changes what the phase offers, never what it has given out', () => {
+        settings.recordPhotoPoolEvents(7, { consume: ['p1'], reserve: [] });
+        settings.setPhotoPool('Wall', ['p3', 'p2', 'p1']);
+        expect(settings.getEffectiveSetting('chosenPhotos', '7')).toEqual(['p3', 'p2']);
+        expect(store.keys.get('gs_scenario_state')).toContain('"consumed":["p1"]');
     });
 });
 

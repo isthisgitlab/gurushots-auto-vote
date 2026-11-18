@@ -11,7 +11,7 @@ import type * as LoggerModule from '../logger';
 import type * as SettingsModule from '../settings';
 import type { Challenge, ChallengeMember, MemberRanking, RankingEntry } from './gurushots';
 import type { ChosenPick, PickerPhoto, SemanticScoreMap } from './photoPicker';
-import type { EntryAgeLedger } from './stores';
+import type { EntryAgeLedger, PhotoPoolBlock } from './stores';
 import type {
     getEligiblePhotos as GetEligiblePhotos,
     getEligiblePhotosWalk as GetEligiblePhotosWalk,
@@ -32,7 +32,7 @@ export type FillLogger = Pick<typeof LoggerModule, 'withCategory' | 'challengeTa
 
 /** The settings facade surface the fill paths read. */
 export type FillSettings = Pick<typeof SettingsModule, 'getEffectiveSetting' | 'getEffectiveTagSetting'> &
-    Partial<Pick<typeof SettingsModule, 'getEffectiveIgnoreTitleWords' | 'getSetting'>>;
+    Partial<Pick<typeof SettingsModule, 'getEffectiveIgnoreTitleWords' | 'getSetting' | 'getChosenPoolView'>>;
 
 /** The endpoints and seams the candidate fetch and ranking read. */
 export interface RankDeps {
@@ -137,8 +137,11 @@ export interface FetchErrorResult {
 export type FillAttemptResult =
     | FetchErrorResult
     | { status: 'probe-stand-down' }
-    /** Submit Only Chosen Photos is on and no chosen photo can be submitted: nothing was picked on purpose. */
-    | { status: 'no-chosen' }
+    /**
+     * Submit Only Chosen Photos is on and no chosen photo can be submitted: nothing was picked on purpose. `reason`: the
+     * phase's photo pool has nothing to give (not saved on this account, or all given out).
+     */
+    | { status: 'no-chosen'; reason?: PhotoPoolBlock }
     | { status: 'no-pick'; detail: string | null }
     | { status: 'gone' }
     /** The pre-submit re-read cannot be trusted (a prune-unsafe read dropped elements): no submit on it. */

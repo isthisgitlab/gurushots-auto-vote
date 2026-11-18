@@ -51,7 +51,7 @@ const thinRows = () =>
         ['get-title-rules', () => settings.getTitleRules, null, 'getting title rules'],
         ['set-title-rules', () => settings.setTitleRules, false, 'setting title rules'],
         ['get-title-profile', () => settings.getTitleProfile, null, 'getting title profile'],
-        ['get-entry-pins', () => settings.getEntryPins, null, 'getting entry pins'],
+        ['get-entry-pins', () => settings.getStoredEntryPins, null, 'getting entry pins'],
         ['get-challenge-overrides', () => settings.getChallengeOverrides, null, 'getting challenge overrides'],
         [
             'replace-challenge-overrides',

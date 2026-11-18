@@ -220,6 +220,42 @@ describe('settings facade — scenarios', () => {
             ]);
         });
 
+        describe('photo pools', () => {
+            const pooled = (...names: string[]) => ({
+                ...simple(),
+                phases: {
+                    main: {},
+                    ...Object.fromEntries(names.map((name, at) => [`feed${at}`, { photoPool: { name, only: true } }])),
+                },
+            });
+
+            test('a document names its pools once each; nothing of the account’s photos is in an export', () => {
+                settings.setPhotoPool('Wall', ['secretPhotoId1', 'secretPhotoId2']);
+                settings.saveScenario(pooled('Wall', 'Wall', 'Fence'));
+                const exported = settings.exportScenarioWithNotes('Plan');
+                expect(exported?.json).toContain('"name": "Wall"');
+                expect(exported?.json).not.toContain('secretPhotoId');
+                expect(settings.describeScenario(settings.getScenario('Plan')!).pools).toEqual(['Wall', 'Fence']);
+            });
+
+            test('the preview and the result tell which pools this account lacks, and it is not an error', () => {
+                settings.setPhotoPool('Wall', ['a']);
+                const preview = settings.previewScenarioImport(json(pooled('Wall', 'Fence'))) as PreviewAccepted;
+                expect(preview.unboundPools).toEqual(['Fence']);
+                expect(settings.importScenario(json(pooled('Wall', 'Fence')))).toEqual({
+                    ok: true,
+                    name: 'Plan',
+                    unboundPools: ['Fence'],
+                });
+                expect(Object.keys(settings.getScenarios())).toEqual(['Plan']);
+            });
+
+            test('a scenario with no pool has nothing to bind', () => {
+                expect((settings.previewScenarioImport(json(simple())) as PreviewAccepted).unboundPools).toEqual([]);
+                expect(settings.describeScenario(simple() as never).pools).toEqual([]);
+            });
+        });
+
         test('preview of a document without a description', () => {
             expect((settings.previewScenarioImport(json(simple())) as PreviewAccepted).preview.description).toBe('');
         });
@@ -234,7 +270,7 @@ describe('settings facade — scenarios', () => {
         });
 
         test('import stores; a name clash needs overwrite', () => {
-            expect(settings.importScenario(json(simple()))).toEqual({ ok: true, name: 'Plan' });
+            expect(settings.importScenario(json(simple()))).toEqual({ ok: true, name: 'Plan', unboundPools: [] });
             expect(settings.importScenario(json(simple()))).toEqual({
                 ok: false,
                 issues: [expect.objectContaining({ path: 'name' })],

@@ -9,6 +9,7 @@ import { finalizePick } from '../../photoPicker';
 import type { Challenge } from '../../../types/gurushots';
 import type { PickerPhoto } from '../../../types/photoPicker';
 import type { FetchErrorResult, RankDeps } from '../../../types/autoFill';
+import { logPoolBlockOnce } from '../chosenPhotos';
 import { addMissedChosen, planChosen } from './attempt';
 import { loadFillCandidates, scoreFillCandidates } from './scoring';
 import { verifyFillPick } from './verify';
@@ -61,6 +62,8 @@ const rankCandidatesForChallenge = async (
     } = opts;
     const plan = planChosen({ label: 'swap', challenge, token, deps, ignoreOnly: !enforceChosenOnly });
     const { enforceOnly } = plan;
+    // A photo pool with nothing to give is said once per challenge, as the fill paths say it.
+    if (plan.blocked !== null) logPoolBlockOnce(deps.logger, challenge, 'swap', plan.blocked, plan.poolName);
     const { inOrder } = plan.settings;
     const unentered = plan.unentered.filter((id) => !excludeIds.has(id));
     const chosen = plan.chosen && { ...plan.chosen, excludeIds };

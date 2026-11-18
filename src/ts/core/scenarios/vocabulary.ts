@@ -9,6 +9,8 @@
  * settings/limits.ts.
  */
 
+import { CHOSEN_PHOTO_ID_RE } from '../settings/limits';
+
 const COMPARISON_OPS = ['<', '<=', '=', '!=', '>=', '>'] as const;
 
 const REPEAT_MODES = ['always', 'once', 'oncePerPhase', 'oncePerDay'] as const;
@@ -192,6 +194,8 @@ const STAGE_ACTIONS = {
         'setSetting',
         'clearSetting',
         'useProfile',
+        'setPin',
+        'clearPin',
         'pauseScenario',
         'handoffScenario',
     ],
@@ -241,7 +245,33 @@ const SCENARIO_CAPS = {
     noticeLength: 120,
     descriptionLength: 500,
     importBytes: 256 * 1024,
+    /** Named photo pools an account holds (config `photoPools`). */
+    photoPools: 20,
+    /** Photo ids one pool holds. */
+    poolPhotos: 100,
+    /** Photo ids one phase's `poolProgress` keeps as consumed; the record never forgets one, so a pool cannot replay. */
+    poolConsumed: 500,
 };
+
+/** Whether a value is a photo id a pin or a pool may name (the shape a Chosen Photos list holds). */
+const isPhotoId = (value: unknown): value is string => typeof value === 'string' && CHOSEN_PHOTO_ID_RE.test(value);
+
+/** Whether a value is a photo pool's name: plain text, trimmed, 1 to `nameLength` characters, no name an object already has. */
+const isPoolName = (value: unknown): value is string =>
+    typeof value === 'string' &&
+    value === value.trim() &&
+    value.length >= 1 &&
+    value.length <= SCENARIO_CAPS.nameLength &&
+    /^\P{Cc}+$/u.test(value) &&
+    !(value in Object.prototype);
+
+/** Whether a value is what a pool holds: 1 to `poolPhotos` distinct photo ids, in order. */
+const isPoolIds = (value: unknown): value is string[] =>
+    Array.isArray(value) &&
+    value.length >= 1 &&
+    value.length <= SCENARIO_CAPS.poolPhotos &&
+    value.every(isPhotoId) &&
+    new Set(value).size === value.length;
 
 /**
  * Human-readable reference, one line per piece: `[kind, type, fields]`.
@@ -388,6 +418,16 @@ const VOCABULARY_REFERENCE = [
     ['action', 'clearSetting', 'key: setting name — undoes a setSetting of this phase'],
     [
         'action',
+        'setPin',
+        `power: ${PINNED_POWERS.join('|')}, entry: selector — pins that power to the entry for this phase only; the saved pins are never written (no entry yet: waits)`,
+    ],
+    [
+        'action',
+        'clearPin',
+        `power: ${PINNED_POWERS.join('|')} — no pin for that power for this phase, whatever the phase or the saved pin say`,
+    ],
+    [
+        'action',
         'useProfile',
         "name: saved profile name | null — uses that profile for this phase instead of the phase's own (null: none); a challenge scenario only",
     ],
@@ -410,6 +450,16 @@ const VOCABULARY_REFERENCE = [
         'scenario',
         'limits',
         'swaps?, keys?, fills?, coins?: a cap on what the scenario spends in all (coins: what its joins spend)',
+    ],
+    [
+        'phase',
+        'pins',
+        `boost?, turbo?: photo id | null — while the challenge is in this phase, the photo that power is pinned to (null: no pin); the saved pins are never written`,
+    ],
+    [
+        'phase',
+        'photoPool',
+        "name: pool name, only?: boolean, inOrder?: boolean — the photos this phase draws from: a named pool saved on this account (never part of an export); each photo is used once per phase; replaces the phase's chosenPhotos settings",
     ],
     ['rule', 'repeat', `${REPEAT_MODES.join('|')} (default always = every pass the conditions hold)`],
     ['rule', 'op', COMPARISON_OPS.join(' ')],
@@ -466,6 +516,9 @@ const isOneOf = <T extends string>(list: readonly T[], value: unknown): value is
 export {
     actionMemory,
     isOneOf,
+    isPhotoId,
+    isPoolName,
+    isPoolIds,
     COMPARISON_OPS,
     REPEAT_MODES,
     RANGE_TIME_CONDITIONS,

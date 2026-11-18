@@ -121,6 +121,11 @@ interface ConfigDocument<App, Rule> {
     rules: Rule[];
     /** Challenge id to what is stored for it. */
     challenges: Record<string, ChallengeRecordV2>;
+    /**
+     * Named photo pools of this account: pool name to its photo ids, in order (a scenario phase's `photoPool` names one). Never
+     * part of a scenario export. A malformed pool is dropped by a load.
+     */
+    photoPools?: Record<string, string[]>;
     /** The scenario selected for the installation and its owner; absent: none. A malformed one is dropped by a load. */
     installationScenario?: InstallationScenarioV2;
     /**

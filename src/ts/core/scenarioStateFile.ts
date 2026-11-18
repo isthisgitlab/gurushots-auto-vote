@@ -9,6 +9,7 @@ import { platform } from './platform/port';
 import { isPlainObject } from './plainObject';
 import { acquireWithin } from './lockWait';
 import { throughStore } from './settings/storage';
+import { SCENARIO_CAPS, isPhotoId } from './scenarios/vocabulary';
 
 /** A cross-process lock, as joinStateStore's acquireUnlockLock gives one. */
 type StateLock = { ok: boolean; release: () => void; unavailable?: true; held?: () => boolean };
@@ -135,6 +136,30 @@ const isPhasePatch = (value: unknown): boolean =>
 const isPhaseProfile = (value: unknown): boolean =>
     value === null || (typeof value === 'string' && value !== '' && value.length <= PROFILE_NAME_MAX);
 
+const isPhasePins = (value: unknown): boolean =>
+    isPlainObject(value) &&
+    Object.keys(value).every((key) => key === 'boost' || key === 'turbo') &&
+    Object.values(value).every((pin) => pin === null || isPhotoId(pin));
+
+// A list of photo ids with no id twice, at most `max` long.
+const isPhotoIdList = (value: unknown, max: number): value is string[] =>
+    Array.isArray(value) && value.length <= max && value.every(isPhotoId) && new Set(value).size === value.length;
+
+// What a phase's pool progress may hold (types/stores.ts poolProgress): a photo is consumed or reserved, never both.
+const isPoolProgressOf = (value: unknown): boolean =>
+    isPlainObject(value) &&
+    hasExactKeys(value, ['consumed', 'reserved']) &&
+    isPhotoIdList(value.consumed, SCENARIO_CAPS.poolConsumed) &&
+    isPhotoIdList(value.reserved, SCENARIO_CAPS.poolPhotos) &&
+    !value.reserved.some((id) => (value.consumed as string[]).includes(id));
+
+const isPoolProgress = (value: unknown): boolean =>
+    isPlainObject(value) &&
+    Object.keys(value).length <= SCENARIO_CAPS.phases &&
+    Object.entries(value).every(
+        ([phase, progress]) => phase !== '' && phase.length <= PATCH_MAX_TEXT && isPoolProgressOf(progress),
+    );
+
 const isInFlight = (value: unknown): boolean =>
     isPlainObject(value) &&
     typeof value.ruleId === 'string' &&
@@ -197,6 +222,8 @@ const isRecord = (r: unknown): r is ScenarioState =>
     (r.handoff === undefined || isHandoff(r.handoff)) &&
     (r.phasePatch === undefined || isPhasePatch(r.phasePatch)) &&
     (r.phaseProfile === undefined || isPhaseProfile(r.phaseProfile)) &&
+    (r.phasePins === undefined || isPhasePins(r.phasePins)) &&
+    (r.poolProgress === undefined || isPoolProgress(r.poolProgress)) &&
     (r.lastRequest === undefined || isLastRequest(r.lastRequest));
 
 // What a reset of one challenge leaves in its place: the record is gone, its count of resets is not.

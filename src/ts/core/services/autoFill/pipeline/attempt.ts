@@ -5,7 +5,8 @@
 import { finalizePick } from '../../photoPicker';
 import { refreshChallengeState, swappedOutIds } from '../challengeState';
 import { resolveSemanticScores } from '../candidates';
-import { clearChosenSkip, enteredIds, logChosenSkipOnce, resolveChosenPhotos } from '../chosenPhotos';
+import { clearChosenSkip, enteredIds, logChosenSkipOnce, logPoolBlockOnce, resolveChosenPhotos } from '../chosenPhotos';
+import type { ChosenSettings } from '../chosenPhotos';
 import { refuseRememberedChosen, resolveMissingChosen } from '../chosenWalkMemo';
 import { describeSubmitFailure, logPopularityPicks, logSelectionDetails } from '../fillLogging';
 import type {
@@ -18,6 +19,7 @@ import type {
 } from '../../../types/autoFill';
 import type { Challenge } from '../../../types/gurushots';
 import type { ChosenPick, IgnoreWords, LibraryUsage, PickerPhoto, ScoredCandidate } from '../../../types/photoPicker';
+import type { PhotoPoolBlock } from '../../../types/stores';
 import { errorMessage } from '../../../errorMessage';
 import { loadFillCandidates, scoreFillCandidates } from './scoring';
 import { recordUncertainSubmission, verifyFillPick } from './verify';
@@ -53,10 +55,12 @@ type PlanParams = ChosenParams & { ignoreOnly?: boolean; onlyIds?: readonly stri
  * and the pick options the scorer takes (null when no list is set).
  */
 const planChosen = ({ label, challenge, deps, ignoreOnly = false, onlyIds }: PlanParams) => {
-    const settings = onlyIds
+    const pool = onlyIds ? null : deps.settings?.getChosenPoolView?.(String(challenge.id));
+    const settings: ChosenSettings = onlyIds
         ? { ids: [...onlyIds], only: true, inOrder: true }
         : resolveChosenPhotos({
               read: (key) => deps.settings?.getEffectiveSetting(key, String(challenge.id)),
+              blocked: pool?.block,
           });
     const pinned = onlyIds !== undefined;
     const enforceOnly = !pinned && settings.only && ONLY_LABELS.has(label) && !ignoreOnly;
@@ -65,7 +69,14 @@ const planChosen = ({ label, challenge, deps, ignoreOnly = false, onlyIds }: Pla
         settings.ids.length > 0
             ? { ids: settings.ids, only: pinned || enforceOnly, inOrder: settings.inOrder, excludeIds: entered }
             : null;
-    return { settings, enforceOnly, unentered: settings.ids.filter((id) => !entered.has(id)), chosen };
+    return {
+        settings,
+        enforceOnly,
+        blocked: enforceOnly ? (settings.blocked ?? null) : null,
+        poolName: pool?.name ?? '',
+        unentered: settings.ids.filter((id) => !entered.has(id)),
+        chosen,
+    };
 };
 
 /**
@@ -163,7 +174,7 @@ const finalEligibilityStandsDown = async (
 type PrepareStop =
     | FetchErrorResult
     | { status: 'probe-stand-down' }
-    | { status: 'no-chosen' }
+    | { status: 'no-chosen'; reason?: PhotoPoolBlock }
     | { status: 'no-pick'; detail: string | null };
 
 /** What the preparation leaves for the steps after the pick: the live re-check, the visual check and the submit. */
@@ -233,6 +244,8 @@ const prepareFillPick = async ({
     const {
         settings: chosenSettings,
         enforceOnly,
+        blocked,
+        poolName,
         unentered,
         chosen,
     } = planChosen({
@@ -242,6 +255,11 @@ const prepareFillPick = async ({
         deps,
         onlyIds,
     });
+    // A photo pool with nothing to give, and Submit Only: nothing is picked, and never anything else instead.
+    if (blocked !== null) {
+        if (!scan) logPoolBlockOnce(logger, challenge, label, blocked, poolName);
+        return { incomplete: false, stop: { status: 'no-chosen', reason: blocked } };
+    }
     // Every chosen photo is already an entry here: nothing is left to choose,
     // so there is nothing to fetch either.
     if (enforceOnly && unentered.length === 0) {

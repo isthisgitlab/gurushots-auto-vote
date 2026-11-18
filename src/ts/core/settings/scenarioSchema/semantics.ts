@@ -470,6 +470,42 @@ export const assignRuleIds = (doc: ParsedScenarioDocument): ScenarioDocument => 
     return { ...doc, phases };
 };
 
+/** The Chosen Photos settings a phase's `photoPool` replaces: a phase holds the pool or these, not both. */
+const POOL_REPLACED_KEYS = ['chosenPhotos', 'chosenPhotosOnly', 'chosenPhotosInOrder'] as const;
+
+/**
+ * The issues of what a phase holds for a challenge's photos: pins and a photo pool belong to a challenge scenario, one
+ * photo is never pinned for both powers, and a pool replaces the phase's own Chosen Photos settings.
+ */
+const phaseHoldingIssues = (
+    phase: ParsedScenarioDocument['phases'][string],
+    phasePath: string,
+    scope: ScenarioScope,
+): ScenarioIssue[] => {
+    const issues: ScenarioIssue[] = [];
+    if (scope === 'installation') {
+        for (const field of ['pins', 'photoPool'] as const) {
+            if (phase[field] !== undefined) {
+                issues.push({ path: `${phasePath}.${field}`, message: `${field} is for a challenge scenario` });
+            }
+        }
+        return issues;
+    }
+    if (phase.pins?.boost && phase.pins.boost === phase.pins.turbo) {
+        issues.push({ path: `${phasePath}.pins`, message: 'A photo is pinned for Boost or Turbo, not both' });
+    }
+    if (phase.photoPool) {
+        const held = new Set([...Object.keys(phase.settings ?? {}), ...Object.keys(phase.bindings ?? {})]);
+        for (const key of POOL_REPLACED_KEYS.filter((name) => held.has(name))) {
+            issues.push({
+                path: `${phasePath}.photoPool`,
+                message: `A photo pool replaces ${key}: remove one of them`,
+            });
+        }
+    }
+    return issues;
+};
+
 /**
  * Checks the zod shape cannot express: references, unique rule ids, nesting
  * depth, and the phase settings overlays. `profiles` are the saved profiles a
@@ -513,6 +549,7 @@ export const semanticIssues = (
             const refused = profileIssue(phaseDoc.profile, `${phasePath}.profile`, profiles);
             if (refused) issues.push(refused);
         }
+        issues.push(...phaseHoldingIssues(phaseDoc, phasePath, scope));
         (phaseDoc.rules ?? []).forEach((item, ruleIndex) => {
             const rulePath = `${phasePath}.rules[${ruleIndex}]`;
             if (item.id) {

@@ -34,6 +34,7 @@
 import { INSTALLATION_KEY, ledgerFor as modeLedger } from '../scenarioStateStore';
 import { isPlainObject } from '../plainObject';
 import { storedSettingValue } from '../scenarios/expressions';
+import { withPoolEvents } from '../scenarios/runtime';
 import { challengeValueSetIsValid, globalChallengeValues } from './defaults';
 import { appValueAllowed } from './loadValidation';
 import { findProfileKey, normalizeProfileName, sanitizeProfileValues } from './profileStore';
@@ -45,7 +46,7 @@ import type { ExprValue } from '../scenarios/expressions';
 import type { ValueState } from '../scenarios/valueState';
 import type { ConfigV2 } from '../types/config';
 import type { ChallengeValues } from '../types/settings';
-import type { ScenarioPublication, ScenarioState } from '../types/stores';
+import type { PhotoPoolBlock, ScenarioPublication, ScenarioState } from '../types/stores';
 import type { ScenarioDocument, ScenarioPhase } from './scenarioSchema';
 
 // Mock mode keeps scenario state in memory only (it must never touch the real
@@ -138,6 +139,14 @@ const isBoundPhase = (phase: ScenarioPhase, change?: RuntimeChange): boolean =>
     Object.keys(phase.bindings ?? {}).length > 0 ||
     hasPatch(change) ||
     change?.phaseProfile !== undefined;
+
+/**
+ * Whether a phase is only known to be in force by the progress record: it is read through a publication, or it sets pins or
+ * draws from a photo pool. With such a phase, a record that cannot be read leaves the subject unavailable, never on its
+ * inherited settings, pins or photos.
+ */
+const needsProgress = (phase: ScenarioPhase): boolean =>
+    isBoundPhase(phase) || phase.pins !== undefined || phase.photoPool !== undefined;
 
 /**
  * Canonical JSON text: object keys in order, so equal documents give equal text.
@@ -316,7 +325,7 @@ const subjectLayer = (
     if (!scenario) return { kind: 'none' };
     const { corrupt, state } = ledgerFor(settings).get(challengeId);
     if (corrupt) {
-        return Object.values(scenario.phases).some((phase) => isBoundPhase(phase))
+        return Object.values(scenario.phases).some(needsProgress)
             ? { kind: 'unreadable', reason: 'the saved progress of this challenge cannot be read' }
             : { kind: 'none' };
     }
@@ -701,6 +710,153 @@ const prepareInstallationOverlay = (
     };
 };
 
+// --- photo pools ---------------------------------------------------------------------------------------------------------
+
+/**
+ * A phase's photo pool as the picks read it: the photos still to give out (the pool's order, less what is consumed or
+ * reserved in this phase's progress), the phase's `only` and `inOrder`, and the block when `only` leaves nothing to pick
+ * from. The pool's definition is the account's, and is never changed by what is given out.
+ */
+type PhotoPoolView = {
+    name: string;
+    only: boolean;
+    inOrder: boolean;
+    ids: string[];
+    block: PhotoPoolBlock | null;
+};
+
+/** The pool a phase draws from, as the picks read it against the phase's progress; null when the phase has none. */
+const photoPoolViewOf = (
+    settings: ConfigV2,
+    phase: ScenarioPhase,
+    progress: NonNullable<ScenarioState['poolProgress']>[string] | undefined,
+): PhotoPoolView | null => {
+    const pool = phase.photoPool;
+    if (!pool) return null;
+    const only = pool.only === true;
+    const saved = settings.photoPools ?? {};
+    const listed = Object.hasOwn(saved, pool.name) ? saved[pool.name] : null;
+    const given = new Set([...(progress?.consumed ?? []), ...(progress?.reserved ?? [])]);
+    const ids = (listed ?? []).filter((id) => !given.has(id));
+    let block: PhotoPoolBlock | null = null;
+    if (only && listed === null) block = 'pool-unbound';
+    else if (only && ids.length === 0) block = 'pool-exhausted';
+    return { name: pool.name, only, inOrder: pool.inOrder === true, ids, block };
+};
+
+/** The pool of a phase layer, or null when the phase draws from none. */
+const photoPoolView = (settings: ConfigV2, layer: PhaseLayer): PhotoPoolView | null =>
+    photoPoolViewOf(settings, layer.phase, layer.state.poolProgress?.[layer.phaseName]);
+
+/**
+ * The pool of the phase a subject's progress record is in, for a subject the overlay does not resolve by id (an un-joined
+ * candidate, whose scenario is the one its rules give). Null when the record is not there or not of `scenarioName` (any
+ * casing), or its phase draws from no pool.
+ */
+const poolViewOfRecord = (settings: ConfigV2, challengeId: string, scenarioName: string): PhotoPoolView | null => {
+    if (!hasStoredScenarios(settings)) return null;
+    const { state } = ledgerFor(settings).get(challengeId);
+    const scenario = findStoredScenario(settings, scenarioName);
+    if (!state || !scenario || normalizeProfileName(state.scenario) !== normalizeProfileName(scenario.name))
+        return null;
+    const phase = scenario.phases[state.phase];
+    return phase ? photoPoolViewOf(settings, phase, state.poolProgress?.[state.phase]) : null;
+};
+
+/**
+ * What the pool of a phase gives for one of the Chosen Photos settings it replaces, or null when the phase draws from no
+ * pool, the key is another, or the runtime patch sets the key (the patch is above the phase's own values).
+ */
+const readPhotoPool = (settings: ConfigV2, layer: PhaseLayer, key: string): { value: unknown } | null => {
+    if (key !== 'chosenPhotos' && key !== 'chosenPhotosOnly' && key !== 'chosenPhotosInOrder') return null;
+    if (hasOwn(layer.state.phasePatch ?? {}, key)) return null;
+    const view = photoPoolView(settings, layer);
+    if (!view) return null;
+    if (key === 'chosenPhotos') return { value: view.ids };
+    return { value: key === 'chosenPhotosOnly' ? view.only : view.inOrder };
+};
+
+/**
+ * The scenario and phase a record's pool progress is for, with the photos that pool lists now (none for a pool that is
+ * not saved). Null when the record's scenario is gone or its phase draws from no pool.
+ */
+const poolOf = (settings: ConfigV2, record: ScenarioState): { listed: readonly string[] } | null => {
+    const pool = findStoredScenario(settings, record.scenario)?.phases[record.phase]?.photoPool;
+    if (!pool) return null;
+    const saved = settings.photoPools ?? {};
+    return { listed: Object.hasOwn(saved, pool.name) ? saved[pool.name] : [] };
+};
+
+/**
+ * Records what a submit or a swap did to the photos of the subject's phase pool, in one atomic change of its progress
+ * record: only photos the pool lists are consumed or reserved. Nothing is written when there is nothing to record (no
+ * progress, a phase without a pool, no pool photo among the ids). Not for use inside a scenario step: a write behind the
+ * runner's own is refused as changed, so the step hands the events to its reducer instead.
+ *
+ * @returns whether the record was written
+ */
+const recordPoolEvents = (
+    settings: ConfigV2,
+    challengeId: string,
+    events: { consume: readonly string[]; reserve: readonly string[] },
+): boolean => {
+    // Read first, without the file's lock: most submits are for no pool and write nothing.
+    const { state } = ledgerFor(settings).get(challengeId);
+    if (!state || !poolOf(settings, state)) return false;
+    return ledgerFor(settings).change(challengeId, (current) => {
+        const pool = current ? poolOf(settings, current) : null;
+        if (!current || !pool) return { refuse: 'no-pool' };
+        const relevant = {
+            consume: events.consume.filter((id) => pool.listed.includes(id)),
+            reserve: events.reserve.filter((id) => pool.listed.includes(id)),
+        };
+        return relevant.consume.length + relevant.reserve.length === 0
+            ? { refuse: 'nothing' }
+            : withPoolEvents(current, relevant);
+    }).ok;
+};
+
+/**
+ * What a read of the challenge's entries settles in its pool progress: the reserved photos that are entered landed
+ * (consumed), those that are not did not (released), and any other photo of the pool that is entered is consumed (it went in
+ * some other way). The read must be the challenge's full, fresh entry list: this is the one place a reserve is released.
+ */
+const poolDelta = (
+    settings: ConfigV2,
+    record: ScenarioState,
+    entered: ReadonlySet<string>,
+): { consume: string[]; release: string[] } => {
+    const progress = record.poolProgress?.[record.phase];
+    const reserved = progress?.reserved ?? [];
+    const listed = poolOf(settings, record)?.listed ?? [];
+    return {
+        consume: [...reserved, ...listed].filter((id) => entered.has(id) && !progress?.consumed.includes(id)),
+        release: reserved.filter((id) => !entered.has(id)),
+    };
+};
+
+/**
+ * Settles the subject's pool progress against the entries a fresh read of its challenge shows (see poolDelta). Read first
+ * without the file's lock: most passes have nothing to settle and write nothing. Run before the scenario's step, never
+ * inside it.
+ *
+ * @returns whether the record was written
+ */
+const reconcilePoolProgress = (settings: ConfigV2, challengeId: string, entryIds: readonly string[]): boolean => {
+    const entered = new Set(entryIds);
+    const { state } = ledgerFor(settings).get(challengeId);
+    if (!state) return false;
+    const seen = poolDelta(settings, state, entered);
+    if (seen.consume.length === 0 && seen.release.length === 0) return false;
+    return ledgerFor(settings).change(challengeId, (current) => {
+        if (!current) return { refuse: 'no-progress' };
+        const delta = poolDelta(settings, current, entered);
+        return delta.consume.length === 0 && delta.release.length === 0
+            ? { refuse: 'nothing' }
+            : withPoolEvents(current, delta);
+    }).ok;
+};
+
 /**
  * A key a phase overlay can reach: a per-challenge key other than the assignment itself.
  */
@@ -721,10 +877,15 @@ export {
     prepareInstallationOverlay,
     prepareOverlay,
     overlaySources,
+    photoPoolView,
+    poolViewOfRecord,
+    readPhotoPool,
+    recordPoolEvents,
+    reconcilePoolProgress,
     readInstallationLayer,
     readLayer,
     readOverlay,
     readPublication,
     subjectLayer,
 };
-export type { InstallationLayer, ResolvedOverlay, SubjectLayer };
+export type { InstallationLayer, PhotoPoolView, ResolvedOverlay, SubjectLayer };

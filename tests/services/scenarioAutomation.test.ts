@@ -28,6 +28,9 @@ jest.mock('../../src/ts/core/settings', () => {
         unresolvedScenarioWork: jest.fn(() => false),
         settleHandoff: jest.fn(() => 'finished'),
         getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
+        getPhotoPools: jest.fn(() => ({})),
+        consumeChosenPhotos: jest.fn(),
+        recordPhotoPoolEvents: jest.fn(),
         prepareScenarioSnapshot: jest.fn(() => ({
             ok: true,
             snapshot: { publication: null, readSetting: () => unknown },
@@ -73,6 +76,8 @@ import autoFillModule = require('../../src/ts/core/services/autoFill');
 import type * as scenarioRunnerModule from '../../src/ts/core/services/scenarioRunner';
 import type * as scenarioStateStoreModule from '../../src/ts/core/scenarioStateStore';
 import { createOperationRecord } from '../../src/ts/core/scenarios/runtime';
+import { withEntryTimes } from '../../src/ts/core/services/entryTimes';
+import { createMemoryEntryAgeLedger } from '../../src/ts/core/entryAgeStore';
 import type { Challenge, ChallengeMember, MemberRanking, RankingEntry } from '../../src/ts/core/types/gurushots';
 import type { ScenarioDocument } from '../../src/ts/core/settings/scenarioSchema';
 import type { ScenarioState } from '../../src/ts/core/types/stores';
@@ -1004,6 +1009,140 @@ describe('handoffScenario', () => {
         await run();
         await run();
         expect(settings.requestScenarioHandoff).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('setPin and clearPin', () => {
+    test('setPin writes the picked entry as the runtime pin of its power, and nothing else', async () => {
+        setup(single([{ type: 'setPin', power: 'boost', entry: { by: 'id', id: 'b' } }]));
+        await run();
+        expect(state().phasePins).toEqual({ boost: 'b' });
+        expect(state().lastAction).toMatchObject({ action: 'setPin', outcome: 'done' });
+        expect(state().inFlight).toBeNull();
+        expect(settings.getEntryPins).not.toHaveBeenCalledWith('7', expect.anything());
+    });
+
+    test('a selector with no entry makes it wait, with no error: it is tried again on the next pass', async () => {
+        setup(single([{ type: 'setPin', power: 'turbo', entry: { by: 'id', id: 'gone' } }]));
+        await run();
+        expect(state().phasePins).toBeUndefined();
+        expect(state().lastError).toBeNull();
+        expect(state().inFlight).toBeNull();
+        expect(state().fired).toEqual({});
+        expect(log.warning).toHaveBeenCalledWith(expect.stringContaining('no entry matches the pin target'), null);
+        // The entry shows up: the same rule goes through on the next pass.
+        const later = challenge();
+        later.member.ranking.entries.push({ id: 'gone', votes: 1, rank: 99, member_id: 'm' });
+        await run(later);
+        expect(state().phasePins).toEqual({ turbo: 'gone' });
+    });
+
+    test('a selection the data cannot decide waits too', async () => {
+        entryAges.entryTimes.mockReturnValue({ a: { at: NOW - 900, exact: true }, b: { at: NOW - 100, exact: false } });
+        setup(single([{ type: 'setPin', power: 'boost', entry: { by: 'oldest', time: 'exact' } }]));
+        await run();
+        expect(state().phasePins).toBeUndefined();
+        expect(state().lastError).toBeNull();
+        expect(log.warning).toHaveBeenCalledWith(expect.stringContaining('the pin target cannot be told yet'), null);
+    });
+
+    test('clearPin is an explicit null: no pin for that power whatever the saved one says; a photo goes to one power only', async () => {
+        setup(
+            single([
+                { type: 'setPin', power: 'boost', entry: { by: 'id', id: 'a' } },
+                { type: 'setPin', power: 'turbo', entry: { by: 'id', id: 'a' } },
+                { type: 'clearPin', power: 'boost' },
+            ]),
+        );
+        await run();
+        expect(state().phasePins).toEqual({ turbo: 'a', boost: null });
+    });
+
+    test('leaving the phase drops the runtime pins', async () => {
+        setup(
+            plan({
+                main: {
+                    rules: [
+                        {
+                            id: 'r1',
+                            do: [
+                                { type: 'setPin', power: 'boost', entry: { by: 'id', id: 'a' } },
+                                { type: 'goto', phase: 'next' },
+                            ],
+                        },
+                    ],
+                },
+                next: {},
+            }),
+        );
+        await run();
+        expect(state().phase).toBe('next');
+        expect(state().phasePins).toBeUndefined();
+    });
+});
+
+describe('what a step’s submits did to the phase’s photo pool', () => {
+    const pooled = (action: object) =>
+        plan({ main: { photoPool: { name: 'Wall' }, rules: [{ id: 'r1', do: [action] }] } });
+    const entryAgeLedger = () => invalid<Parameters<typeof withEntryTimes>[1]>(createMemoryEntryAgeLedger());
+    /** A fill whose submit goes through the real wrapper, as every real submit does. */
+    const fillWith = (submit: () => Promise<{ ok: boolean; raw: null | { success: boolean } }>, photoId: string) =>
+        autoFill.submitNewEntryForAction.mockImplementation(async (c) => {
+            const api = withEntryTimes({ submitToChallenge: jest.fn(submit), swapPhoto: jest.fn() }, entryAgeLedger());
+            const sent = await api.submitToChallenge(c.id, [photoId], 'tok');
+            return sent.ok
+                ? { ok: true, imageId: photoId, reason: 'submitted' }
+                : { ok: false, imageId: null, reason: 'submit-failed' };
+        });
+
+    beforeEach(() => settings.getPhotoPools.mockReturnValue({ Wall: ['p1', 'p2'] }));
+
+    test('a photo of the pool that went in is consumed by the step’s own write, and nothing else writes behind it', async () => {
+        fillWith(async () => ({ ok: true, raw: { success: true } }), 'p1');
+        setup(pooled({ type: 'enterPhoto', photo: 'best' }));
+        await run();
+        expect(state().poolProgress).toEqual({ main: { consumed: ['p1'], reserved: [] } });
+        expect(state().lastAction).toMatchObject({ action: 'enterPhoto', outcome: 'done' });
+        expect(settings.recordPhotoPoolEvents).not.toHaveBeenCalled();
+    });
+
+    test('a submit that got no answer reserves its photo, and the step stops as a failure', async () => {
+        fillWith(async () => ({ ok: false, raw: null }), 'p2');
+        setup(pooled({ type: 'enterPhoto', photo: 'best' }));
+        await run();
+        expect(state().poolProgress).toEqual({ main: { consumed: [], reserved: ['p2'] } });
+        expect(state().lastError?.message).toContain('submit-failed');
+        expect(settings.recordPhotoPoolEvents).not.toHaveBeenCalled();
+    });
+
+    test('a photo that is not in the pool is not recorded, and a phase without a pool records nothing', async () => {
+        fillWith(async () => ({ ok: true, raw: { success: true } }), 'elsewhere');
+        setup(pooled({ type: 'enterPhoto', photo: 'best' }));
+        await run();
+        expect(state().poolProgress).toBeUndefined();
+
+        fresh();
+        settings.getPhotoPools.mockClear();
+        fillWith(async () => ({ ok: true, raw: { success: true } }), 'p1');
+        setup(single([{ type: 'enterPhoto', photo: 'best' }]));
+        await run();
+        expect(state().poolProgress).toBeUndefined();
+        expect(settings.getPhotoPools).not.toHaveBeenCalled();
+    });
+
+    test('a pool that is not saved blocks the step with its reason, whatever else the library holds', async () => {
+        settings.getPhotoPools.mockReturnValue({});
+        autoFill.submitNewEntryForAction.mockResolvedValue({ ok: false, imageId: null, reason: 'pool-unbound' });
+        setup(pooled({ type: 'enterPhoto', photo: 'best' }));
+        await run();
+        expect(state().lastError?.message).toContain('enterPhoto: pool-unbound');
+        expect(state().poolProgress).toBeUndefined();
+
+        fresh();
+        autoFill.submitNewEntryForAction.mockResolvedValue({ ok: false, imageId: null, reason: 'pool-exhausted' });
+        setup(pooled({ type: 'enterPhoto', photo: 'best' }));
+        await run();
+        expect(state().lastError?.message).toContain('enterPhoto: pool-exhausted');
     });
 });
 

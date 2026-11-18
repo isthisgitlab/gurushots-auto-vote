@@ -174,6 +174,15 @@ export interface ScenarioPublication {
     generation?: number;
 }
 
+/** Why a photo pool leaves nothing to pick from while its phase demands it (`only`): its name is not saved on this account, or every photo of it is given out. */
+export type PhotoPoolBlock = 'pool-unbound' | 'pool-exhausted';
+
+/** One phase's photo pool progress (see ScenarioState.poolProgress): photo ids, in the order they were given out. */
+interface PoolProgress {
+    consumed: string[];
+    reserved: string[];
+}
+
 /** A challenge's runtime position in its scenario (scenarioStateStore record). */
 export interface ScenarioState {
     scenario: string;
@@ -237,6 +246,19 @@ export interface ScenarioState {
      * that saved profile instead; null, no phase profile. Dropped when the subject leaves the phase.
      */
     phaseProfile?: string | null;
+    /**
+     * The runtime pins, set by `setPin` / `clearPin` for this phase entry: an entry's photo id, or null for no pin for that
+     * power whatever the phase and the saved pin say (a power left out inherits). Above the phase's own pins and the user's
+     * saved pins; never written to the configuration; dropped when the subject leaves the phase.
+     */
+    phasePins?: { boost?: string | null; turbo?: string | null };
+    /**
+     * What each phase's photo pool has given out, by phase name: `consumed` photos (entered, or swapped in) are never offered
+     * again, in this phase or after a re-entry; `reserved` photos went out in a submit or swap that got no answer and wait
+     * for the next read of the challenge to say whether they landed. Kept when the subject leaves the phase; the pool's own
+     * definition is never changed.
+     */
+    poolProgress?: Record<string, PoolProgress>;
     /** The last lifecycle request applied to the subject (unix seconds), for a repeated request to answer the same. */
     lastRequest?: { id: string; result: string; at: number } | null;
     /**

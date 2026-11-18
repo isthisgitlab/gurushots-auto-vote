@@ -255,6 +255,12 @@ const photoSource = z.union([z.literal('best'), z.strictObject({ memory: identif
 
 const settingKey = z.string().min(1).max(SCENARIO_CAPS.nameLength);
 
+const photoId = z.string().refine(vocabulary.isPhotoId, 'Use a photo id: letters, digits, "-" or "_" (max 64)');
+
+const poolName = z.string().refine(vocabulary.isPoolName, 'Name a photo pool (max 60 characters, no line breaks)');
+
+const pinPower = oneOf(vocabulary.PINNED_POWERS);
+
 /** A literal setting value as the configuration stores it: a flag, a number, a text or a list of texts. */
 const settingLiteral = z.union([
     z.boolean(),
@@ -304,6 +310,9 @@ const action = z.discriminatedUnion('type', [
         type: z.literal('useProfile'),
         name: z.string().trim().min(1, 'Name a profile').max(MAX_PROFILE_NAME_LENGTH).nullable(),
     }),
+    // A runtime pin for this phase entry: the entry a selector picks when the action runs. Challenge scenarios only (semantics.ts).
+    z.strictObject({ type: z.literal('setPin'), power: pinPower, entry: selector }),
+    z.strictObject({ type: z.literal('clearPin'), power: pinPower }),
     z.strictObject({ type: z.literal('pauseScenario'), reason: plainText(SCENARIO_CAPS.noticeLength).optional() }),
     // Must be the last action of its rule (semantics.ts).
     z.strictObject({ type: z.literal('handoffScenario'), to: scenarioName.nullable() }),
@@ -337,6 +346,14 @@ const phase = z.strictObject({
     // The name of one saved challenge profile the phase applies below its own settings. Whether it exists is a runtime
     // question: a profile can be saved after the scenario.
     profile: z.string().trim().min(1, 'Name a profile').max(MAX_PROFILE_NAME_LENGTH).optional(),
+    // The photo each power is pinned to while the challenge is in this phase: an image id, or null for no pin whatever
+    // the saved pin says. A power it leaves out keeps the saved pin. Challenge scenarios only (semantics.ts).
+    pins: z.strictObject({ boost: photoId.nullable().optional(), turbo: photoId.nullable().optional() }).optional(),
+    // The named photo pool of this account the phase draws its photos from, in place of the phase's own Chosen Photos
+    // settings (semantics.ts refuses both). Whether the pool exists is a runtime question: pools are the account's.
+    photoPool: z
+        .strictObject({ name: poolName, only: z.boolean().optional(), inOrder: z.boolean().optional() })
+        .optional(),
     rules: z.array(rule).max(SCENARIO_CAPS.rulesPerPhase).optional(),
 });
 

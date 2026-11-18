@@ -13,8 +13,17 @@
 
 import type { ScenarioState, SpendAction } from '../types/stores';
 import { firedRecord } from './evaluate';
+import { SCENARIO_CAPS } from './vocabulary';
 
 type SpendKind = 'swaps' | 'keys' | 'fills';
+
+/**
+ * What a submit or a swap did to the photos of a phase's pool, as the photo ids it concerned: `consume` those that landed
+ * (never offered again), `reserve` those that went out and got no answer (not offered again until a read of the challenge
+ * says whether they landed), `release` the reserved ones that did not land. Photos that are not in the pool are the
+ * caller's to leave out.
+ */
+type PoolEvents = { consume?: readonly string[]; reserve?: readonly string[]; release?: readonly string[] };
 
 /**
  * What an action did: its effects on the scenario state when done, or why not.
@@ -31,6 +40,10 @@ type ActionEffects = {
     patch?: { set: string; value: unknown } | { clear: string };
     /** The runtime phase profile from now on: a saved profile's name, or null for none. */
     profile?: string | null;
+    /** A runtime pin from now on: the photo id a power is pinned to, or null for no pin for it (`clearPin`). */
+    pin?: { power: 'boost' | 'turbo'; id: string | null };
+    /** What the step's submits and swaps did to the phase's photo pool. */
+    pool?: PoolEvents;
     /** The subject is paused (`reason`, for the status line); the rule stops after this step and keeps its progress. */
     pause?: string;
     /** The subject was handed to another scenario: its record is that scenario's now, and nothing more is written to it. */
@@ -55,6 +68,8 @@ type NotDoneOutcome = {
     halt?: true;
     /** `pending`: the rule is stopped from a marker written before the spend, not from a spend that got no answer. */
     origin?: 'pending';
+    /** What the step's submits and swaps did to the phase's photo pool before it stopped (a submit that got no answer reserves). */
+    pool?: PoolEvents;
 };
 
 type ActionOutcome = DoneOutcome | NotDoneOutcome;
@@ -73,6 +88,31 @@ const withNotice = (state: ScenarioState, message: string, at: number, token: st
     const kept = (state.outbox ?? []).filter((item) => at - item.at <= OUTBOX_KEEP_SEC);
     const id = `${at}-${kept.length}-${token}`;
     return { ...state, outbox: [...kept, { id, at, message }].slice(-OUTBOX_LIMIT) };
+};
+
+/**
+ * State with a phase's pool events applied: the photos that landed are consumed once, the unanswered ones reserved (never a
+ * photo already consumed), the released ones no longer reserved. A photo the record has no room to keep as consumed is not
+ * recorded (the caps are in vocabulary SCENARIO_CAPS). The phase is the subject's current one: a step's photos are drawn
+ * in the phase the rule runs in, and a phase change takes effect only when the rule finishes.
+ */
+const withPoolEvents = (state: ScenarioState, events: PoolEvents): ScenarioState => {
+    const before = state.poolProgress?.[state.phase] ?? { consumed: [], reserved: [] };
+    const consumed = [...before.consumed];
+    for (const id of events.consume ?? []) {
+        if (!consumed.includes(id) && consumed.length < SCENARIO_CAPS.poolConsumed) consumed.push(id);
+    }
+    const released = new Set(events.release ?? []);
+    const reserved = [...before.reserved, ...(events.reserve ?? [])]
+        .filter((id, at, all) => all.indexOf(id) === at && !consumed.includes(id) && !released.has(id))
+        .slice(0, SCENARIO_CAPS.poolPhotos);
+    const progress = { ...state.poolProgress };
+    if (consumed.length > 0 || reserved.length > 0) progress[state.phase] = { consumed, reserved };
+    else delete progress[state.phase];
+    const next: ScenarioState = { ...state };
+    if (Object.keys(progress).length > 0) next.poolProgress = progress;
+    else delete next.poolProgress;
+    return next;
 };
 
 /**
@@ -97,8 +137,17 @@ const applyEffects = (before: ScenarioState, effects: ActionEffects, at: number,
         else delete next.phasePatch;
     }
     if (effects.profile !== undefined) next.phaseProfile = effects.profile;
+    if (effects.pin) {
+        // A photo is pinned for one power only: pinning it for one takes the runtime pin of the other on it away (the saved
+        // pins' own rule, voting/entryPins.ts applyPinToRecord). A cleared pin is kept as an explicit null: no pin.
+        const { power, id } = effects.pin;
+        const other = power === 'boost' ? 'turbo' : 'boost';
+        const pins = { ...state.phasePins, [power]: id };
+        if (id !== null && pins[other] === id) delete pins[other];
+        next.phasePins = pins;
+    }
     if (effects.pause !== undefined) next.paused = { at, reason: effects.pause };
-    return next;
+    return effects.pool ? withPoolEvents(next, effects.pool) : next;
 };
 
 /** The step an outcome is for: where in which rule, when, and under what the rule's state was. */
@@ -164,7 +213,7 @@ const stoppedAt = (state: ScenarioState, step: ReducerStep, result: NotDoneOutco
         next.inFlight = { ruleId, actionIndex: index, ...marker };
     }
     if (result.status !== 'deferred') next.lastError = { at, message };
-    return applyEffects(next, { spent: result.spent, coins: result.coins }, at, noticeToken);
+    return applyEffects(next, { spent: result.spent, coins: result.coins, pool: result.pool }, at, noticeToken);
 };
 
 /**
@@ -225,6 +274,7 @@ const finishScenarioRule = (
     const left: ScenarioState = { ...state, phase: gotoPhase, phaseEnteredAt: at };
     delete left.phasePatch;
     delete left.phaseProfile;
+    delete left.phasePins;
     return left;
 };
 
@@ -311,6 +361,7 @@ const createOperationRecord = (): OperationRecord => {
 
 export {
     withNotice,
+    withPoolEvents,
     applyEffects,
     reduceScenarioOutcome,
     finishScenarioRule,
@@ -326,6 +377,7 @@ export type {
     NotDoneOutcome,
     OperationKind,
     OperationRecord,
+    PoolEvents,
     ReducerStep,
     SpendKind,
 };

@@ -214,11 +214,12 @@ describe('import / export', () => {
             scenario,
             preview: invalid({ name: 'Plan' }),
             exists: false,
+            unboundPools: [],
         });
         await expect(handlers['preview-scenario-import'](null, '{}')).resolves.toEqual(
             expect.objectContaining({ success: true, exists: false }),
         );
-        settings.importScenario.mockReturnValue({ ok: true, name: 'Plan' });
+        settings.importScenario.mockReturnValue({ ok: true, name: 'Plan', unboundPools: [] });
         await handlers['import-scenario'](null, '{}');
         expect(settings.importScenario).toHaveBeenLastCalledWith('{}', {
             overwrite: false,

@@ -257,6 +257,7 @@ const finishedRecord = (state: ScenarioState, next: ScenarioDocument | null, gen
     // What a phase of the old scenario patched does not outlive it, and the step that asked for the handoff is over.
     delete base.phasePatch;
     delete base.phaseProfile;
+    delete base.phasePins;
     base.inFlight = null;
     return {
         ...base,

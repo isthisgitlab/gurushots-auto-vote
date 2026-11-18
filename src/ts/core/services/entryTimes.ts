@@ -13,14 +13,57 @@
 
 import * as logger from '../logger';
 import { errorKind } from '../errorMessage';
-import { consumeChosenPhotos } from '../settings';
+import { consumeChosenPhotos, recordPhotoPoolEvents } from '../settings';
 import { isMarkedChallenge } from '../challengeMarks';
 import type { submitToChallenge as SubmitToChallenge } from '../api/submissions';
 import type { swapPhoto as SwapPhoto } from '../api/currency';
 import type { ActiveChallengesResponse, Challenge, RankingEntry } from '../types/gurushots';
 import type { EntryAgeLedger } from '../types/stores';
+import type { PoolEvents } from '../scenarios/runtime';
 
 const nowSeconds = (): number => Math.floor(Date.now() / 1000);
+
+// The photos a scenario step's submits and swaps put in or may have put in, by challenge: while a step runs, what a photo
+// pool is owed is handed to the step's reducer (collectPoolEvents), because a write to the progress record behind the
+// runner's own would be refused as changed. Outside a step it is written at once (recordPhotoPoolEvents).
+type PoolSink = { consume: string[]; reserve: string[] };
+const poolSinks = new Map<string, PoolSink>();
+
+/**
+ * Runs `run`, and answers what its submits and swaps did to photos, for a scenario step to record in its own state.
+ * While it runs, no photo-pool progress of `challengeId` is written elsewhere. Steps of one challenge never overlap.
+ */
+export const collectPoolEvents = async <T>(
+    challengeId: string | number,
+    run: () => Promise<T>,
+): Promise<{ result: T; events: PoolSink }> => {
+    const key = String(challengeId);
+    const sink: PoolSink = { consume: [], reserve: [] };
+    poolSinks.set(key, sink);
+    try {
+        return { result: await run(), events: sink };
+    } finally {
+        poolSinks.delete(key);
+    }
+};
+
+/**
+ * Notes that photos went in (`consume`) or may have (`reserve`: the request got no answer): into the running step's sink, or
+ * into the challenge's pool progress. Bookkeeping, contained like the ledger's: a failure is logged, never raised.
+ */
+const notePoolPhotos = (challengeId: string | number, events: Required<Pick<PoolEvents, 'consume' | 'reserve'>>) => {
+    try {
+        const sink = poolSinks.get(String(challengeId));
+        if (sink) {
+            sink.consume.push(...events.consume);
+            sink.reserve.push(...events.reserve);
+        } else {
+            recordPhotoPoolEvents(challengeId, events);
+        }
+    } catch (error) {
+        logFailure('photo pool progress not recorded', error);
+    }
+};
 
 const entriesOf = (challenge: Challenge): RankingEntry[] =>
     Array.isArray(challenge?.member?.ranking?.entries) ? challenge.member.ranking.entries : [];
@@ -110,20 +153,44 @@ export const withEntryTimes = (
             logFailure('chosen photos not consumed', error);
         }
     };
+    // A request that threw may have been sent: its photos are reserved, then the error goes on.
+    const unanswered = async <R>(
+        challengeId: string | number,
+        imageIds: string[],
+        call: () => Promise<R>,
+    ): Promise<R> => {
+        try {
+            return await call();
+        } catch (error) {
+            notePoolPhotos(challengeId, { consume: [], reserve: imageIds });
+            throw error;
+        }
+    };
     return {
         submitToChallenge: async (challengeId, imageIds, token) => {
-            const result = await api.submitToChallenge(challengeId, imageIds, token);
+            const result = await unanswered(challengeId, imageIds, () =>
+                api.submitToChallenge(challengeId, imageIds, token),
+            );
             if (result.ok) {
                 mark(challengeId, imageIds);
                 consume(challengeId, imageIds);
+                notePoolPhotos(challengeId, { consume: imageIds, reserve: [] });
+            } else if (result.raw === null) {
+                // No usable answer: the photos may have gone in. A refusal the server answered did not take them.
+                notePoolPhotos(challengeId, { consume: [], reserve: imageIds });
             }
             return result;
         },
         swapPhoto: async (challengeId, oldImageId, newImageId, token) => {
-            const result = await api.swapPhoto(challengeId, oldImageId, newImageId, token);
+            const result = await unanswered(challengeId, [newImageId], () =>
+                api.swapPhoto(challengeId, oldImageId, newImageId, token),
+            );
             if (result.ok) {
                 mark(challengeId, [newImageId]);
                 consume(challengeId, [newImageId]);
+                notePoolPhotos(challengeId, { consume: [newImageId], reserve: [] });
+            } else if (result.unclear === true) {
+                notePoolPhotos(challengeId, { consume: [], reserve: [newImageId] });
             }
             return result;
         },

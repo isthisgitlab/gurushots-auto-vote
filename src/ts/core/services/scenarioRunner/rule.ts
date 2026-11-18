@@ -31,7 +31,7 @@ import type {
 import type { ActionEffects } from './types';
 import { limitOf, log, nowSec, skipped, spendOf } from './support';
 import type { Retry } from './support';
-import { ACTIONS, settleUnclearSpend } from './actions';
+import { ACTIONS, settleUnclearSpend, withPoolReport } from './actions';
 
 // The mission each confirmed action counts toward, once (a join is counted by the join pass that made it).
 const MISSION_OF: Readonly<Record<string, MissionKind | undefined>> = { fillExposure: 'fill', boost: 'boost' };
@@ -141,7 +141,8 @@ const runAction = async (
     const spend = spendOf(action);
     if (ctx.stage === 'active' && retry && spend) return settleUnclearSpend(spend, action, ctx, state, retry);
     // ACTIONS pairs each type with its handler and its stage's context; the union call needs the widened view.
-    return (ACTIONS[action.type] as ActionHandler<ScenarioAction>)(action, ctx, state);
+    const handler = ACTIONS[action.type] as ActionHandler<ScenarioAction>;
+    return withPoolReport(ctx, state, () => handler(action, ctx, state));
 };
 
 /**

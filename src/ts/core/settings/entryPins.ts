@@ -13,6 +13,7 @@ import { oneLine } from '../format/logSafe';
 import { isUnsafeChallengeKey } from '../challengeKey';
 import { isPlainObject } from '../plainObject';
 import { applyPinToRecord } from '../voting/entryPins';
+import { SCENARIO_CAPS, isPoolIds, isPoolName } from '../scenarios/vocabulary';
 import { loadSettings, saveSettings } from './persistence';
 
 import type { ConfigV2 } from '../types/config';
@@ -78,8 +79,8 @@ const _validMap = (challenges: ConfigV2['challenges']): Record<string, EntryPinR
 };
 
 /**
- * The photos pinned for a challenge's Boost and Turbo (null = no pin). Reads
- * the one record only: this runs per challenge on every voting pass.
+ * The photos pinned for a challenge's Boost and Turbo (null = no pin), as the user saved them: what the pin controls show
+ * and write. Reads the one record only: this runs per challenge on every voting pass.
  */
 const getEntryPins = (challengeId: string | number): EntryPins => {
     const key = _keyOf(challengeId);
@@ -88,6 +89,51 @@ const getEntryPins = (challengeId: string | number): EntryPins => {
     const { challenges } = loadSettings();
     const record = key !== null && Object.hasOwn(challenges, key) ? _validRecord(challenges[key].pins) : {};
     return { boost: record.boost ?? null, turbo: record.turbo ?? null };
+};
+
+/** The pins one scenario tier sets: a photo id, null for no pin whatever the lower tiers say, absent to inherit. */
+type PinTier = { boost?: string | null; turbo?: string | null };
+
+/**
+ * The pins in force: for each power the highest tier that sets it — the runtime pin of the phase entry, the phase's pin, the
+ * saved pin; a missing value inherits, an explicit null suppresses. A photo is pinned for one power only: when both end
+ * on the same photo, the power whose pin comes from the lower tier gives it up (the saved pins' own rule, applyPinToRecord).
+ * Pure: it writes nothing, so a tier above never overwrites the saved pin.
+ */
+const mergeEntryPins = (stored: EntryPins, phase?: PinTier, runtime?: PinTier): EntryPins => {
+    const pick = (kind: EntryPinKind): { id: string | null; rank: number } => {
+        if (runtime?.[kind] !== undefined) return { id: runtime[kind], rank: 3 };
+        if (phase?.[kind] !== undefined) return { id: phase[kind], rank: 2 };
+        return { id: stored[kind], rank: 1 };
+    };
+    const boost = pick('boost');
+    const turbo = pick('turbo');
+    const same = boost.id !== null && boost.id === turbo.id && boost.rank !== turbo.rank;
+    return {
+        boost: same && boost.rank < turbo.rank ? null : boost.id,
+        turbo: same && turbo.rank < boost.rank ? null : turbo.id,
+    };
+};
+
+/** What writing a photo pool came to: refused as malformed, the cap of pools reached, or the write failing. */
+type PhotoPoolResult = 'ok' | 'invalid' | 'cap' | 'write-failed';
+
+/** The account's named photo pools: pool name to its photo ids, in order. A copy. */
+const getPhotoPools = (): Record<string, string[]> => structuredClone(loadSettings().photoPools ?? {});
+
+/**
+ * Saves a named photo pool (the ordered photo ids a scenario phase draws from), replacing the pool of that name. A name or
+ * a list that is malformed (see vocabulary isPoolName / isPoolIds) is refused, and so is a new pool past the cap. A scenario's
+ * progress with the pool is its own ledger's; it is never touched here.
+ */
+const setPhotoPool = (name: string, ids: readonly string[]): PhotoPoolResult => {
+    if (!isPoolName(name) || !isPoolIds(ids)) return 'invalid';
+    const settings = loadSettings();
+    const pools = { ...settings.photoPools };
+    if (!Object.hasOwn(pools, name) && Object.keys(pools).length >= SCENARIO_CAPS.photoPools) return 'cap';
+    pools[name] = [...ids];
+    settings.photoPools = pools;
+    return saveSettings(settings) ? 'ok' : 'write-failed';
 };
 
 // Warn once per saturation that the cap blocked `key`.
@@ -150,4 +196,4 @@ const setEntryPin = (kind: EntryPinKind, challengeId: string | number, imageId: 
     return saveSettings(settings) ? 'ok' : 'write-failed';
 };
 
-export { getEntryPins, setEntryPin, isPinnableImageId, MAX_ENTRY_PINS };
+export { getEntryPins, mergeEntryPins, setEntryPin, isPinnableImageId, getPhotoPools, setPhotoPool, MAX_ENTRY_PINS };

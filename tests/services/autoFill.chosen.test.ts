@@ -14,6 +14,8 @@ import type * as entryAgeStoreModule from '../../src/ts/core/entryAgeStore';
 import type { FillDeps, FillLogger, FillSettings, RankDeps } from '../../src/ts/core/types/autoFill';
 import type { FillSchedule } from '../../src/ts/core/services/scheduleRemap';
 import type { PickerPhoto, ScoredCandidate } from '../../src/ts/core/types/photoPicker';
+import type { PhotoPoolBlock } from '../../src/ts/core/types/stores';
+import type { Challenge } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 jest.mock('../../src/ts/core/services/semantic/lexicon', () => ({
@@ -42,9 +44,10 @@ const {
     submitNewEntryForAction,
     reflectNewEntry,
     rankCandidatesForChallenge,
+    scanFillCandidates,
     __resetMemberIdCache,
 } = require('../../src/ts/core/services/autoFill') as typeof autoFillModule;
-const { forgetChosenPhotosMemory, logChosenSkipOnce } =
+const { forgetChosenPhotosMemory, logChosenSkipOnce, logPoolBlockOnce, resolveChosenPhotos } =
     require('../../src/ts/core/services/autoFill/chosenPhotos') as typeof chosenPhotosModule;
 const { resolveMissingChosen, refuseRememberedChosen, lastWalkStoppedAtPageCap } =
     require('../../src/ts/core/services/autoFill/chosenWalkMemo') as typeof import('../../src/ts/core/services/autoFill/chosenWalkMemo');
@@ -119,6 +122,8 @@ type SettingsSpec = {
     submitWithoutTagMatch?: boolean;
     emergencySubmit?: number;
     schedule?: FillSchedule;
+    /** What the phase's photo pool says (settings getChosenPoolView); absent: the stub has no such function. */
+    poolBlock?: PhotoPoolBlock | null;
 };
 
 const makeSettings = ({
@@ -134,8 +139,18 @@ const makeSettings = ({
         { count: 3, seconds: 1200 },
         { count: 4, seconds: 600 },
     ],
+    poolBlock,
 }: SettingsSpec = {}): jest.MockedObject<FillSettings> =>
     invalid({
+        ...(poolBlock === undefined
+            ? {}
+            : {
+                  getChosenPoolView: jest.fn(() =>
+                      poolBlock === null
+                          ? null
+                          : { name: 'Wall', only: true, inOrder: false, ids: [], block: poolBlock },
+                  ),
+              }),
         getEffectiveSetting: jest.fn((key: string) => {
             switch (key) {
                 case 'autoSubmit':
@@ -1529,6 +1544,177 @@ describe('Submit Only Chosen Photos', () => {
             ok: false,
             imageId: null,
             reason: 'no-chosen',
+        });
+    });
+});
+
+describe('a phase’s photo pool that has nothing to give', () => {
+    const blocked = (poolBlock: PhotoPoolBlock | null, extra: SettingsSpec = {}) =>
+        makeDeps({ settings: { chosen: [], only: true, poolBlock, ...extra } });
+
+    test.each(['pool-unbound', 'pool-exhausted'] as const)(
+        'fill-new answers %s and reads nothing: never another photo instead',
+        async (reason) => {
+            const deps = blocked(reason);
+            await expect(submitNewEntryForAction(makeChallenge(), 'tok', deps)).resolves.toEqual({
+                ok: false,
+                imageId: null,
+                reason,
+            });
+            expect(deps.getEligiblePhotos).not.toHaveBeenCalled();
+            expect(deps.submitToChallenge).not.toHaveBeenCalled();
+        },
+    );
+
+    test('the scheduled fill leaves the challenge alone', async () => {
+        const deps = blocked('pool-exhausted');
+        expect(await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps)).toBe('skipped');
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    describe('the line a blocked pick writes', () => {
+        const said = (lines: ReturnType<typeof makeLog>['lines']) =>
+            lines.warning.filter((m) => m.includes('photo pool'));
+
+        test('one per challenge and reason: the scheduled fill says it once however often it is skipped', async () => {
+            const { logger, lines } = makeLog();
+            const deps = makeDeps({ logger, settings: { chosen: [], only: true, poolBlock: 'pool-exhausted' } });
+            await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps);
+            await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps);
+            expect(said(lines)).toEqual([
+                'autoSubmit: skipped [Challenge c1] — photo pool Wall has no photos left for this phase',
+            ]);
+            // Another challenge is its own; so is another reason.
+            await maybeAutoFillChallenge(
+                makeChallenge({ title: 'Other' }),
+                'tok',
+                NOW,
+                makeDeps({ logger, settings: { poolBlock: 'pool-unbound', only: true } }),
+            );
+            expect(said(lines)).toHaveLength(2);
+            expect(said(lines)[1]).toContain('is not saved on this account');
+        });
+
+        test('it is said again when the pool stops blocking and blocks again, and fill-new and the swap ranking say it too', async () => {
+            const { logger, lines } = makeLog();
+            const blockedDeps = () =>
+                makeDeps({ logger, settings: { chosen: [], only: true, poolBlock: 'pool-exhausted' } });
+            await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, blockedDeps());
+            // A pool with something to give lets the fill through, which clears the memory of the line.
+            expect(
+                await maybeAutoFillChallenge(
+                    makeChallenge(),
+                    'tok',
+                    NOW,
+                    makeDeps({ logger, settings: { poolBlock: null } }),
+                ),
+            ).toBe('submitted');
+            await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, blockedDeps());
+            expect(said(lines)).toHaveLength(2);
+            forgetChosenPhotosMemory();
+            await submitNewEntryForAction(makeChallenge(), 'tok', blockedDeps());
+            expect(lines.warning.some((m) => m.startsWith('fillNew: skipped [Challenge c1] — photo pool Wall'))).toBe(
+                true,
+            );
+            // One line per challenge and reason, whichever path says it first: the ranking's own is a fresh start.
+            forgetChosenPhotosMemory();
+            await rankCandidatesForChallenge(makeChallenge(), 'tok', blockedDeps(), { enforceChosenOnly: true });
+            expect(lines.warning.some((m) => m.startsWith('swap: skipped [Challenge c1] — photo pool Wall'))).toBe(
+                true,
+            );
+        });
+
+        test('the pool line and the chosen-photo skip line do not hide each other', async () => {
+            const { logger, lines } = makeLog();
+            const library = [photo('theme-a')];
+            const chosenOnly = makeDeps({ logger, library, settings: { chosen: ['car'], only: true } });
+            await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, chosenOnly);
+            const blocked = makeDeps({
+                logger,
+                library,
+                settings: { chosen: [], only: true, poolBlock: 'pool-exhausted' },
+            });
+            await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, blocked);
+            expect(said(lines)).toHaveLength(1);
+            expect(lines.warning.filter((m) => m.includes('none of your chosen photos'))).toHaveLength(1);
+            await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, chosenOnly);
+            await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, blocked);
+            expect(said(lines)).toHaveLength(1);
+            expect(lines.warning.filter((m) => m.includes('none of your chosen photos'))).toHaveLength(1);
+        });
+
+        test('a pool name is shown on one line, and the table of lines stays bounded', async () => {
+            const { logger, lines } = makeLog();
+            const view = { name: 'Wall\nline', only: true, inOrder: false, ids: [], block: 'pool-exhausted' as const };
+            const deps = makeDeps({ logger, settings: { chosen: [], only: true } });
+            deps.settings.getChosenPoolView = jest.fn(() => view);
+            await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps);
+            expect(said(lines)[0]).toContain('photo pool Wall line has no photos');
+            for (let at = 0; at < 70; at++) {
+                logPoolBlockOnce(
+                    logger,
+                    invalid<Challenge>({ id: `many${at}` }),
+                    'autoSubmit',
+                    'pool-exhausted',
+                    'Wall',
+                );
+            }
+            expect(said(lines)).toHaveLength(71);
+        });
+
+        test('a scan reads the pool and says nothing', async () => {
+            const { logger, lines } = makeLog();
+            const deps = makeDeps({ logger, settings: { chosen: [], only: true, poolBlock: 'pool-exhausted' } });
+            await expect(
+                scanFillCandidates({
+                    challenge: makeChallenge(),
+                    token: 'tok',
+                    deps,
+                    mustIncludeTags: null,
+                    shouldIncludeTags: null,
+                    submitWithoutTagMatch: true,
+                }),
+            ).resolves.toMatchObject({
+                eligible: 0,
+                firstReason: 'no-chosen-photo',
+            });
+            expect(said(lines)).toEqual([]);
+        });
+    });
+
+    test('a pool with something to give, or a settings stub that knows no pools, is the normal pick', async () => {
+        const open = blocked(null);
+        expect(await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, open)).toBe('submitted');
+        const plain = makeDeps({ settings: { chosen: [] } });
+        expect(plain.settings.getChosenPoolView).toBeUndefined();
+        expect(await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, plain)).toBe('submitted');
+    });
+
+    test('emergency fill ignores it, as it ignores Submit Only', async () => {
+        const deps = blocked('pool-exhausted', { autoSubmit: false });
+        expect(await maybeEmergencyFillChallenge(makeChallenge({ entries: [], closeIn: 200 }), 'tok', NOW, deps)).toBe(
+            'submitted',
+        );
+    });
+
+    test('an explicit id pool (the Boost-pinned submit) is not the pool', async () => {
+        const deps = blocked('pool-exhausted', { chosen: ['theme-a'] });
+        const { submitPinnedEntry } = require('../../src/ts/core/services/autoFill') as typeof autoFillModule;
+        await expect(submitPinnedEntry(makeChallenge(), 'tok', deps, 'theme-a')).resolves.toMatchObject({ ok: true });
+    });
+
+    test('resolveChosenPhotos: a block is Submit Only with nothing to pick; without one it resolves as ever', () => {
+        const read = () => ['a'];
+        expect(resolveChosenPhotos({ read, blocked: 'pool-unbound' })).toEqual({
+            ids: [],
+            only: true,
+            inOrder: false,
+            blocked: 'pool-unbound',
+        });
+        expect(resolveChosenPhotos({ read: (key) => (key === 'chosenPhotos' ? ['a'] : false) })).toEqual({
+            ids: ['a'],
+            only: false,
+            inOrder: false,
         });
     });
 });

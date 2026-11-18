@@ -8,6 +8,7 @@ import {
     clearChosenSkip,
     fetchCandidatesForChallenge,
     logChosenSkipOnce,
+    logPoolBlockOnce,
     resolveChosenPhotos,
     resolveMissingChosen,
     resolveSemanticScores,
@@ -17,6 +18,7 @@ import { createStatsBudget, createVotesLoader } from '../photoStats';
 import { rankVisually } from '../visionVerifier';
 import type { Challenge } from '../../types/gurushots';
 import type { PickerPhoto, TagOptions } from '../../types/photoPicker';
+import type { PhotoPoolBlock } from '../../types/stores';
 import { errorMessage } from '../../errorMessage';
 import { cat } from './shared';
 import type { JoinDeps } from './shared';
@@ -29,10 +31,13 @@ const VISUAL_SHORTLIST = 12;
  * What a join's photo pick came to: the photo, or why there is none —
  * 'no-photo' (the photos were read and nothing is eligible) versus
  * 'no-chosen' (Submit Only Chosen Photos is on and no chosen photo can be
- * entered, so nothing was picked on purpose) — and 'unreadable' when the photos could
+ * entered, so nothing was picked on purpose), 'pool-unbound' / 'pool-exhausted' (the same, for the photo pool of the
+ * phase the candidate's scenario is in: not saved on this account, or all given out) — and 'unreadable' when the photos could
  * not be read at all (a network or API error), which says nothing about the library.
  */
-type JoinPick = { id: string; reason: 'picked' } | { id: null; reason: 'no-photo' | 'no-chosen' | 'unreadable' };
+type JoinPick =
+    | { id: string; reason: 'picked' }
+    | { id: null; reason: 'no-photo' | 'no-chosen' | 'unreadable' | PhotoPoolBlock };
 
 /**
  * The photos a join can choose from, or null when they could not be read. The
@@ -71,14 +76,33 @@ const loadJoinCandidates = async (
 };
 
 /**
+ * The photo pool of the phase the candidate's scenario is in, or null: the scenario is the one its own override names, else
+ * the one a title rule gives it (as the scenario runner resolves it for a candidate that is not joined yet), and its progress
+ * record must be of that scenario. A candidate with none keeps the join's own settings.
+ */
+const joinPoolView = (challenge: Challenge) => {
+    const own: unknown = settings.getChallengeOverride?.('scenario', String(challenge.id));
+    const rule: unknown =
+        typeof own === 'string' && own !== '' ? own : settings.resolveRuleSetting?.('scenario', challenge)?.value;
+    return typeof rule === 'string' && rule !== '' ? (settings.getPoolViewFor?.(challenge.id, rule) ?? null) : null;
+};
+
+/**
  * The Chosen Photos settings for a join candidate. An un-joined challenge has no
  * id in the settings cache, so they resolve by rule and per-id override like
- * every other join setting.
+ * every other join setting. A candidate whose scenario phase draws from a photo pool takes the pool instead, as a fill
+ * does: the photos it has left, `only` and `inOrder` as the phase says, and the pool's block.
  */
-const resolveJoinChosen = (challenge: Challenge) =>
-    resolveChosenPhotos({
-        read: (key) => resolveJoinSetting(key, challenge),
-    });
+const resolveJoinChosen = (challenge: Challenge, pool: ReturnType<typeof joinPoolView>) =>
+    pool
+        ? resolveChosenPhotos({
+              read: (key) =>
+                  key === 'chosenPhotos' ? pool.ids : key === 'chosenPhotosOnly' ? pool.only : pool.inOrder,
+              blocked: pool.block,
+          })
+        : resolveChosenPhotos({
+              read: (key) => resolveJoinSetting(key, challenge),
+          });
 
 /**
  * The library photos GuruShots suggests for this un-joined challenge, as a
@@ -126,8 +150,16 @@ const pickJoinPhoto = async (
     // partial settings stub (or facade) must degrade to "no
     // list", never throw mid-join.
     const ignoreWords = settings.getEffectiveIgnoreTitleWords?.(challenge) ?? null;
-    const chosenSettings = resolveJoinChosen(challenge);
+    const pool = joinPoolView(challenge);
+    const chosenSettings = resolveJoinChosen(challenge, pool);
     const enforceOnly = chosenSettings.only && !ignoreChosenOnly;
+    // A photo pool with nothing to give, and Submit Only: nothing is picked and nothing is read or asked of GuruShots; the join
+    // does not happen (so a paid one spends nothing). A join the coins are already spent on, or one the user asked for, is not
+    // held back, as Submit Only is not.
+    if (enforceOnly && pool?.block) {
+        logPoolBlockOnce(logger, challenge, 'join', pool.block, pool.name);
+        return { id: null, reason: pool.block };
+    }
 
     const loaded = await loadJoinCandidates(challenge, token, deps, {
         mustIncludeTags,

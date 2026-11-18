@@ -13,6 +13,7 @@ jest.mock('../../src/ts/core/settings', () => ({
     getSetting: jest.fn(() => 'UTC'),
     getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
     consumeChosenPhotos: jest.fn(() => false),
+    reconcilePhotoPool: jest.fn(() => false),
 }));
 
 jest.mock('../../src/ts/core/services/VotingLogic', () => ({

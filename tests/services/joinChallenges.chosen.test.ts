@@ -69,6 +69,9 @@ jest.mock('../../src/ts/core/settings', () => ({
     resolveRuleSetting: jest.fn(() => null),
     hasRuleJoinOptIn: jest.fn(() => false),
     rememberOpenChallengeIds: jest.fn(),
+    getPoolViewFor: jest.fn(),
+    recordPhotoPoolEvents: jest.fn(),
+    consumeChosenPhotos: jest.fn(),
 }));
 
 import { invalid } from '../helpers/invalid';
@@ -84,6 +87,9 @@ import type * as submissionsModule from '../../src/ts/core/api/submissions';
 import type * as autoFillModule from '../../src/ts/core/services/autoFill';
 import type * as photoStatsModule from '../../src/ts/core/services/photoStats';
 import type * as chosenPhotosModule from '../../src/ts/core/services/autoFill/chosenPhotos';
+import type * as entryTimesModule from '../../src/ts/core/services/entryTimes';
+import type * as entryAgeStoreModule from '../../src/ts/core/entryAgeStore';
+import type { PhotoPoolView } from '../../src/ts/core/settings';
 import type { Challenge } from '../../src/ts/core/types/gurushots';
 import type { PickerPhoto } from '../../src/ts/core/types/photoPicker';
 import type { RawJsonStore } from '../../src/ts/core/types/stores';
@@ -93,6 +99,9 @@ const { performJoin, runJoinPass, joinChallengeSingle, resolveJoinSetting, inFli
 const { __resetMemberIdCache } = require('../../src/ts/core/services/autoFill') as typeof autoFillModule;
 const { forgetChosenPhotosMemory } =
     require('../../src/ts/core/services/autoFill/chosenPhotos') as typeof chosenPhotosModule;
+
+const { withEntryTimes } = require('../../src/ts/core/services/entryTimes') as typeof entryTimesModule;
+const { createMemoryEntryAgeLedger } = require('../../src/ts/core/entryAgeStore') as typeof entryAgeStoreModule;
 
 const { makePostRequest } = jest.mocked(require('../../src/ts/core/api/api-client') as typeof apiClientModule);
 const { getEligiblePhotos } = require('../../src/ts/core/api/submissions') as typeof submissionsModule;
@@ -153,6 +162,7 @@ beforeEach(() => {
     settings.getSetting.mockReturnValue(invalid(''));
     settings.getEffectiveTagSetting.mockReturnValue([]);
     settings.resolveRuleSetting.mockReturnValue(null);
+    settings.getPoolViewFor.mockReturnValue(null);
     vision.rankVisually.mockImplementation(async (_c, ids, _e, want) => ids.slice(0, want));
 });
 
@@ -342,6 +352,157 @@ describe('Submit Only Chosen Photos on a join', () => {
         const deps = makeDeps(undefined, { getMemberChallenges: jest.fn(async () => invalid(null)) });
         await runJoinPass('tok', Date.now(), deps);
         expect(settings.rememberOpenChallengeIds).not.toHaveBeenCalled();
+    });
+});
+
+describe('a candidate in a scenario phase that draws from a photo pool', () => {
+    const view = (over: Partial<PhotoPoolView> = {}): PhotoPoolView => ({
+        name: 'Wall',
+        only: true,
+        inOrder: true,
+        ids: ['auto-5', 'auto-2'],
+        block: null,
+        ...over,
+    });
+    /** The candidate's own override names the scenario; its progress is in `Wall`'s phase. */
+    const inPoolPhase = (pool: PhotoPoolView | null) => {
+        settings.getChallengeOverride.mockImplementation((key) => (key === 'scenario' ? 'Queue' : null));
+        settings.getPoolViewFor.mockReturnValue(pool);
+    };
+    /** A submit that goes through the wrapper every real submit does, so what it notes for the pool is observable. */
+    const wrapped = (result: { ok: boolean; raw: unknown }) =>
+        withEntryTimes(
+            {
+                submitToChallenge: jest.fn(async () =>
+                    invalid<Awaited<ReturnType<JoinDeps['submitToChallenge']>>>(result),
+                ),
+                swapPhoto: jest.fn(),
+            },
+            createMemoryEntryAgeLedger(),
+        ).submitToChallenge;
+
+    test('the pool photo is the join photo: the first it has left, in order, whatever the join’s own settings say', async () => {
+        withSettings({ chosenPhotos: ['auto-1'], submitWithoutTagMatch: true });
+        inPoolPhase(view());
+        const deps = makeDeps();
+        await expect(performJoin(challenge(), 'tok', deps, 0)).resolves.toEqual({
+            status: 'joined',
+            charged: 0,
+            imageId: 'auto-5',
+        });
+        expect(deps.submitToChallenge).toHaveBeenCalledWith(1, ['auto-5'], 'tok');
+        expect(settings.getPoolViewFor).toHaveBeenCalledWith(1, 'Queue');
+    });
+
+    test('the scenario is the one a title rule gives the candidate when it has no override of its own', async () => {
+        withSettings({ scenario: 'Queue', submitWithoutTagMatch: true });
+        settings.getPoolViewFor.mockReturnValue(view({ ids: ['auto-3'] }));
+        const deps = makeDeps();
+        await performJoin(challenge(), 'tok', deps, 0);
+        expect(settings.getPoolViewFor).toHaveBeenCalledWith(1, 'Queue');
+        expect(deps.submitToChallenge).toHaveBeenCalledWith(1, ['auto-3'], 'tok');
+    });
+
+    test('without only, a pool with photos left ranks them first and the join may still pick another', async () => {
+        withSettings({ submitWithoutTagMatch: true });
+        inPoolPhase(view({ only: false, inOrder: false, ids: ['car'] }));
+        const deps = makeDeps();
+        await performJoin(challenge(), 'tok', deps, 0);
+        expect(deps.submitToChallenge).toHaveBeenCalledWith(1, ['car'], 'tok');
+        inPoolPhase(view({ only: false, inOrder: false, ids: [] }));
+        const plain = makeDeps();
+        await expect(performJoin(challenge(), 'tok', plain, 0)).resolves.toMatchObject({ status: 'joined' });
+        expect(jest.mocked(plain.submitToChallenge).mock.calls[0][1][0]).toMatch(/^auto-/);
+    });
+
+    test.each([
+        ['pool-exhausted', 'photo pool Wall has no photos left for this phase'],
+        ['pool-unbound', 'photo pool Wall is not saved on this account'],
+    ] as const)('%s with only blocks the join before any request, and is said once', async (block, wording) => {
+        withSettings({ submitWithoutTagMatch: true });
+        inPoolPhase(view({ ids: [], block }));
+        const deps = makeDeps();
+        await expect(performJoin(challenge(), 'tok', deps, 50)).resolves.toEqual({
+            status: 'skipped-no-chosen',
+            charged: 0,
+        });
+        await expect(performJoin(challenge(), 'tok', deps, 50)).resolves.toMatchObject({ status: 'skipped-no-chosen' });
+        expect(deps.getEligiblePhotos).not.toHaveBeenCalled();
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+        expect(makePostRequest).not.toHaveBeenCalled();
+        const said = lines.warning.filter((line) => line.includes('photo pool'));
+        expect(said).toEqual([`join: skipped challenge 1 — ${wording}`]);
+    });
+
+    test('the pool line has a key of its own: it neither hides nor is hidden by the chosen-photo skip line', async () => {
+        const noneUsable = () => {
+            withSettings({ chosenPhotos: ['gone'], chosenPhotosOnly: true });
+            return makeDeps(eleven, {
+                getEligiblePhotosWalk: jest.fn(async () => ({ items: eleven, truncated: false, nextStart: 11 })),
+            });
+        };
+        await performJoin(challenge(), 'tok', noneUsable(), 0);
+        expect(
+            lines.warning.filter((line) => line.includes('every chosen photo') || line.includes('none of your chosen')),
+        ).toHaveLength(1);
+        inPoolPhase(view({ ids: [], block: 'pool-exhausted' }));
+        await performJoin(challenge(), 'tok', makeDeps(), 0);
+        expect(lines.warning.filter((line) => line.includes('photo pool'))).toHaveLength(1);
+        // And back: the chosen-photo line is still the one it was, not written again.
+        inPoolPhase(null);
+        await performJoin(challenge(), 'tok', noneUsable(), 0);
+        expect(lines.warning.filter((line) => line.includes('none of your chosen'))).toHaveLength(1);
+    });
+
+    test('a join the coins are already spent on, or a person asked for, is not held back by the block', async () => {
+        withSettings({ submitWithoutTagMatch: true });
+        inPoolPhase(view({ ids: [], block: 'pool-exhausted' }));
+        const paid = makeDeps(eleven, {
+            joinStateStore: makeStore(JSON.stringify({ '1': { unlockedAt: Date.now() } })),
+        });
+        await expect(performJoin(challenge(), 'tok', paid, 50)).resolves.toMatchObject({ status: 'joined' });
+        expect(paid.coinsUnlock).not.toHaveBeenCalled();
+        const manual = makeDeps(eleven, { getMemberChallenges: jest.fn(async () => [{ id: 1, join_coins: 0 }]) });
+        await expect(joinChallengeSingle(1, 'tok', manual)).resolves.toMatchObject({ status: 'joined' });
+    });
+
+    test('a candidate whose scenario is in no pool phase, or has none, joins as it always did', async () => {
+        withSettings({ submitWithoutTagMatch: true });
+        inPoolPhase(null);
+        const deps = makeDeps();
+        await expect(performJoin(challenge(), 'tok', deps, 0)).resolves.toMatchObject({ status: 'joined' });
+        settings.getChallengeOverride.mockReturnValue(null);
+        settings.getPoolViewFor.mockClear();
+        await performJoin(challenge(), 'tok', makeDeps(), 0);
+        expect(settings.getPoolViewFor).not.toHaveBeenCalled();
+    });
+
+    test('a confirmed join consumes its pool photo, once', async () => {
+        withSettings({ submitWithoutTagMatch: true });
+        inPoolPhase(view());
+        const deps = makeDeps(undefined, { submitToChallenge: wrapped({ ok: true, raw: { success: true } }) });
+        await expect(performJoin(challenge(), 'tok', deps, 0)).resolves.toMatchObject({
+            status: 'joined',
+            imageId: 'auto-5',
+        });
+        expect(settings.recordPhotoPoolEvents).toHaveBeenCalledTimes(1);
+        expect(settings.recordPhotoPoolEvents).toHaveBeenCalledWith(1, { consume: ['auto-5'], reserve: [] });
+    });
+
+    test('a paid join whose submit got no answer reserves its pool photo; one the server refused does not', async () => {
+        withSettings({ submitWithoutTagMatch: true });
+        inPoolPhase(view());
+        const unclear = makeDeps(undefined, { submitToChallenge: wrapped({ ok: false, raw: null }) });
+        await expect(performJoin(challenge(), 'tok', unclear, 50)).resolves.toMatchObject({
+            status: 'charged-pending-submit',
+        });
+        expect(settings.recordPhotoPoolEvents).toHaveBeenCalledWith(1, { consume: [], reserve: ['auto-5'] });
+        settings.recordPhotoPoolEvents.mockClear();
+        inFlight.clear();
+        const refused = makeDeps(undefined, { submitToChallenge: wrapped({ ok: false, raw: { success: false } }) });
+        await performJoin(challenge(), 'tok', refused, 0);
+        expect(settings.recordPhotoPoolEvents).not.toHaveBeenCalled();
     });
 });
 

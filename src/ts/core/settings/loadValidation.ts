@@ -9,6 +9,7 @@ import { getDefaultSettings } from './defaults';
 import { isPlainObject } from '../plainObject';
 import { oneLine } from '../format/logSafe';
 import { isUnsafeChallengeKey } from '../challengeKey';
+import { SCENARIO_CAPS, isPoolIds, isPoolName } from '../scenarios/vocabulary';
 
 import type { ConfigV2, ImportedV2 } from '../types/config';
 import type { AuthKey } from '../types/settings';
@@ -244,6 +245,29 @@ const dropInvalidContainers = (config: ConfigV2, dropped: string[]) => {
     }
 };
 
+/**
+ * A container of the wrong kind leaves no pools; a pool whose name or photo list is malformed, or that is past the cap, is
+ * dropped alone (the others stay). Each drop is reported once, with the load's other dropped values.
+ */
+const dropInvalidPhotoPools = (config: ConfigV2, dropped: string[]) => {
+    const { photoPools } = config;
+    if (photoPools === undefined) return;
+    if (!isPlainObject(photoPools)) {
+        delete config.photoPools;
+        dropped.push('photoPools');
+        return;
+    }
+    let kept = 0;
+    for (const [name, ids] of Object.entries(photoPools)) {
+        if (isPoolName(name) && isPoolIds(ids) && kept < SCENARIO_CAPS.photoPools) {
+            kept++;
+            continue;
+        }
+        delete photoPools[name];
+        dropped.push(`photoPools.${oneLine(name)}`);
+    }
+};
+
 const dropInvalidChallenges = (config: ConfigV2, dropped: string[]) => {
     for (const [challengeId, record] of Object.entries(config.challenges)) {
         const path = `challenges.${oneLine(challengeId)}`;
@@ -284,6 +308,7 @@ const dropInvalidValues = (config: ConfigV2): string[] => {
     dropInvalidContainers(config, dropped);
     dropInvalidSchemaValues(config.defaults, 'defaults', dropped);
     dropInvalidChallenges(config, dropped);
+    dropInvalidPhotoPools(config, dropped);
     return dropped;
 };
 
