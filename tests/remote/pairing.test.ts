@@ -22,7 +22,7 @@ import type * as pairingModule from '../../src/ts/shells/electron/remote/pairing
 
 /** The exact published pairing link: the Pages origin, /remote/, and the 43-char base64url key. */
 const PUBLISHED_LINK =
-    /^https:\/\/isthisgitlab\.github\.io\/gurushots-auto-vote\/remote\/v2\/index\.html#k=[A-Za-z0-9_-]{43}$/;
+    /^https:\/\/isthisgitlab\.github\.io\/gurushots-auto-vote\/remote\/v3\/index\.html#k=[A-Za-z0-9_-]{43}$/;
 
 const loadPairing = (): {
     pairing: typeof pairingModule;
@@ -102,7 +102,7 @@ describe('the desktop pairing store', () => {
         const info = pairing.accessInfo();
         expect(info.enabled).toBe(false);
         expect(info.link).toBe(
-            `https://isthisgitlab.github.io/gurushots-auto-vote/remote/v2/index.html#k=${pairing.state().key}`,
+            `https://isthisgitlab.github.io/gurushots-auto-vote/remote/v3/index.html#k=${pairing.state().key}`,
         );
         expect(info.qrDataUrl).toMatch(/^data:image\/svg\+xml;base64,/);
         const svg = Buffer.from(info.qrDataUrl.slice('data:image/svg+xml;base64,'.length), 'base64').toString('utf8');
@@ -114,7 +114,7 @@ describe('the desktop pairing store', () => {
     test('the dev-only launcher argument points the link at a local site build; a packaged build ignores it', () => {
         const dev = newPairing(userData, ['--remote-link-origin=http://127.0.0.1:8080']);
         expect(dev.pairing.accessInfo().link).toMatch(
-            /^http:\/\/127\.0\.0\.1:8080\/remote\/v2\/index\.html#k=[A-Za-z0-9_-]{43}$/,
+            /^http:\/\/127\.0\.0\.1:8080\/remote\/v3\/index\.html#k=[A-Za-z0-9_-]{43}$/,
         );
         expect(dev.warns).toEqual([]);
 
@@ -132,7 +132,7 @@ describe('the desktop pairing store', () => {
         'the dev launcher argument accepts the local origin %s',
         (origin) => {
             const { pairing, warns } = newPairing(userData, [`--remote-link-origin=${origin}`]);
-            expect(pairing.accessInfo().link).toBe(`${origin}/remote/v2/index.html#k=${pairing.state().key}`);
+            expect(pairing.accessInfo().link).toBe(`${origin}/remote/v3/index.html#k=${pairing.state().key}`);
             expect(warns).toEqual([]);
         },
     );

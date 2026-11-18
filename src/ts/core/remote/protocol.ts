@@ -34,7 +34,7 @@ export const APP_VERSION: string = pkg.version;
  * enum member of an existing setting, or a change to a channel's spend class needs a new number and a new
  * `contract/v<N>/`. New page code must handle a missing field and a channel an older desktop refuses.
  */
-export const LINK_VERSION = 2 as const;
+export const LINK_VERSION = 3 as const;
 
 /** The highest link version a `hello` may carry: a bound on the wire, not a statement of what is published. */
 const MAX_LINK_VERSION = 999;

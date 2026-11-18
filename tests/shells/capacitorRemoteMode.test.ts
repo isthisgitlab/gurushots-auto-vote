@@ -10,7 +10,7 @@ import { invalid } from '../helpers/invalid';
 import type { CapacitorGlobals } from '../../src/ts/core/types/capacitor';
 
 const KEY = 'AbC-_9'.repeat(7) + 'A';
-const LINK = `https://example.test/remote/v2/index.html#k=${KEY}`;
+const LINK = `https://example.test/remote/v3/index.html#k=${KEY}`;
 
 const order: string[] = [];
 const mockStop = jest.fn<Promise<unknown>, []>();
@@ -73,7 +73,7 @@ describe('Android remote mode', () => {
         test('stops the service, clears and flushes the running flag, stores the key, then loads the bundled current page', async () => {
             const { enterRemoteMode } = load();
             await expect(enterRemoteMode(LINK)).resolves.toEqual({ success: true });
-            expect(order).toEqual(['stop', 'flag', 'flush', 'set', `go /remote/v2/index.html#k=${KEY}`]);
+            expect(order).toEqual(['stop', 'flag', 'flush', 'set', `go /remote/v3/index.html#k=${KEY}`]);
             expect(mockSettings.setSetting).toHaveBeenCalledWith('autovoteRunning', false);
             expect(nativePromise).toHaveBeenCalledWith('Preferences', 'set', {
                 key: 'gs_remote_access',
@@ -98,7 +98,7 @@ describe('Android remote mode', () => {
 
         test.each([
             `https://example.test/remote/v1/index.html#k=${KEY}`,
-            `https://example.test/remote/v3/index.html#k=${KEY}`,
+            `https://example.test/remote/v2/index.html#k=${KEY}`,
         ])(
             'a non-current link is refused before any service, settings, storage, or navigation side effect',
             async (link) => {
@@ -182,7 +182,7 @@ describe('Android remote mode', () => {
 
     test('loadBundledRemotePage moves the WebView to the current page with its key in the fragment', () => {
         load().loadBundledRemotePage(KEY);
-        expect(assign).toHaveBeenCalledWith(`/remote/v2/index.html#k=${KEY}`);
+        expect(assign).toHaveBeenCalledWith(`/remote/v3/index.html#k=${KEY}`);
     });
 
     test('installRemoteModeEntry offers the paste entry to the React app', () => {
