@@ -269,8 +269,8 @@ importers:
         specifier: ^5.8.1
         version: 5.8.1
       electron:
-        specifier: ^45.3.3
-        version: 45.3.3(supports-color@8.1.1)
+        specifier: ^45.3.4
+        version: 45.3.4(supports-color@8.1.1)
       electron-builder:
         specifier: ^26.18.0
         version: 26.18.0(electron-builder-squirrel-windows@26.18.0)(supports-color@8.1.1)
@@ -2528,8 +2528,8 @@ packages:
   electron-publish@26.18.0:
     resolution: {integrity: sha512-MagnqaZSALSWjcdKu5HEVhYUZD/2BDL3q7XzrqWwub6gf/UfD3ItMgmthVDv9w5y9E0gH1C3JWqKaXwf6f4ROg==}
 
-  electron-to-chromium@1.5.487:
-    resolution: {integrity: sha512-qWotOhQYeYEj+DK4+Y+cfPj44qiC6ETIiWtJLfmDJydED2BJJ7loPA4SfBbbrMI6X/X3tryJgxnY9nxsO545Zw==}
+  electron-to-chromium@1.5.488:
+    resolution: {integrity: sha512-Uox8y5IeRGB/uXNMNSPfWaiI5/8d/2XG125oc+f2C5JniHcoMxsbCXcVFRZnIsdrgPwZQ6/k5SbSxhBirqQPuA==}
 
   electron-updater@6.8.11:
     resolution: {integrity: sha512-12U/mbzaIKQS3Q543aQ7DjyAZMXeVJy1Wpu0qdq5ne4RXpIQDpWYm25zRjgXngAoo6swMrm4C4owGyiIipelsg==}
@@ -2538,8 +2538,8 @@ packages:
     resolution: {integrity: sha512-bO3y10YikuUwUuDUQRM4KfwNkKhnpVO7IPdbsrejwN9/AABJzzTQ4GeHwyzNSrVO+tEH3/Np255a3sVZpZDjvg==}
     engines: {node: '>=8.0.0'}
 
-  electron@45.3.3:
-    resolution: {integrity: sha512-YS01j/AMWGbPAfbXijkLOUJGFhmrIg6pf9An8+LzY1PIc5sjwqEcSMsEBXgUQiWw1lSfPCP7RpxbvkN1JQRD8A==}
+  electron@45.3.4:
+    resolution: {integrity: sha512-cqU5u6arfGd9KJvCODjj32ckxkDQbweTL3v8J51tAsKGmDWYKcAqszvie0NDKBIGl6Ze19QTL74yIAUHrqNDig==}
     engines: {node: '>= 22.12.0'}
     hasBin: true
 
@@ -6010,7 +6010,7 @@ snapshots:
     dependencies:
       baseline-browser-mapping: 2.11.38
       caniuse-lite: 1.0.30001826
-      electron-to-chromium: 1.5.487
+      electron-to-chromium: 1.5.488
       node-releases: 2.0.65
       update-browserslist-db: 1.4.0(browserslist@4.29.6)
 
@@ -6273,7 +6273,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  electron-to-chromium@1.5.487: {}
+  electron-to-chromium@1.5.488: {}
 
   electron-updater@6.8.11(supports-color@8.1.1):
     dependencies:
@@ -6300,7 +6300,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  electron@45.3.3(supports-color@8.1.1):
+  electron@45.3.4(supports-color@8.1.1):
     dependencies:
       '@electron-internal/extract-zip': 1.0.8
       '@electron/get': 5.1.0(supports-color@8.1.1)
