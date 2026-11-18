@@ -6,7 +6,7 @@
 
 import type * as scheduleRemapModule from '../../src/ts/core/services/scheduleRemap';
 
-const { getScheduleShift, remapScheduleRows } =
+const { getScheduleShift, remapScheduleRows, shiftForSpan, shiftRowCounts } =
     require('../../src/ts/core/services/scheduleRemap') as typeof scheduleRemapModule;
 
 const DEFAULT_SCHEDULE = [
@@ -77,5 +77,44 @@ describe('remapScheduleRows — the schedule as it applies to one challenge', ()
             { count: 2, seconds: 0 },
             { count: 3, seconds: 600 },
         ]);
+    });
+});
+
+describe('shiftForSpan — the shift for a span the caller already measured', () => {
+    test('is the part of the span the photo limit cannot hold, never negative', () => {
+        expect(shiftForSpan(4, 2)).toBe(2);
+        expect(shiftForSpan(4, 3)).toBe(1);
+        expect(shiftForSpan(4, 4)).toBe(0);
+        expect(shiftForSpan(3, 6)).toBe(0);
+    });
+
+    test('a missing limit counts as 0, so the whole span shifts away', () => {
+        expect(shiftForSpan(4, undefined)).toBe(4);
+    });
+});
+
+describe('shiftRowCounts — rows of any shape move toward the end', () => {
+    const rows = [
+        { count: 2, state: 'known', at: 10 },
+        { count: 3, state: 'absent', reason: 'not-present' },
+        { count: 4, state: 'unknown', reason: 'why' },
+    ];
+
+    test('a shift of 0 keeps every row as it is, in a new array', () => {
+        const kept = shiftRowCounts(rows, 0);
+        expect(kept).toEqual(rows);
+        expect(kept).not.toBe(rows);
+    });
+
+    test('keeps every other field of a shifted row and drops the rows that fall below count 2', () => {
+        expect(shiftRowCounts(rows, 1)).toEqual([
+            { count: 2, state: 'absent', reason: 'not-present' },
+            { count: 3, state: 'unknown', reason: 'why' },
+        ]);
+        expect(shiftRowCounts(rows, 2)).toEqual([{ count: 2, state: 'unknown', reason: 'why' }]);
+    });
+
+    test('a shift that is not a number leaves nothing', () => {
+        expect(shiftRowCounts(rows, NaN)).toEqual([]);
     });
 });

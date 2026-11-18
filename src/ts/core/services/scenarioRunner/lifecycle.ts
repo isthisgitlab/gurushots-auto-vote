@@ -24,6 +24,7 @@ import { errorMessage } from '../../errorMessage';
 import { effectiveTimezone } from '../../settings/uiDefaults';
 import * as cancellation from '../../voting/cancellation';
 import { DEFAULT_STAGES } from '../../scenarios/vocabulary';
+import { admitsAtCountOne } from '../../scenarios/evaluate';
 import { createOperationRecord } from '../../scenarios/runtime';
 import type { OperationRecord } from '../../scenarios/runtime';
 import type { Challenge, CompletedChallenge } from '../../types/gurushots';
@@ -70,12 +71,15 @@ type Lifecycle = {
 };
 
 /**
- * Whether any rule of the document runs in the stage.
+ * Whether any rule of the document runs in the stage. A phase's count-1 `absolute` submit row is a pre-join rule too: it
+ * joins the candidate once it is due.
  */
 const hasStage = (doc: ScenarioDocument, stage: ScenarioStage): boolean => {
     const defaults: readonly ScenarioStage[] = DEFAULT_STAGES[doc.scope ?? 'challenge'];
-    return Object.values(doc.phases).some((phase) =>
-        (phase.rules ?? []).some((rule) => (rule.stages ?? defaults).includes(stage)),
+    return Object.values(doc.phases).some(
+        (phase) =>
+            (stage === 'preJoin' && admitsAtCountOne(phase)) ||
+            (phase.rules ?? []).some((rule) => (rule.stages ?? defaults).includes(stage)),
     );
 };
 
@@ -143,6 +147,8 @@ const runPreJoinStep = async (
         operations,
         join: async (maxCoins, policy) => {
             made.attempt = await join(maxCoins, policy);
+            // Whatever asked for it, this candidate has had its join this pass (the schedule's own is not asked again).
+            operations.mark('join', challengeId);
             return made.attempt;
         },
     };

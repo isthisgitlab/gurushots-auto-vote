@@ -9,7 +9,7 @@ import * as logger from '../../logger';
 import * as settings from '../../settings';
 import { platform } from '../../platform/port';
 import { effectiveTimezone } from '../../settings/uiDefaults';
-import { evaluateScenario } from '../../scenarios/evaluate';
+import { ADMISSION_RULE_ID, evaluateScenario } from '../../scenarios/evaluate';
 import { entriesOf } from '../../scenarios/selectors';
 import { recordVoteSample } from '../../scenarios/speed';
 import { initialState } from '../../scenarioStateStore';
@@ -206,6 +206,11 @@ const advance = async (ctx: RunnerContext, now: number): Promise<void> => {
         const prepared = await prepare(ctx, state);
         if (!prepared) return;
         ({ state } = prepared);
+        // A candidate this pass already tried to join (by a rule of the document) is not asked to join again by its schedule.
+        const skipped =
+            ctx.stage === 'preJoin' && ctx.operations?.has('join', challengeId)
+                ? new Set([...firedThisPass, ADMISSION_RULE_ID])
+                : firedThisPass;
         const decision = evaluateScenario({
             scenario,
             state,
@@ -216,7 +221,7 @@ const advance = async (ctx: RunnerContext, now: number): Promise<void> => {
             timezone,
             evidence: prepared.evidence,
             readSetting: prepared.readSetting,
-            skipRuleIds: firedThisPass,
+            skipRuleIds: skipped,
         });
         if (decision.halted) {
             noteHalt(ctx, state, decision.halted);

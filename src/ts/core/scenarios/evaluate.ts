@@ -44,6 +44,40 @@ export interface EvaluateInput {
 }
 
 /**
+ * The id of the rule a count-1 `absolute` submit row stands for. It is no rule of the document (a document rule id never
+ * starts with "@"): an implicit pre-join rule, `join` once the row is due, that resumes like any other after an interruption.
+ */
+const ADMISSION_RULE_ID = '@admission';
+
+const ADMISSION_RULE: ScenarioRule = {
+    id: ADMISSION_RULE_ID,
+    repeat: 'always',
+    stages: ['preJoin'],
+    do: [{ type: 'join' }],
+};
+
+/**
+ * Whether a phase asks for a photo at count 1: an `absolute` submit schedule with a row of count 1 (an end-aligned one
+ * never does: the first photo is the join itself).
+ */
+const admitsAtCountOne = (phase: ScenarioDocument['phases'][string] | undefined): boolean =>
+    phase?.schedules?.submit?.alignment === 'absolute' && phase.schedules.submit.rows.some((row) => row.count === 1);
+
+/**
+ * Whether the count-1 row of the phase is known and due: only a row whose resolved instant is known and has come asks for
+ * the join. An unknown, absent or future row does not.
+ */
+const admissionDue = (phase: ScenarioDocument['phases'][string], state: ScenarioEngineState, now: number): boolean => {
+    const { published } = state;
+    const submit = published?.phase === state.phase ? published.schedules?.submit : undefined;
+    return (
+        admitsAtCountOne(phase) &&
+        submit?.alignment === 'absolute' &&
+        submit.rows.some((row) => row.count === 1 && row.state === 'known' && row.at <= now)
+    );
+};
+
+/**
  * The stage a scenario's rules run in when the caller names none: a challenge scenario's active stage, an installation's
  * account stage.
  */
@@ -121,8 +155,8 @@ const evaluateScenario = (
         return { ...base, halted: `Phase "${state.phase}" no longer exists in scenario "${scenario.name}"` };
     }
     const stage = input.stage ?? defaultStage(scenario);
-    const allRules = phase.rules ?? [];
-    const rules = allRules.filter((candidate) => runsIn(candidate, scenario, stage));
+    const allRules = [...(phase.rules ?? []), ...(admitsAtCountOne(phase) ? [ADMISSION_RULE] : [])];
+    const rules = (phase.rules ?? []).filter((candidate) => runsIn(candidate, scenario, stage));
 
     if (state.inFlight) {
         const rule = allRules.find((candidate) => candidate.id === state.inFlight?.ruleId);
@@ -191,6 +225,10 @@ const evaluateScenario = (
         });
         fire ??= { ruleId: rule.id, rule, startIndex: 0 };
     }
+    // The count-1 admission comes after every rule of the document, and only while the candidate is before its join.
+    if (!fire && stage === 'preJoin' && !skip.has(ADMISSION_RULE_ID) && admissionDue(phase, state, now)) {
+        fire = { ruleId: ADMISSION_RULE_ID, rule: ADMISSION_RULE, startIndex: 0 };
+    }
     return { ...base, halted: null, fire, explain, nextWakeAt: wakeOf(input) };
 };
 
@@ -208,4 +246,4 @@ const startState = (scenario: ScenarioDocument, now: number): ScenarioEngineStat
     inFlight: null,
 });
 
-export { evaluateScenario, firedRecord, localDayOf, runsIn, startState };
+export { ADMISSION_RULE_ID, admitsAtCountOne, evaluateScenario, firedRecord, localDayOf, runsIn, startState };

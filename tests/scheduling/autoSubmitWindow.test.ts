@@ -314,6 +314,51 @@ describe('soonestAutoSubmitClockBoundary', () => {
 });
 
 describe('soonestAutoSubmitScheduleBoundary', () => {
+    test('a resolved schedule replaces the literal one: its earliest unsatisfied known row is the boundary', async () => {
+        const now = utc(2026, 1, 15, 12);
+        const close = now + 7200;
+        const resolved = {
+            alignment: 'end' as const,
+            rows: [
+                { count: 2, state: 'unknown' as const, reason: 'boost-timeout-malformed' },
+                { count: 3, state: 'known' as const, at: now + 600 },
+                { count: 4, state: 'known' as const, at: now + 1200 },
+            ],
+        };
+        const challenge = (entries: number, max = 4) =>
+            invalid({
+                id: 1,
+                title: 'Timed',
+                close_time: close,
+                max_photo_submits: max,
+                member: { ranking: { entries: Array.from({ length: entries }, () => ({})) } },
+            });
+        const resolveSchedule = () => ({
+            enabled: true,
+            manualPhotosOnly: false,
+            // the literal setting would put the boundary at close - 600; the resolved rows win
+            schedule: [{ count: 2, seconds: 600 }],
+            resolved,
+        });
+
+        // an unknown row supplies no deadline: the earliest known one that entries have not satisfied is next
+        expect(await soonestAutoSubmitScheduleBoundary(invalid([challenge(1)]), now, resolveSchedule)).toMatchObject({
+            challengeId: 1,
+            boundaryTime: now + 600,
+            thresholdSec: 7200 - 600,
+            anyDue: false,
+        });
+        expect(await soonestAutoSubmitScheduleBoundary(invalid([challenge(3)]), now, resolveSchedule)).toMatchObject({
+            boundaryTime: now + 1200,
+        });
+        // every known row satisfied (a fifth slot is free, but no row asks for it): no boundary
+        expect(await soonestAutoSubmitScheduleBoundary(invalid([challenge(4, 5)]), now, resolveSchedule)).toBeNull();
+        // a known row already due is a due schedule
+        expect(
+            await soonestAutoSubmitScheduleBoundary(invalid([challenge(1)]), now + 700, resolveSchedule),
+        ).toMatchObject({ anyDue: true, boundaryTime: null });
+    });
+
     test('skips full, missing, invalid, disabled, manual-only, and exhausted schedules', async () => {
         const now = utc(2026, 1, 15, 12);
         const resolveSchedule = jest.fn((id: string) => {

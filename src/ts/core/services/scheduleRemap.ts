@@ -23,6 +23,13 @@ import type { SettingValues } from '../settings/schema';
 export type FillSchedule = SettingValues['autoSubmitSchedule'];
 
 /**
+ * The shift for a schedule whose highest active image number is `highestActive` (see getScheduleShift): the part of the
+ * span the challenge's photo limit cannot hold, never negative.
+ */
+const shiftForSpan = (highestActive: number, maxPhotoSubmits: number | undefined): number =>
+    Math.max(0, highestActive - (maxPhotoSubmits ?? 0));
+
+/**
  * How far the schedule shifts toward the end for a given challenge: the
  * schedule's active span minus the challenge's photo limit, floored at 0
  * (never stretch, only compress). Span = highest image number with a real
@@ -33,11 +40,18 @@ export type FillSchedule = SettingValues['autoSubmitSchedule'];
  *
  * @param maxPhotoSubmits - challenge.max_photo_submits
  */
-const getScheduleShift = (rows: FillSchedule, maxPhotoSubmits: number | undefined): number => {
-    const max = maxPhotoSubmits ?? 0;
-    const highestActive = rows.reduce((m, r) => (r.seconds > 0 ? Math.max(m, r.count) : m), 0);
-    return Math.max(0, highestActive - max);
-};
+const getScheduleShift = (rows: FillSchedule, maxPhotoSubmits: number | undefined): number =>
+    shiftForSpan(
+        rows.reduce((m, r) => (r.seconds > 0 ? Math.max(m, r.count) : m), 0),
+        maxPhotoSubmits,
+    );
+
+/**
+ * Rows moved `shift` toward the end, the rows that fall below count 2 dropped (a shift of 0 keeps every row as it is).
+ * Works on any row that carries a count: the literal schedule's rows and the resolved rows of a dynamic one.
+ */
+const shiftRowCounts = <T extends { count: number }>(rows: readonly T[], shift: number): T[] =>
+    shift === 0 ? [...rows] : rows.map((r) => ({ ...r, count: r.count - shift })).filter((r) => r.count >= 2);
 
 /**
  * The schedule as it effectively applies to a challenge: its rows, shifted
@@ -50,10 +64,6 @@ const getScheduleShift = (rows: FillSchedule, maxPhotoSubmits: number | undefine
 const remapScheduleRows = (
     rows: FillSchedule,
     maxPhotoSubmits: number | undefined,
-): Array<{ count: number; seconds: number }> => {
-    const shift = getScheduleShift(rows, maxPhotoSubmits);
-    if (shift === 0) return [...rows];
-    return rows.map((r) => ({ count: r.count - shift, seconds: r.seconds })).filter((r) => r.count >= 2);
-};
+): Array<{ count: number; seconds: number }> => shiftRowCounts(rows, getScheduleShift(rows, maxPhotoSubmits));
 
-export { getScheduleShift, remapScheduleRows };
+export { getScheduleShift, remapScheduleRows, shiftForSpan, shiftRowCounts };

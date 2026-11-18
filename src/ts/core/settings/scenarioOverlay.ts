@@ -46,6 +46,7 @@ import type { ExprValue } from '../scenarios/expressions';
 import type { ValueState } from '../scenarios/valueState';
 import type { ConfigV2 } from '../types/config';
 import type { ChallengeValues } from '../types/settings';
+import type { ResolvedSchedules } from '../types/autoFill';
 import type { PhotoPoolBlock, ScenarioPublication, ScenarioState } from '../types/stores';
 import type { ScenarioDocument, ScenarioPhase } from './scenarioSchema';
 
@@ -96,6 +97,8 @@ type ResolvedOverlay = {
     bindings: Record<string, unknown>;
     /** The selected profile and its validated values. */
     profile: { name: string; values: ChallengeValues } | null;
+    /** The phase's published dynamic schedules (empty for a phase that has none). */
+    schedules: ResolvedSchedules;
 };
 
 /** One phase of a challenge's scenario as the overlay reads it. */
@@ -130,12 +133,17 @@ const profileOf = (phase: ScenarioPhase, change?: RuntimeChange): string | undef
 
 const hasPatch = (change?: RuntimeChange): boolean => Object.keys(change?.phasePatch ?? {}).length > 0;
 
+/** The kinds of dynamic schedule a phase carries (submit, vote, pause). */
+const scheduleKinds = (phase: ScenarioPhase): Array<keyof ResolvedSchedules> =>
+    (['submit', 'vote', 'pause'] as const).filter((kind) => phase.schedules?.[kind] !== undefined);
+
 /**
- * Whether a phase is read through a publication: it has bindings or a profile, or its entry holds a runtime patch or a
- * runtime profile.
+ * Whether a phase is read through a publication: it has bindings, schedules or a profile, or its entry holds a runtime patch
+ * or a runtime profile.
  */
 const isBoundPhase = (phase: ScenarioPhase, change?: RuntimeChange): boolean =>
     phase.profile !== undefined ||
+    scheduleKinds(phase).length > 0 ||
     Object.keys(phase.bindings ?? {}).length > 0 ||
     hasPatch(change) ||
     change?.phaseProfile !== undefined;
@@ -207,6 +215,7 @@ const phaseFingerprint = (
             phase: phaseName,
             literals: phase.settings,
             bindings: phase.bindings,
+            schedules: phase.schedules,
             profile: profile === undefined ? null : [profile, storedProfile(settings, profile)],
             // Only a record that changed something at run time adds to what a publication is made from.
             patch: hasPatch(change) ? change?.phasePatch : undefined,
@@ -284,6 +293,11 @@ const readPublication = (
     if (boundKeys.length !== publishedKeys.length || boundKeys.some((key) => !hasOwn(published.bindings, key))) {
         return { ok: false, reason: 'the published settings do not match the bindings of this phase' };
     }
+    const wanted = scheduleKinds(phase);
+    const publishedKinds = Object.keys(published.schedules ?? {});
+    if (wanted.length !== publishedKinds.length || wanted.some((kind) => !publishedKinds.includes(kind))) {
+        return { ok: false, reason: 'the published settings do not match the schedules of this phase' };
+    }
     let profile: { name: string; values: ChallengeValues } | null = null;
     const profileName = profileOf(phase, state);
     if (profileName !== undefined) {
@@ -301,6 +315,7 @@ const readPublication = (
             literals: phase.settings ?? {},
             bindings: { ...published.bindings },
             profile,
+            schedules: published.schedules ?? {},
         },
     };
 };
@@ -345,7 +360,10 @@ const subjectLayer = (
             state,
             overlay: bound
                 ? readPublication(settings, scenario, state, now)
-                : { ok: true, value: { patch: {}, literals: phase.settings ?? {}, bindings: {}, profile: null } },
+                : {
+                      ok: true,
+                      value: { patch: {}, literals: phase.settings ?? {}, bindings: {}, profile: null, schedules: {} },
+                  },
         },
     };
 };
@@ -411,6 +429,7 @@ const prepareOverlay = (
     challengeId: string,
     validUntil: number | null,
     now: number,
+    schedules?: ResolvedSchedules,
 ):
     | { ok: true; overlay: ResolvedOverlay; publication: ScenarioPublication }
     | { ok: false; key: string | null; reason: string } => {
@@ -459,7 +478,7 @@ const prepareOverlay = (
     }
     return {
         ok: true,
-        overlay: { patch, literals, bindings, profile },
+        overlay: { patch, literals, bindings, profile, schedules: schedules ?? {} },
         publication: {
             revision: (state.published?.revision ?? 0) + 1,
             documentFingerprint: phaseFingerprint(settings, scenario, state.phase, state),
@@ -469,6 +488,7 @@ const prepareOverlay = (
             validUntil,
             bindings,
             profile: profile?.name ?? null,
+            ...(schedules && Object.keys(schedules).length > 0 ? { schedules } : {}),
         },
     };
 };
@@ -886,6 +906,7 @@ export {
     readLayer,
     readOverlay,
     readPublication,
+    scheduleKinds,
     subjectLayer,
 };
 export type { InstallationLayer, PhotoPoolView, ResolvedOverlay, SubjectLayer };

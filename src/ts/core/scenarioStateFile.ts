@@ -169,6 +169,56 @@ const isInFlight = (value: unknown): boolean =>
     (value.lost === undefined || (Array.isArray(value.lost) && value.lost.every(isSpendAction))) &&
     (value.unclearAt === undefined || Number.isFinite(value.unclearAt));
 
+/** The most rows one published schedule holds (a window schedule's cap; a submit schedule holds at most 4). */
+const SCHEDULE_ROWS_MAX = 6;
+
+/**
+ * One published schedule row: known (the fields of its instant or window) or absent/unknown (with the reason), and no other field.
+ */
+const isScheduleRow = (value: unknown, known: readonly string[], extra: readonly string[]): boolean => {
+    if (!isPlainObject(value)) return false;
+    if (value.state === 'known') {
+        return hasExactKeys(value, ['state', ...extra, ...known]) && known.every((key) => Number.isFinite(value[key]));
+    }
+    return (
+        (value.state === 'absent' || value.state === 'unknown') &&
+        hasExactKeys(value, ['state', 'reason', ...extra]) &&
+        typeof value.reason === 'string' &&
+        value.reason.length <= PATCH_MAX_TEXT
+    );
+};
+
+const isRowList = (rows: unknown, max: number, check: (row: unknown) => boolean): boolean =>
+    Array.isArray(rows) && rows.length >= 1 && rows.length <= max && rows.every(check);
+
+/** The dynamic schedules a publication holds (types/autoFill.ts ResolvedSchedules): each kind strict, no other kind. */
+const isPublishedSchedules = (value: unknown): boolean => {
+    if (!isPlainObject(value)) return false;
+    const { submit, vote, pause } = value;
+    const windows = (schedule: unknown) =>
+        isPlainObject(schedule) &&
+        hasExactKeys(schedule, ['rows']) &&
+        isRowList(schedule.rows, SCHEDULE_ROWS_MAX, (row) => isScheduleRow(row, ['start', 'end'], []));
+    return (
+        Object.keys(value).every((key) => key === 'submit' || key === 'vote' || key === 'pause') &&
+        (submit === undefined ||
+            (isPlainObject(submit) &&
+                hasExactKeys(submit, ['alignment', 'rows']) &&
+                (submit.alignment === 'end' || submit.alignment === 'absolute') &&
+                isRowList(
+                    submit.rows,
+                    4,
+                    (row) =>
+                        isScheduleRow(row, ['at'], ['count']) &&
+                        Number.isInteger((row as { count: unknown }).count) &&
+                        Number((row as { count: number }).count) >= 1 &&
+                        Number((row as { count: number }).count) <= 4,
+                ))) &&
+        (vote === undefined || windows(vote)) &&
+        (pause === undefined || windows(pause))
+    );
+};
+
 const PUBLICATION_KEYS: ReadonlySet<string> = new Set([
     'revision',
     'documentFingerprint',
@@ -178,6 +228,7 @@ const PUBLICATION_KEYS: ReadonlySet<string> = new Set([
     'validUntil',
     'bindings',
     'profile',
+    'schedules',
     'generation',
 ]);
 
@@ -198,6 +249,7 @@ const isPublication = (value: unknown): value is NonNullable<ScenarioState['publ
     (value.validUntil === null || Number.isFinite(value.validUntil)) &&
     isPlainObject(value.bindings) &&
     (value.profile === null || typeof value.profile === 'string') &&
+    (value.schedules === undefined || isPublishedSchedules(value.schedules)) &&
     (value.generation === undefined || isCount(value.generation));
 
 /**

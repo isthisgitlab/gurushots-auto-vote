@@ -88,7 +88,27 @@ export type ScenarioExpr =
 
 /** What the engine reads of a challenge's runtime state: a stored record, or a fresh start state. */
 export type ScenarioEngineState = Pick<ScenarioState, 'phase' | 'phaseEnteredAt' | 'memory' | 'fired' | 'inFlight'> &
-    Partial<Pick<ScenarioState, 'history'>>;
+    Partial<Pick<ScenarioState, 'history' | 'published'>>;
+
+/**
+ * A phase's dynamic submit schedule: one row per cumulative photo count, each with the instant (an expression) the photo is
+ * due by. `end` alignment shifts the counts toward the end of a challenge that allows fewer photos (the literal schedule's
+ * rule); `absolute` keeps each count as written and ignores a count above the challenge's capacity.
+ */
+type ScenarioSubmitSchedule = {
+    alignment: 'end' | 'absolute';
+    rows: Array<{ count: number; at: ScenarioExpr }>;
+};
+
+/** A phase's dynamic vote or pause schedule: windows that start at an instant and last a duration (both expressions). */
+type ScenarioWindowSchedule = { rows: Array<{ at: ScenarioExpr; duration: ScenarioExpr }> };
+
+/** The schedules a phase may carry in place of the literal settings of the same name (see services/autoFill/schedule.ts). */
+export type ScenarioSchedules = {
+    submit?: ScenarioSubmitSchedule;
+    vote?: ScenarioWindowSchedule;
+    pause?: ScenarioWindowSchedule;
+};
 
 export type ScenarioCondition =
     | { type: 'dailyWindow'; from: string; to: string }

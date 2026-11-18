@@ -31,6 +31,7 @@ import {
     readPhotoPool,
     reconcilePoolProgress,
     recordPoolEvents,
+    scheduleKinds,
     subjectLayer,
 } from './scenarioOverlay';
 import { getEntryPins as getStoredEntryPins, mergeEntryPins } from './entryPins';
@@ -49,6 +50,7 @@ import type { ValueState } from '../scenarios/valueState';
 import type { ConfigApp, ConfigV2 } from '../types/config';
 import type { SettingView } from '../types/scenario';
 import type { ChallengeIdInput, ChallengeValues, EntryPins, SettingValueOf } from '../types/settings';
+import type { ResolvedSchedules } from '../types/autoFill';
 import type { ScenarioPublication, ScenarioState } from '../types/stores';
 import type { InstallationLayer, PhotoPoolView, ResolvedOverlay, SubjectLayer } from './scenarioOverlay';
 import type { ScenarioDocument } from './scenarioSchema';
@@ -695,6 +697,26 @@ const reconcilePhotoPool = (challengeId: string | number, entryIds: readonly str
     return hasStoredScenarios(settings) && reconcilePoolProgress(settings, String(challengeId), entryIds);
 };
 
+/**
+ * What a challenge's phase says about its dynamic schedules: none (no phase, or one without schedules), the schedules the
+ * owner published (a kind the phase does not carry is absent: that one keeps its literal settings), or why they cannot be
+ * read (the published settings are missing, expired or from another document, or the progress record is unreadable).
+ */
+type PhaseSchedulesRead =
+    | { kind: 'none' }
+    | { kind: 'resolved'; schedules: ResolvedSchedules }
+    | { kind: 'unavailable'; reason: string };
+
+const getPhaseSchedules = (challengeId: string | number): PhaseSchedulesRead => {
+    const subject = _subjectLayer(loadSettings(), challengeId);
+    if (subject.kind === 'none') return { kind: 'none' };
+    if (subject.kind === 'unreadable') return { kind: 'unavailable', reason: subject.reason };
+    const { layer } = subject;
+    if (scheduleKinds(layer.phase).length === 0) return { kind: 'none' };
+    if (!layer.overlay.ok) return { kind: 'unavailable', reason: layer.overlay.reason };
+    return { kind: 'resolved', schedules: layer.overlay.value.schedules };
+};
+
 /** What the runner holds for one evaluation of a phase: what to publish, and how to read settings in it. */
 type ScenarioSnapshot = {
     /** The overlay to publish, or null when the phase has no bindings or profile (there is nothing to publish). */
@@ -703,7 +725,12 @@ type ScenarioSnapshot = {
 };
 
 /** What a phase's bindings resolved to, as the runner works them out from the base reads it is handed. */
-type BindingResolution = { bound: Record<string, ValueState<ExprValue>>; validUntil: number | null };
+type BindingResolution = {
+    bound: Record<string, ValueState<ExprValue>>;
+    validUntil: number | null;
+    /** What the phase's dynamic schedules resolved to (absent: the phase has none). */
+    schedules?: ResolvedSchedules;
+};
 
 /**
  * Prepares the settings of a challenge's phase: the base values, and the overlay the phase gives with its bindings
@@ -739,14 +766,30 @@ const prepareScenarioSnapshot = (
         };
     // A phase with literals only is read straight from the document, as it always was: nothing to publish.
     if (!isBoundPhase(phase, state)) {
-        const overlay: ResolvedOverlay = { patch: {}, literals: phase.settings ?? {}, bindings: {}, profile: null };
+        const overlay: ResolvedOverlay = {
+            patch: {},
+            literals: phase.settings ?? {},
+            bindings: {},
+            profile: null,
+            schedules: {},
+        };
         return { ok: true, snapshot: { publication: null, readSetting: reader(overlay, false) } };
     }
     // A binding is worked out before the overlay exists, so it reads the base view only.
-    const { bound, validUntil } = resolveBindings((settingKey, view) =>
+    const { bound, validUntil, schedules } = resolveBindings((settingKey, view) =>
         view === 'base' ? baseOf(settingKey) : unknownOf('binding-reads-base-only', [`setting:${settingKey}`]),
     );
-    const prepared = prepareOverlay(settings, scenario, state, baseRaw, bound, String(challengeId), validUntil, now);
+    const prepared = prepareOverlay(
+        settings,
+        scenario,
+        state,
+        baseRaw,
+        bound,
+        String(challengeId),
+        validUntil,
+        now,
+        schedules,
+    );
     if (!prepared.ok) return prepared;
     return { ok: true, snapshot: { publication: prepared.publication, readSetting: reader(prepared.overlay, true) } };
 };
@@ -949,6 +992,7 @@ export type {
     BindingResolution,
     InstallationCapture,
     InstallationValueOf,
+    PhaseSchedulesRead,
     PhotoPoolView,
     ScenarioOverlayStatus,
     ScenarioSnapshot,
@@ -972,6 +1016,7 @@ export {
     getEffectiveSetting,
     getEffectiveEntryPins,
     getChosenPoolView,
+    getPhaseSchedules,
     getPoolViewFor,
     recordPhotoPoolEvents,
     reconcilePhotoPool,

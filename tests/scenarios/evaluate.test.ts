@@ -402,6 +402,56 @@ describe('nextWakeAt', () => {
         expect(wake([{ type: 'inPhaseFor', min: '4m' }], { challenge: challenge({ close_time: null }) })).toBeNull();
     });
 
+    describe('the resolved instants of the phase’s dynamic schedules', () => {
+        const publication = (phase: string, schedules: object) =>
+            invalid<ScenarioEngineState['published']>({
+                revision: 1,
+                documentFingerprint: 'f',
+                phase,
+                phaseEnteredAt: NOW - 60,
+                observedAt: NOW - 60,
+                validUntil: null,
+                bindings: {},
+                profile: null,
+                schedules,
+            });
+        const schedules = {
+            submit: {
+                alignment: 'end',
+                rows: [
+                    { count: 2, state: 'known', at: NOW + 100 },
+                    { count: 3, state: 'unknown', reason: 'r' },
+                ],
+            },
+            pause: { rows: [{ state: 'known', start: NOW + 50, end: NOW + 80 }] },
+        };
+        const wakeWith = (published: ScenarioEngineState['published'], now = NOW) =>
+            nextWakeAt({
+                scenario: scenario([]),
+                state: { ...initialState('Plan', 'main', NOW - 60), published },
+                challenge: challenge(),
+                now,
+                timezone: TZ,
+            });
+
+        test('the next known row instant is a wake, whichever kind it comes from', () => {
+            expect(wakeWith(publication('main', schedules))).toBe(NOW + 50);
+            expect(wakeWith(publication('main', schedules), NOW + 50)).toBe(NOW + 81);
+            expect(wakeWith(publication('main', schedules), NOW + 81)).toBe(NOW + 100);
+            // an unknown or absent row supplies none, and nothing remains after the last one
+            expect(wakeWith(publication('main', schedules), NOW + 100)).toBeNull();
+        });
+
+        test('a publication of another phase entry is not read', () => {
+            expect(wakeWith(publication('other', schedules))).toBeNull();
+            expect(wakeWith(undefined)).toBeNull();
+        });
+
+        test('a publication with no schedules adds nothing', () => {
+            expect(wakeWith(publication('main', {}))).toBeNull();
+        });
+    });
+
     test('an unknown phase has nothing to wake for', () => {
         expect(
             nextWakeAt({
@@ -412,5 +462,94 @@ describe('nextWakeAt', () => {
                 timezone: TZ,
             }),
         ).toBeNull();
+    });
+});
+
+describe('the count-1 admission of an absolute submit schedule', () => {
+    const phaseWith = (alignment: 'absolute' | 'end', counts: number[]) =>
+        invalid<ScenarioDocument>({
+            name: 'Plan',
+            version: 1,
+            start: 'main',
+            phases: {
+                main: {
+                    schedules: {
+                        submit: {
+                            alignment,
+                            rows: counts.map((count) => ({ count, at: { kind: 'fact', name: 'challenge.end' } })),
+                        },
+                    },
+                },
+            },
+        });
+    const published = (rows: object[], phase = 'main') =>
+        invalid<ScenarioEngineState['published']>({
+            revision: 1,
+            documentFingerprint: 'f',
+            phase,
+            phaseEnteredAt: NOW - 60,
+            observedAt: NOW,
+            validUntil: null,
+            bindings: {},
+            profile: null,
+            schedules: { submit: { alignment: 'absolute', rows } },
+        });
+    const run = (over: {
+        scenario?: ScenarioDocument;
+        state?: ScenarioEngineState;
+        stage?: 'preJoin' | 'active';
+        skip?: Set<string>;
+    }) =>
+        evaluateScenario({
+            scenario: over.scenario ?? phaseWith('absolute', [1]),
+            state: over.state ?? {
+                ...initialState('Plan', 'main', NOW - 60),
+                published: published([{ count: 1, state: 'known', at: NOW - 1 }]),
+            },
+            challenge: challenge(),
+            stage: over.stage ?? 'preJoin',
+            skipRuleIds: over.skip,
+            now: NOW,
+            timezone: TZ,
+        });
+
+    test('a known due count-1 row fires the implicit join, in the pre-join stage only', () => {
+        expect(run({}).fire).toMatchObject({ ruleId: '@admission', startIndex: 0, rule: { do: [{ type: 'join' }] } });
+        expect(run({ stage: 'active' }).fire).toBeNull();
+    });
+
+    test('a row that is future, unknown or absent, another phase’s publication, or none, fires nothing', () => {
+        for (const rows of [
+            [{ count: 1, state: 'known', at: NOW + 1 }],
+            [{ count: 1, state: 'unknown', reason: 'r' }],
+            [{ count: 1, state: 'absent', reason: 'r' }],
+            [{ count: 2, state: 'known', at: NOW - 1 }],
+        ]) {
+            const state = { ...initialState('Plan', 'main', NOW - 60), published: published(rows) };
+            expect(run({ state }).fire).toBeNull();
+        }
+        const other = {
+            ...initialState('Plan', 'main', NOW - 60),
+            published: published([{ count: 1, state: 'known', at: NOW - 1 }], 'other'),
+        };
+        expect(run({ state: other }).fire).toBeNull();
+        expect(run({ state: initialState('Plan', 'main', NOW - 60) }).fire).toBeNull();
+    });
+
+    test('an end-aligned schedule, or one with no count-1 row, never fires it', () => {
+        expect(run({ scenario: phaseWith('end', [1]) }).fire).toBeNull();
+        expect(run({ scenario: phaseWith('absolute', [2, 3]) }).fire).toBeNull();
+    });
+
+    test('it is skipped when this pass already tried the candidate’s join', () => {
+        expect(run({ skip: new Set(['@admission']) }).fire).toBeNull();
+    });
+
+    test('an interrupted admission resumes in the pre-join stage, and is another stage’s elsewhere', () => {
+        const state = { ...initialState('Plan', 'main', NOW - 60), inFlight: { ruleId: '@admission', actionIndex: 0 } };
+        expect(run({ state }).fire).toMatchObject({ ruleId: '@admission', startIndex: 0 });
+        expect(run({ state, stage: 'active' })).toMatchObject({ fire: null, halted: null });
+        // a phase that no longer has the row no longer knows the rule
+        expect(run({ state, scenario: phaseWith('absolute', [2]) }).halted).toMatch(/no longer matches/);
     });
 });

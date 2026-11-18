@@ -10,12 +10,16 @@
  * past one is the bug the scheduler's boundary invariant exists to prevent —
  * so every bound yields a candidate, whichever way it flips.
  *
+ * The resolved instants of the phase's dynamic submit, vote and pause schedules are candidates too (the rows its owner
+ * published: a deadline, a window's start, the first second after its end), so the scheduler wakes at each of them.
+ *
  * `phaseClock: false` leaves the in-phase bounds out: a plan that has not started has no phase
  * clock (the real one starts on the first pass that runs it), so a synthetic `startState(now)`
  * must not pull every wake in to `now + min`. Every other bound is still used.
  */
 
 import { occurrencesOf } from '../scheduling/wallClock';
+import { scheduleInstants } from '../services/autoFill/schedule';
 import { finite, durationBound } from './conditions';
 
 import type { Challenge } from '../types/gurushots';
@@ -127,6 +131,8 @@ const nextWakeAt = ({
         if (rule.repeat === 'oncePerDay' && state.fired?.[rule.id])
             instants.push(nextOccurrence('00:00', timezone, now));
     }
+    // The resolved instants of the phase's dynamic schedules (known rows only), as its owner published them.
+    if (state.published?.phase === state.phase) instants.push(...scheduleInstants(state.published.schedules));
     const upcoming = instants.filter((instant) => instant > now && instant < close);
     return upcoming.length ? Math.min(...upcoming) : null;
 };

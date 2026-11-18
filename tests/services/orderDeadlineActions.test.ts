@@ -176,3 +176,38 @@ describe('orderDeadlineActions', () => {
         ]);
     });
 });
+
+describe('orderDeadlineActions — a scenario phase’s dynamic submit schedule', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    const read = (value: unknown) =>
+        settings.getPhaseSchedules.mockReturnValue(invalid<ReturnType<typeof settingsModule.getPhaseSchedules>>(value));
+    const submitRows = [{ count: 2, state: 'known', at: 1_000_000 - 900 }];
+
+    test('its known row sorts like a literal one: the deadline measured back from close', () => {
+        mockSettings({ autoSubmitSchedule: [], turboTime: 720, emergencySubmit: 300 });
+        read({ kind: 'resolved', schedules: { submit: { alignment: 'end', rows: submitRows } } });
+        expect(order(buildChallenge())).toEqual(['autoSubmit', 'turbo', 'emergencySubmit', 'boost']);
+    });
+
+    test('an unknown row supplies no deadline, so the fill is not ordered ahead of anything', () => {
+        mockSettings({ autoSubmitSchedule: DEFAULT_SCHEDULE, turboTime: 720, emergencySubmit: 300 });
+        read({
+            kind: 'resolved',
+            schedules: { submit: { alignment: 'end', rows: [{ count: 2, state: 'unknown', reason: 'r' }] } },
+        });
+        expect(order(buildChallenge()).indexOf('autoSubmit')).toBeGreaterThan(order(buildChallenge()).indexOf('turbo'));
+    });
+
+    test('published settings that cannot be read give the fill no deadline, not the literal one', () => {
+        mockSettings({ autoSubmitSchedule: [{ count: 2, seconds: 900 }], turboTime: 720, emergencySubmit: 300 });
+        read({ kind: 'unavailable', reason: 'expired' });
+        expect(order(buildChallenge())[0]).not.toBe('autoSubmit');
+    });
+
+    test('a phase with no submit schedule of its own keeps the literal one', () => {
+        mockSettings({ autoSubmitSchedule: [{ count: 2, seconds: 900 }], turboTime: 720, emergencySubmit: 300 });
+        read({ kind: 'resolved', schedules: {} });
+        expect(order(buildChallenge())[0]).toBe('autoSubmit');
+    });
+});

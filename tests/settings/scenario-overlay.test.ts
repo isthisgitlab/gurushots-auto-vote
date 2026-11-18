@@ -1077,3 +1077,224 @@ describe('scenario phase bindings and profile', () => {
         });
     });
 });
+
+describe('a scenario phase with dynamic schedules', () => {
+    let store: MemoryStore;
+
+    const instant = (value: number) => invalid<ScenarioExpr>({ kind: 'literal', value, quantity: 'instant' });
+    const hours = (value: number) =>
+        invalid<ScenarioExpr>({ kind: 'literal', value, quantity: 'duration', unit: 'hours' });
+
+    const schedulePlan = (schedules: Record<string, unknown>) => ({
+        name: 'Plan',
+        version: 1,
+        start: 'timed',
+        phases: { timed: { schedules }, plain: {} },
+    });
+    const submitSchedule = () => ({
+        submit: { alignment: 'end', rows: [{ count: 2, at: instant(5000) }] },
+    });
+    const resolvedSubmit = {
+        submit: { alignment: 'end', rows: [{ count: 2, state: 'known', at: 5000 }] },
+    };
+
+    const assign = (doc: unknown = schedulePlan(submitSchedule())) => {
+        expect(settings.saveScenario(doc)).toEqual({ ok: true, name: 'Plan' });
+        settings.setChallengeOverride('scenario', '7', 'Plan');
+        expect(scenarioStateLedger.set(7, initialState('Plan', 'timed', 1000))).toBe('saved');
+    };
+
+    /** What the runner does for this phase: works out the schedules and publishes them. */
+    const publish = (resolved: unknown = resolvedSubmit) => {
+        const scenario = settings.getScenario('Plan') as ScenarioDocument;
+        const state = scenarioStateLedger.get(7).state as ScenarioState;
+        const result = settings.prepareScenarioSnapshot(
+            7,
+            scenario,
+            state,
+            () => ({ bound: {}, validUntil: null, schedules: invalid(resolved) }),
+            1500,
+        );
+        if (!result.ok || !result.snapshot.publication) throw new Error('nothing to publish');
+        expect(scenarioStateLedger.set(7, { ...state, published: result.snapshot.publication })).toBe('saved');
+        return result.snapshot.publication;
+    };
+
+    beforeEach(() => {
+        store = installHeadlessStore();
+        settings.rememberChallengeTitles([{ id: 7, title: 'Big show', type: 'exhibition' }]);
+    });
+
+    afterEach(() => {
+        removeHeadlessStore();
+        settings.rememberChallengeTitles([]);
+    });
+
+    test('a challenge with no scenario, or a phase with no schedules, has none to read', () => {
+        expect(settings.getPhaseSchedules(7)).toEqual({ kind: 'none' });
+        assign(schedulePlan(submitSchedule()));
+        scenarioStateLedger.set(7, initialState('Plan', 'plain', 1000));
+        expect(settings.getPhaseSchedules(7)).toEqual({ kind: 'none' });
+    });
+
+    test('a phase with schedules is read through its publication: the resolved rows, as published', () => {
+        assign();
+        expect(settings.getPhaseSchedules(7)).toEqual({
+            kind: 'unavailable',
+            reason: 'nothing is published for this phase yet',
+        });
+        const publication = publish();
+        expect(publication.schedules).toEqual(resolvedSubmit);
+        expect(settings.getPhaseSchedules(7)).toEqual({ kind: 'resolved', schedules: resolvedSubmit });
+        // the phase has no literal or binding of its own, yet it is read through a publication, so it is bound
+        expect(settings.scenarioOverlayStatus(7)).toMatchObject({ bound: true, available: true });
+    });
+
+    test('a phase that gets no resolved schedule from its owner publishes none and reads as none published', () => {
+        assign();
+        const scenario = settings.getScenario('Plan') as ScenarioDocument;
+        const state = scenarioStateLedger.get(7).state as ScenarioState;
+        const result = settings.prepareScenarioSnapshot(
+            7,
+            scenario,
+            state,
+            () => ({ bound: {}, validUntil: null }),
+            1500,
+        );
+        expect(result).toMatchObject({ ok: true });
+        if (!result.ok) throw new Error('prepared');
+        expect(result.snapshot.publication).not.toHaveProperty('schedules');
+        scenarioStateLedger.set(7, { ...state, published: result.snapshot.publication as ScenarioState['published'] });
+        expect(settings.getPhaseSchedules(7)).toMatchObject({ kind: 'unavailable' });
+    });
+
+    test('a publication made for other kinds of schedule than the phase holds is unavailable', () => {
+        assign(schedulePlan({ ...submitSchedule(), pause: { rows: [{ at: instant(1), duration: hours(1) }] } }));
+        publish({ submit: resolvedSubmit.submit, pause: { rows: [{ state: 'known', start: 1, end: 3601 }] } });
+        expect(settings.getPhaseSchedules(7)).toMatchObject({ kind: 'resolved' });
+        // the owner's publication names a kind the phase no longer carries
+        const state = scenarioStateLedger.get(7).state as ScenarioState;
+        scenarioStateLedger.set(7, {
+            ...state,
+            published: { ...(state.published as NonNullable<ScenarioState['published']>), schedules: resolvedSubmit },
+        } as ScenarioState);
+        expect(settings.getPhaseSchedules(7)).toEqual({
+            kind: 'unavailable',
+            reason: 'the published settings do not match the schedules of this phase',
+        });
+    });
+
+    test('an edit of the schedules after they were published makes the publication unavailable until it is made again', () => {
+        assign();
+        publish();
+        expect(
+            settings.saveScenario(
+                schedulePlan({ submit: { alignment: 'absolute', rows: [{ count: 2, at: instant(1) }] } }),
+                {
+                    expectedDefinitionRevision: settings.getScenarioLibrary().revision as number,
+                },
+            ),
+        ).toEqual({ ok: true, name: 'Plan' });
+        expect(settings.getPhaseSchedules(7)).toEqual({
+            kind: 'unavailable',
+            reason: 'the scenario or its profile changed after its settings were published',
+        });
+    });
+
+    describe('what the progress file keeps of a publication’s schedules', () => {
+        const window = { rows: [{ state: 'known', start: 1, end: 2 }] };
+        const stored = (schedules: unknown) => {
+            assign();
+            publish();
+            const blob = parseJsonAs(store.keys.get('gs_scenario_state')!, isRecordOf(isRecordOf(isUnknown)));
+            const published = invalid<Record<string, unknown>>(blob['7'].published);
+            published.schedules = schedules;
+            store.keys.set('gs_scenario_state', JSON.stringify(blob));
+            return scenarioStateLedger.get(7);
+        };
+
+        test('every kind, with known, absent and unknown rows, is read back as it was published', () => {
+            const schedules = {
+                submit: {
+                    alignment: 'absolute',
+                    rows: [
+                        { count: 1, state: 'known', at: 5 },
+                        { count: 2, state: 'absent', reason: 'not-present' },
+                        { count: 4, state: 'unknown', reason: 'boost-timeout-malformed' },
+                    ],
+                },
+                vote: window,
+                pause: {
+                    rows: [
+                        { state: 'unknown', reason: 'r' },
+                        { state: 'absent', reason: 'off' },
+                    ],
+                },
+            };
+            expect(stored(schedules).state?.published?.schedules).toEqual(schedules);
+        });
+
+        test.each([
+            ['a list', []],
+            ['a kind that is none of the three', { other: window }],
+            ['a submit schedule with an alignment of its own', { submit: { alignment: 'start', rows: [] } }],
+            ['a submit schedule with no rows', { submit: { alignment: 'end', rows: [] } }],
+            [
+                'a submit schedule with extra fields',
+                { submit: { alignment: 'end', rows: [{ count: 2, state: 'known', at: 1 }], x: 1 } },
+            ],
+            ['a submit row of count 5', { submit: { alignment: 'end', rows: [{ count: 5, state: 'known', at: 1 }] } }],
+            ['a submit row of count 0', { submit: { alignment: 'end', rows: [{ count: 0, state: 'known', at: 1 }] } }],
+            [
+                'a submit row of a fractional count',
+                { submit: { alignment: 'end', rows: [{ count: 1.5, state: 'known', at: 1 }] } },
+            ],
+            [
+                'five submit rows',
+                {
+                    submit: {
+                        alignment: 'end',
+                        rows: [1, 2, 3, 4, 4].map((count) => ({ count, state: 'known', at: 1 })),
+                    },
+                },
+            ],
+            ['a known row with no instant', { submit: { alignment: 'end', rows: [{ count: 2, state: 'known' }] } }],
+            [
+                'a known row with an extra field',
+                { submit: { alignment: 'end', rows: [{ count: 2, state: 'known', at: 1, reason: 'x' }] } },
+            ],
+            ['an unknown row with no reason', { submit: { alignment: 'end', rows: [{ count: 2, state: 'unknown' }] } }],
+            [
+                'an absent row with a reason that is not text',
+                { submit: { alignment: 'end', rows: [{ count: 2, state: 'absent', reason: 3 }] } },
+            ],
+            [
+                'a reason that is far too long',
+                { submit: { alignment: 'end', rows: [{ count: 2, state: 'absent', reason: 'x'.repeat(500) }] } },
+            ],
+            ['a state of its own', { submit: { alignment: 'end', rows: [{ count: 2, state: 'maybe', reason: 'x' }] } }],
+            ['a row that is not an object', { submit: { alignment: 'end', rows: ['x'] } }],
+            ['a vote schedule that is not an object', { vote: 3 }],
+            ['a vote schedule with extra fields', { vote: { ...window, x: 1 } }],
+            ['a vote schedule with no rows', { vote: { rows: [] } }],
+            ['seven pause rows', { pause: { rows: Array.from({ length: 7 }, () => window.rows[0]) } }],
+            ['a window whose end is not a number', { pause: { rows: [{ state: 'known', start: 1, end: 'x' }] } }],
+            ['a window with no start', { pause: { rows: [{ state: 'known', end: 2 }] } }],
+        ])('%s makes the publication unreadable, not the whole record', (_label, schedules) => {
+            const read = stored(schedules);
+            expect(read.corrupt).toBe(false);
+            expect(read.state).toMatchObject({ phase: 'timed', publicationUnreadable: true });
+            expect(read.state?.published).toBeUndefined();
+        });
+    });
+
+    test('progress that cannot be read makes the schedules unavailable, never the literal settings', () => {
+        assign();
+        publish();
+        store.keys.set('gs_scenario_state', '{broken');
+        expect(settings.getPhaseSchedules(7)).toEqual({
+            kind: 'unavailable',
+            reason: 'the saved progress of this challenge cannot be read',
+        });
+    });
+});

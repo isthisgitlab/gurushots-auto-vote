@@ -3,10 +3,7 @@
  * scheduler cycle, spaced by the user's autoSubmitSchedule.
  */
 
-import { getScheduleShift } from '../scheduleRemap';
-
-import type { FillSchedule } from '../scheduleRemap';
-import { resolveScheduleTarget } from './schedule';
+import { authorizeSubmit, lowerSubmitSchedule, submitCeiling, submitShift } from './schedule';
 import { getEntries, getSlotsRemaining, reflectNewEntry, refreshChallengeState } from './challengeState';
 import { runFillAttempt } from './pipeline';
 import { finiteOr } from '../../numbers';
@@ -16,14 +13,21 @@ import { getAutoSubmitClockWindowState } from '../../scheduling/autoSubmitWindow
 import { isCancelled } from '../../voting/cancellation';
 
 import type { Challenge } from '../../types/gurushots';
-import type { FillSettings, SettingsFillDeps } from '../../types/autoFill';
+import type { FillSettings, ResolvedSubmitSchedule, SettingsFillDeps } from '../../types/autoFill';
 
 type AutoSubmitTrigger = {
     relativeTarget: number;
     clockTarget: number;
     desired: number;
-    /** The effective autoSubmitSchedule read for the targets; callers reuse it instead of re-reading. */
-    schedule: FillSchedule;
+    /**
+     * The overall relative target when it is exactly known: null while an unsatisfied unknown row of a dynamic schedule
+     * could still raise it. `relativeTarget` is the proved lower authorization.
+     */
+    exactTarget: number | null;
+    /** The schedule the targets were read from, as resolved rows; callers reuse it instead of re-reading. */
+    resolved: ResolvedSubmitSchedule;
+    /** Whether there is a schedule to act on at all: rows of a phase's dynamic schedule, or a non-empty literal one. */
+    hasSchedule: boolean;
     activeClockTimes: string[];
     nextClockStart: number | null;
     timezone: string;
@@ -32,15 +36,42 @@ type AutoSubmitTrigger = {
 type FinalAuthorization = {
     trigger: AutoSubmitTrigger;
     authorizer: 'clock' | 'relative' | 'both';
-    schedule: Parameters<typeof getScheduleShift>[0];
+    resolved: ResolvedSubmitSchedule;
     desired: number;
     slotsRemaining: number;
 };
 
 /**
+ * The submit schedule that applies to a challenge, as resolved rows: the one its scenario phase published (a dynamic
+ * schedule replaces the literal setting for as long as the phase holds it), else the literal autoSubmitSchedule setting
+ * lowered against the challenge's close time. A phase whose published settings cannot be read has no schedule: nothing is
+ * authorized on it.
+ */
+const resolveSubmitSchedule = (
+    challenge: Challenge,
+    challengeId: string,
+    settings: FillSettings,
+): { resolved: ResolvedSubmitSchedule; hasSchedule: boolean } => {
+    const phase = settings.getPhaseSchedules?.(challengeId);
+    if (phase?.kind === 'unavailable') {
+        return { resolved: { alignment: 'end', rows: [] }, hasSchedule: false };
+    }
+    if (phase?.kind === 'resolved' && phase.schedules.submit) {
+        return { resolved: phase.schedules.submit, hasSchedule: true };
+    }
+    const schedule = settings.getEffectiveSetting('autoSubmitSchedule', challengeId);
+    return {
+        resolved: lowerSubmitSchedule(Array.isArray(schedule) ? schedule : [], Number(challenge.close_time)),
+        hasSchedule: Array.isArray(schedule) && schedule.length > 0,
+    };
+};
+
+/**
  * What the schedule and any active clock window demand for the challenge at
  * `now`: `desired` is the higher of the two targets, so both the staggered
- * fill and the emergency fill's schedule-progress check read one number.
+ * fill and the emergency fill's schedule-progress check read one number. The
+ * relative target is the largest count a known due row asks for (an unknown row
+ * never raises it; `exactTarget` says when one could).
  * Reads only `settings` (not the whole deps) so callers that hold the facade
  * directly can reuse it.
  */
@@ -50,19 +81,22 @@ const resolveAutoSubmitTrigger = (
     now: number,
     settings: FillSettings,
 ): AutoSubmitTrigger => {
-    const schedule = settings.getEffectiveSetting('autoSubmitSchedule', challengeId);
-    const closeTime = Number(challenge.close_time);
-    const relativeTarget =
-        Array.isArray(schedule) && Number.isFinite(closeTime)
-            ? resolveScheduleTarget(schedule, closeTime - now, challenge.max_photo_submits)
-            : 0;
+    const { resolved, hasSchedule } = resolveSubmitSchedule(challenge, challengeId, settings);
+    const { authorizedCount: relativeTarget, exactTarget } = authorizeSubmit(
+        resolved,
+        now,
+        getEntries(challenge).length,
+        challenge.max_photo_submits,
+    );
     const clockTimes = settings.getEffectiveSetting('autoSubmitTime', challengeId);
     if (!Array.isArray(clockTimes) || clockTimes.length === 0) {
         return {
             relativeTarget,
             clockTarget: 0,
             desired: relativeTarget,
-            schedule,
+            exactTarget,
+            resolved,
+            hasSchedule,
             activeClockTimes: [],
             nextClockStart: null,
             timezone: 'UTC',
@@ -80,7 +114,9 @@ const resolveAutoSubmitTrigger = (
         relativeTarget,
         clockTarget,
         desired: Math.max(relativeTarget, clockTarget),
-        schedule,
+        exactTarget,
+        resolved,
+        hasSchedule,
         activeClockTimes: clockState.activeTimes,
         nextClockStart: clockState.nextStart,
         timezone,
@@ -134,7 +170,7 @@ const createFinalEligibility =
         finalAuthorization.trigger = current;
         finalAuthorization.authorizer =
             relativeDue && clockAuthorizes ? 'both' : clockAuthorizes ? 'clock' : 'relative';
-        finalAuthorization.schedule = deps.settings.getEffectiveSetting('autoSubmitSchedule', challengeId);
+        finalAuthorization.resolved = current.resolved;
         finalAuthorization.desired =
             finalAuthorization.authorizer === 'clock' ? current.desired : current.relativeTarget;
         finalAuthorization.slotsRemaining = getSlotsRemaining(challenge);
@@ -143,21 +179,21 @@ const createFinalEligibility =
 
 const logAutoSubmitSuccess = ({
     challenge,
-    schedule,
+    resolved,
     desired,
     slotsRemaining,
     finalAuthorization,
     logger,
 }: {
     challenge: Challenge;
-    schedule: Parameters<typeof getScheduleShift>[0];
+    resolved: ResolvedSubmitSchedule;
     desired: number;
     slotsRemaining: number;
     finalAuthorization: FinalAuthorization;
     logger: SettingsFillDeps['logger'];
 }): void => {
     const maxSubmits = challenge.max_photo_submits;
-    const shift = getScheduleShift(schedule, maxSubmits);
+    const shift = submitShift(resolved, maxSubmits);
     const shiftNote =
         (finalAuthorization.authorizer === 'relative' || finalAuthorization.authorizer === 'both') && shift > 0
             ? `; ${maxSubmits}-image challenge — the target of ${desired} entries follows the Image ${desired + shift} time`
@@ -214,8 +250,8 @@ const resolveAutoSubmitDue = (challenge: Challenge, now: number, deps: SettingsF
     // schedule to act on — a deliberate opt-out state the GUI editor warns about.
     // The trigger carries the schedule it read, so nothing here re-reads it.
     const trigger = resolveAutoSubmitTrigger(challenge, String(challengeId), now, settings);
-    const { schedule } = trigger;
-    if ((!Array.isArray(schedule) || schedule.length === 0) && trigger.clockTarget === 0) {
+    const { resolved } = trigger;
+    if (!trigger.hasSchedule && trigger.clockTarget === 0) {
         return { due: false, status: 'no-schedule' };
     }
 
@@ -227,11 +263,11 @@ const resolveAutoSubmitDue = (challenge: Challenge, now: number, deps: SettingsF
         // builds — see makeFallbackLogger) so a real user has a trace for why
         // those slots stay empty until emergency fill.
         const max = finiteOr(challenge.max_photo_submits, 0);
-        // Highest target the schedule can ever demand = the target as time
-        // runs out (secondsRemaining → 0 matches every row), so reuse
-        // resolveScheduleTarget instead of re-deriving the clamp-and-max here.
-        const maxTarget = resolveScheduleTarget(schedule, 0, max);
+        // Highest target the schedule can ever demand, over its resolved rows. A schedule with an unknown row left to satisfy
+        // is not known to top out: that row could still raise the target.
+        const maxTarget = submitCeiling(resolved, max);
         if (
+            trigger.exactTarget !== null &&
             trigger.relativeTarget >= trigger.clockTarget &&
             desired > 0 &&
             desired === maxTarget &&
@@ -247,7 +283,7 @@ const resolveAutoSubmitDue = (challenge: Challenge, now: number, deps: SettingsF
         }
         return { due: false, status: 'skipped' };
     }
-    return { due: true, authorization: { trigger, authorizer: 'relative', schedule, desired, slotsRemaining } };
+    return { due: true, authorization: { trigger, authorizer: 'relative', resolved, desired, slotsRemaining } };
 };
 
 /**
@@ -325,7 +361,7 @@ const maybeAutoFillChallenge = async (
     reflectNewEntry(challenge, attempt.picked[0]);
     logAutoSubmitSuccess({
         challenge,
-        schedule: finalAuthorization.schedule,
+        resolved: finalAuthorization.resolved,
         desired: finalAuthorization.desired,
         slotsRemaining: finalAuthorization.slotsRemaining,
         finalAuthorization,

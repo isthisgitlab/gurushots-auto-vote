@@ -27,12 +27,44 @@ import type { rankVisually as RankVisually } from '../services/visionVerifier';
 import type { getSemanticScores as GetSemanticScores } from '../services/semantic';
 import type { StatsBudget } from '../services/photoStats';
 
+/**
+ * One resolved schedule row: known (with its instant or window), confirmed absent (inactive), or unknown (the evidence
+ * could not tell; `reason` says why). Literal schedule settings and a phase's dynamic schedules are both lowered into
+ * these; execution, deadline ordering, status, the final live recheck and the next wake all read them.
+ */
+type RowState<Known extends object> =
+    | ({ state: 'known' } & Known)
+    | { state: 'absent'; reason: string }
+    | { state: 'unknown'; reason: string };
+
+/** A submit row: the photo count it asks for (cumulative) and the instant (unix seconds) it is due by. */
+export type ResolvedSubmitRow = { count: number } & RowState<{ at: number }>;
+
+export type ResolvedSubmitSchedule = { alignment: 'end' | 'absolute'; rows: ResolvedSubmitRow[] };
+
+/** A vote or pause row: a window from `start` to `end` (unix seconds, both inclusive). */
+export type ResolvedWindowRow = RowState<{ start: number; end: number }>;
+
+type ResolvedWindowSchedule = { rows: ResolvedWindowRow[] };
+
+/** What a phase's dynamic schedules resolved to; a kind the phase does not carry is left out. */
+export type ResolvedSchedules = {
+    submit?: ResolvedSubmitSchedule;
+    vote?: ResolvedWindowSchedule;
+    pause?: ResolvedWindowSchedule;
+};
+
 /** The logger surface the fill paths use: the facade module, or a stand-in with the same two members. */
 export type FillLogger = Pick<typeof LoggerModule, 'withCategory' | 'challengeTag'>;
 
 /** The settings facade surface the fill paths read. */
 export type FillSettings = Pick<typeof SettingsModule, 'getEffectiveSetting' | 'getEffectiveTagSetting'> &
-    Partial<Pick<typeof SettingsModule, 'getEffectiveIgnoreTitleWords' | 'getSetting' | 'getChosenPoolView'>>;
+    Partial<
+        Pick<
+            typeof SettingsModule,
+            'getEffectiveIgnoreTitleWords' | 'getSetting' | 'getChosenPoolView' | 'getPhaseSchedules'
+        >
+    >;
 
 /** The endpoints and seams the candidate fetch and ranking read. */
 export interface RankDeps {

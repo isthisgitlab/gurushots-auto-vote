@@ -8,7 +8,9 @@ import { parseDuration } from '../../scenarios/duration';
 import * as vocabulary from '../../scenarios/vocabulary';
 import { MAX_PROFILE_NAME_LENGTH, RESERVED_PROFILE_NAMES } from '../profileStore';
 
-import type { ScenarioCondition, ScenarioExpr } from '../../types/scenario';
+import { MAX_SCHEDULED_FILL_ENTRIES } from '../limits';
+
+import type { ScenarioCondition, ScenarioExpr, ScenarioSchedules } from '../../types/scenario';
 
 const { SCENARIO_CAPS } = vocabulary;
 
@@ -338,11 +340,38 @@ const rule = z.strictObject({
     do: z.array(action).min(1, 'A rule needs at least one action').max(SCENARIO_CAPS.actionsPerRule),
 });
 
+/** Most rows a submit schedule holds: one per cumulative photo count, 1 to 4. */
+const SUBMIT_SCHEDULE_ROWS = 4;
+
+const windowSchedule = z.strictObject({
+    rows: z
+        .array(z.strictObject({ at: expression, duration: expression }))
+        .min(1)
+        .max(MAX_SCHEDULED_FILL_ENTRIES),
+});
+
+// What the phase's schedules are worked out from is checked with the document (semantics.ts); the shape fixes the fields.
+const schedules: z.ZodType<ScenarioSchedules> = z.strictObject({
+    submit: z
+        .strictObject({
+            alignment: oneOf(['end', 'absolute']),
+            rows: z
+                .array(z.strictObject({ count: z.number().int().min(1).max(SUBMIT_SCHEDULE_ROWS), at: expression }))
+                .min(1)
+                .max(SUBMIT_SCHEDULE_ROWS),
+        })
+        .optional(),
+    vote: windowSchedule.optional(),
+    pause: windowSchedule.optional(),
+});
+
 const phase = z.strictObject({
     settings: z.record(z.string(), z.unknown()).optional(),
     // Settings whose value is worked out when the phase is published, one typed expression per setting key. Which keys
     // may be bound, and what each expression may read, is checked with the document (semantics.ts).
     bindings: z.record(z.string(), expression).optional(),
+    // Dynamic submit, vote and pause schedules, worked out like bindings when the phase is published.
+    schedules: schedules.optional(),
     // The name of one saved challenge profile the phase applies below its own settings. Whether it exists is a runtime
     // question: a profile can be saved after the scenario.
     profile: z.string().trim().min(1, 'Name a profile').max(MAX_PROFILE_NAME_LENGTH).optional(),

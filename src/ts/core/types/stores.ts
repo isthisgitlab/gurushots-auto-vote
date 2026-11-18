@@ -5,6 +5,7 @@
  */
 
 import type { EntryEnteredTime } from './gurushots';
+import type { ResolvedSchedules } from './autoFill';
 
 /** What `updateThrough` came to: saved, left alone because `update` declined (answered null), or not saved. */
 export type ThroughResult = 'saved' | 'aborted' | 'failed';
@@ -167,6 +168,8 @@ export interface ScenarioPublication {
     bindings: Record<string, unknown>;
     /** The profile the phase selected, or null. */
     profile: string | null;
+    /** The phase's dynamic schedules, resolved from the evidence observed at `observedAt` (absent: the phase has none). */
+    schedules?: ResolvedSchedules;
     /**
      * Set on the installation's publication only: the installation generation (the owner fence) it was prepared under.
      * A publication made under another generation is not read.

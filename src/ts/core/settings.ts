@@ -204,10 +204,13 @@ export const setPhotoPool = entryPins.setPhotoPool;
 export const deletePhotoPool = scenarios.deletePhotoPool;
 export const renamePhotoPool = scenarios.renamePhotoPool;
 export const getChosenPoolView = challengeOverrides.getChosenPoolView;
+// What a challenge's phase published for its dynamic submit, vote and pause schedules (none, resolved, or unavailable).
+export const getPhaseSchedules = challengeOverrides.getPhaseSchedules;
 export const getPoolViewFor = challengeOverrides.getPoolViewFor;
 export const recordPhotoPoolEvents = challengeOverrides.recordPhotoPoolEvents;
 export const reconcilePhotoPool = challengeOverrides.reconcilePhotoPool;
 export type PhotoPoolView = challengeOverrides.PhotoPoolView;
+export type PhaseSchedulesRead = challengeOverrides.PhaseSchedulesRead;
 // Cleanup functions
 export const cleanupStaleChallengeSetting = staleChallengeCleanup.cleanupStaleChallengeSetting;
 // What the last complete post-close pass found in the completed listing (null: forget it), for cleanup to go by.

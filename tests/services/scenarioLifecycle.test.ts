@@ -1732,3 +1732,168 @@ describe('pause and handoff after the close', () => {
         expect(settings.requestScenarioHandoff).toHaveBeenCalledWith('9', 'Next plan', 2, undefined);
     });
 });
+
+describe('a count-1 absolute submit row joins the candidate once it is due', () => {
+    type Row =
+        | { count: number; state: 'known'; at: number }
+        | { count: number; state: 'absent' | 'unknown'; reason: string };
+    const admission = (alignment: 'absolute' | 'end' = 'absolute', counts = [1]) =>
+        plan({
+            main: {
+                schedules: {
+                    submit: {
+                        alignment,
+                        rows: counts.map((count) => ({ count, at: { kind: 'fact', name: 'challenge.end' } })),
+                    },
+                },
+            },
+        });
+    /** What the owner publishes for the phase: the rows its evidence resolved to. */
+    const resolved = (rows: Row[], alignment: 'absolute' | 'end' = 'absolute') =>
+        settings.prepareScenarioSnapshot.mockReturnValue({
+            ok: true,
+            snapshot: {
+                publication: {
+                    revision: 1,
+                    documentFingerprint: 'f',
+                    phase: 'main',
+                    phaseEnteredAt: NOW,
+                    observedAt: NOW,
+                    validUntil: null,
+                    bindings: {},
+                    profile: null,
+                    schedules: { submit: { alignment, rows } },
+                },
+                readSetting: () => ({ state: 'unknown', reason: 'test', dependencies: [] }),
+            },
+        });
+    const due: Row = { count: 1, state: 'known', at: NOW - 10 };
+    const arrange = (doc: ScenarioDocument = admission()) => {
+        scenarios.Plan = doc;
+        assigned['7'] = 'Plan';
+    };
+
+    test('a due known row joins the candidate while the inherited Auto Join is off, once, through the join action’s path', async () => {
+        arrange();
+        resolved([due]);
+        const result = await passOver([candidate()]);
+        expect(result).toEqual({ ran: true, joined: 1, results: [{ id: 7, status: 'joined' }] });
+        expect(performJoin).toHaveBeenCalledTimes(1);
+        expect(record().fired['@admission']).toBeDefined();
+        expect(record().lastAction).toEqual(
+            expect.objectContaining({ ruleId: '@admission', action: 'join', outcome: 'done' }),
+        );
+        expect(operations.has('join', '7')).toBe(true);
+    });
+
+    test('a row that is not yet due, unknown or absent does not join and makes no join call', async () => {
+        for (const row of [
+            { count: 1, state: 'known', at: NOW + 600 } as Row,
+            { count: 1, state: 'unknown', reason: 'boost-timeout-malformed' } as Row,
+            { count: 1, state: 'absent', reason: 'not-present' } as Row,
+        ]) {
+            arrange();
+            resolved([row]);
+            const result = await passOver([candidate()]);
+            expect(result.results).toEqual([{ id: 7, status: 'skipped:autojoin-off' }]);
+            expect(performJoin).not.toHaveBeenCalled();
+        }
+    });
+
+    test('only a count-1 row asks for the join: a due row of another count does not', async () => {
+        arrange(admission('absolute', [1, 2]));
+        resolved([
+            { count: 2, state: 'known', at: NOW - 10 },
+            { count: 1, state: 'unknown', reason: 'r' },
+        ]);
+        expect((await passOver([candidate()])).results).toEqual([{ id: 7, status: 'skipped:autojoin-off' }]);
+        expect(performJoin).not.toHaveBeenCalled();
+    });
+
+    test('an end-aligned schedule never asks for it: the first photo is the join itself', async () => {
+        arrange(admission('end'));
+        resolved([due], 'end');
+        // no phase asks for a pre-join step, so the pass is not even run for it
+        await expect(passOver([candidate()])).resolves.toEqual({ ran: false, joined: 0, results: [] });
+        expect(performJoin).not.toHaveBeenCalled();
+    });
+
+    test('a phase with no such row keeps its behaviour: an absolute schedule of other counts runs no pre-join step', async () => {
+        arrange(admission('absolute', [2, 3]));
+        resolved([{ count: 2, state: 'known', at: NOW - 10 }]);
+        await expect(passOver([candidate()])).resolves.toEqual({ ran: false, joined: 0, results: [] });
+        config.autoJoin = true;
+        // the Auto Join switch decides it, as today
+        expect((await passOver([candidate()])).results).toEqual([{ id: 7, status: 'joined' }]);
+    });
+
+    test('a join a rule of the document already made is not made again by the schedule', async () => {
+        const doc = admission();
+        doc.phases.main.rules = [invalid(rule('r1', [{ type: 'join' }], { stages: ['preJoin'] }))];
+        arrange(doc);
+        resolved([due]);
+        const result = await passOver([candidate()]);
+        expect(result.results).toEqual([{ id: 7, status: 'joined' }]);
+        expect(performJoin).toHaveBeenCalledTimes(1);
+        expect(record().fired['@admission']).toBeUndefined();
+    });
+
+    test('a paid join goes through the same decision and performJoin, at the price it was decided at', async () => {
+        arrange();
+        resolved([due]);
+        const result = await passOver([candidate({ join_coins: 80 })]);
+        expect(result.results).toEqual([{ id: 7, status: 'joined' }]);
+        expect(performJoin).toHaveBeenCalledWith(
+            expect.objectContaining({ id: 7 }),
+            'tok',
+            expect.anything(),
+            80,
+            expect.objectContaining({ submitOnly: false, coinsBefore: 500, priceCeiling: 80 }),
+        );
+    });
+
+    test('the scenario’s coin limit and the paid cap apply as they do to a join action without a price limit', async () => {
+        arrange({ ...admission(), limits: { coins: 50 } });
+        resolved([due]);
+        expect((await passOver([candidate({ join_coins: 80 })])).results).toEqual([
+            { id: 7, status: 'skipped:over-per-challenge-cap' },
+        ]);
+        expect(performJoin).not.toHaveBeenCalled();
+        config.autoJoinMaxCoins = 0;
+        arrange(admission());
+        ledger = createMemoryStateLedger();
+        expect((await passOver([candidate({ join_coins: 80 })])).results).toEqual([
+            { id: 7, status: 'skipped:paid-disabled' },
+        ]);
+    });
+
+    test('the cycle’s coin budget is shared with the other joins of the pass', async () => {
+        arrange();
+        assigned['8'] = 'Plan';
+        resolved([due]);
+        config.autoJoinMaxCoins = 250;
+        performJoin.mockResolvedValue({ status: 'joined', charged: 200 });
+        const result = await passOver([candidate({ join_coins: 200 }), candidate({ id: 8, join_coins: 150 })]);
+        expect(result.results).toEqual([
+            { id: 7, status: 'joined' },
+            { id: 8, status: 'skipped:over-cycle-budget' },
+        ]);
+        expect(performJoin).toHaveBeenCalledTimes(1);
+    });
+
+    test('a candidate listed twice is joined once; a refused join is tried again next pass', async () => {
+        arrange();
+        resolved([due]);
+        const twice = await passOver([candidate(), candidate()]);
+        expect(twice.results.map((item) => item.status)).toEqual(['joined', 'skipped:done-this-pass']);
+        expect(performJoin).toHaveBeenCalledTimes(1);
+
+        ledger = createMemoryStateLedger();
+        performJoin.mockReset();
+        performJoin.mockResolvedValueOnce({ status: 'skipped-no-photo', charged: 0 });
+        await passOver([candidate()]);
+        performJoin.mockResolvedValueOnce({ status: 'joined', charged: 0 });
+        expect((await passOver([candidate()])).results).toEqual([{ id: 7, status: 'joined' }]);
+        expect(performJoin).toHaveBeenCalledTimes(2);
+    });
+});

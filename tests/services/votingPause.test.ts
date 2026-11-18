@@ -472,3 +472,91 @@ describe('voting pause is independent of scheduled fill', () => {
         expect(state).toEqual({ active: true, inWindow: true, replaces: true });
     });
 });
+
+describe('a scenario phase’s dynamic windows', () => {
+    type Rows = Array<{ state: 'known'; start: number; end: number } | { state: 'absent' | 'unknown'; reason: string }>;
+    const phase = (kind: 'pause' | 'vote', rows: Rows) =>
+        invalid<ReturnType<typeof settingsModule.getPhaseSchedules>>({
+            kind: 'resolved',
+            schedules: { [kind]: { rows } },
+        });
+    const open = { state: 'known', start: NOW - 60, end: NOW + 60 } as const;
+    const over = { state: 'known', start: NOW - 7200, end: NOW - 3600 } as const;
+    const unknown = { state: 'unknown', reason: 'boost-timeout-malformed' } as const;
+    const absent = { state: 'absent', reason: 'not-present' } as const;
+
+    const pauseState = (read: ReturnType<typeof settingsModule.getPhaseSchedules>) => {
+        mockSettings({ useVotingPause: true, votingPauseBeforeEnd: [], votingPauseDurationMinutes: 240 });
+        settings.getPhaseSchedules.mockReturnValue(read);
+        return VotingLogic.getVotingPauseState(buildChallenge(), '777', NOW);
+    };
+
+    test('a window that holds now is active and in window; an over window is active only', () => {
+        expect(pauseState(phase('pause', [open]))).toEqual({ active: true, inWindow: true });
+        expect(pauseState(phase('pause', [over]))).toEqual({ active: true, inWindow: false });
+        // the window ends inclusively
+        expect(pauseState(phase('pause', [{ state: 'known', start: NOW - 10, end: NOW }]))).toEqual({
+            active: true,
+            inWindow: true,
+        });
+    });
+
+    test('an absent row is no window at all', () => {
+        expect(pauseState(phase('pause', [absent]))).toEqual({ active: false, inWindow: false });
+    });
+
+    test('an unknown row is unproven, beside a clear window or an open one', () => {
+        expect(pauseState(phase('pause', [unknown]))).toEqual({ active: false, inWindow: false, unproven: true });
+        expect(pauseState(phase('pause', [over, unknown]))).toEqual({ active: true, inWindow: false, unproven: true });
+        expect(pauseState(phase('pause', [open, unknown]))).toEqual({ active: true, inWindow: true, unproven: true });
+    });
+
+    test('published settings that cannot be read leave the pause unproven', () => {
+        expect(pauseState(invalid({ kind: 'unavailable', reason: 'expired' }))).toEqual({
+            active: false,
+            inWindow: false,
+            unproven: true,
+        });
+    });
+
+    test('a phase with no pause of its own keeps the literal one', () => {
+        for (const read of [
+            phase('vote', [open]),
+            invalid<ReturnType<typeof settingsModule.getPhaseSchedules>>({ kind: 'none' }),
+        ]) {
+            mockSettings({ useVotingPause: true, votingPauseBeforeEnd: [7200], votingPauseDurationMinutes: 240 });
+            settings.getPhaseSchedules.mockReturnValue(read);
+            expect(VotingLogic.getVotingPauseState(buildChallenge(), '777', NOW)).toEqual({
+                active: true,
+                inWindow: true,
+            });
+        }
+    });
+
+    test('the pause switch still applies: with it off a dynamic pause pauses nothing', () => {
+        mockSettings({ useVotingPause: false });
+        settings.getPhaseSchedules.mockReturnValue(phase('pause', [open]));
+        expect(VotingLogic.getVotingPauseState(buildChallenge(), '777', NOW)).toEqual({
+            active: false,
+            inWindow: false,
+        });
+    });
+
+    test('an unproven pause blocks automatic voting and keeps a new entry’s vote for later; a manual vote is not refused', () => {
+        mockSettings({ useVotingPause: true, exposure: 100 });
+        settings.getPhaseSchedules.mockReturnValue(phase('pause', [unknown]));
+        const decision = VotingLogic.evaluateVotingDecision(buildChallenge({ exposureFactor: 10 }), NOW);
+        expect(decision).toMatchObject({ shouldVote: false, blocked: true, preservesNewEntryTrigger: true });
+        expect(
+            VotingLogic.evaluateManualVotingDecision(buildChallenge({ exposureFactor: 10 }), NOW, 't'),
+        ).toMatchObject({
+            shouldAllowVoting: true,
+        });
+    });
+
+    test('a known clear pause beside no unknown row lets the ordinary rules vote', () => {
+        mockSettings({ useVotingPause: true, exposure: 100 });
+        settings.getPhaseSchedules.mockReturnValue(phase('pause', [over]));
+        expect(VotingLogic.evaluateVotingDecision(buildChallenge({ exposureFactor: 10 }), NOW).shouldVote).toBe(true);
+    });
+});

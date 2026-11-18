@@ -1080,3 +1080,220 @@ describe('validateScenario — an installation setting outside the schema, by it
         jest.dontMock('../../src/ts/core/settings/scenarioCapabilities');
     });
 });
+
+describe('validateScenario — a phase’s dynamic schedules', () => {
+    const instant = { kind: 'fact', name: 'challenge.end' };
+    const duration = { kind: 'literal', value: 1, quantity: 'duration', unit: 'hours' };
+    const submitRows = (count: number) =>
+        Array.from({ length: count }, (_unused, index) => ({ count: Math.min(index + 1, 4), at: instant }));
+    const windowRows = (count: number) => Array.from({ length: count }, () => ({ at: instant, duration }));
+    const withSchedules = (schedules: unknown) => doc({ phases: { main: { schedules } } });
+
+    test('a submit, a vote and a pause schedule validate, and are kept as written', () => {
+        const schedules = {
+            submit: {
+                alignment: 'end',
+                rows: [
+                    { count: 2, at: instant },
+                    { count: 4, at: instant },
+                ],
+            },
+            vote: { rows: windowRows(1) },
+            pause: { rows: windowRows(6) },
+        };
+        const result = validate(withSchedules(schedules));
+        expect(result.ok).toBe(true);
+        expect((result as Accepted).scenario.phases.main.schedules).toEqual(schedules);
+    });
+
+    test('a phase may carry any one of them, or an empty set', () => {
+        for (const schedules of [{}, { submit: { alignment: 'absolute', rows: submitRows(1) } }]) {
+            expect(validate(withSchedules(schedules)).ok).toBe(true);
+        }
+    });
+
+    test('a count is a whole number from 1 to 4, and a submit schedule has 1 to 4 rows', () => {
+        for (const rows of [
+            [{ count: 0, at: instant }],
+            [{ count: 5, at: instant }],
+            [{ count: 1.5, at: instant }],
+            [],
+            submitRows(5),
+        ]) {
+            expect(validate(withSchedules({ submit: { alignment: 'end', rows } })).ok).toBe(false);
+        }
+        expect(validate(withSchedules({ submit: { alignment: 'end', rows: submitRows(4) } })).ok).toBe(true);
+    });
+
+    test('a window schedule has 1 to 6 rows, each with an instant and a duration', () => {
+        for (const kind of ['vote', 'pause']) {
+            expect(validate(withSchedules({ [kind]: { rows: [] } })).ok).toBe(false);
+            expect(validate(withSchedules({ [kind]: { rows: windowRows(7) } })).ok).toBe(false);
+            expect(validate(withSchedules({ [kind]: { rows: [{ at: instant }] } })).ok).toBe(false);
+            expect(validate(withSchedules({ [kind]: { rows: [{ duration }] } })).ok).toBe(false);
+        }
+    });
+
+    test('every object is strict, and the alignment is one of the two', () => {
+        for (const schedules of [
+            { other: { rows: windowRows(1) } },
+            { submit: { alignment: 'start', rows: submitRows(1) } },
+            { submit: { rows: submitRows(1) } },
+            { submit: { alignment: 'end', rows: submitRows(1), extra: 1 } },
+            { submit: { alignment: 'end', rows: [{ count: 2, at: instant, extra: 1 }] } },
+            { vote: { rows: windowRows(1), extra: 1 } },
+        ]) {
+            expect(validate(withSchedules(schedules)).ok).toBe(false);
+        }
+    });
+
+    test('an expression that is not one is refused with its path', () => {
+        const refused = issuesOf(
+            withSchedules({ submit: { alignment: 'end', rows: [{ count: 2, at: { kind: 'nope' } }] } }),
+        );
+        expect(refused.some((issue) => issue.path.startsWith('phases.main.schedules.submit.rows'))).toBe(true);
+    });
+
+    describe('what a schedule may be set beside, and what its expressions may be', () => {
+        const submit = { alignment: 'end', rows: [{ count: 2, at: instant }] };
+        const issueAt = (input: unknown, path: string) => issuesOf(input).filter((issue) => issue.path === path);
+
+        test.each([
+            ['submit', { submit }, 'autoSubmitSchedule', [{ count: 2, seconds: 600 }]],
+            ['vote', { vote: { rows: windowRows(1) } }, 'scheduledFillTime', ['12:00']],
+            ['vote', { vote: { rows: windowRows(1) } }, 'scheduledFillBeforeEnd', [600]],
+            ['vote', { vote: { rows: windowRows(1) } }, 'scheduledFillWindowMinutes', 30],
+            ['pause', { pause: { rows: windowRows(1) } }, 'votingPauseTime', ['01:00']],
+            ['pause', { pause: { rows: windowRows(1) } }, 'votingPauseBeforeEnd', [600]],
+            ['pause', { pause: { rows: windowRows(1) } }, 'votingPauseDurationMinutes', 60],
+        ])('a %s schedule and a literal %s are refused together', (_kind, schedules, key, value) => {
+            expect(
+                issueAt(
+                    doc({ phases: { main: { schedules, settings: { [key]: value } } } }),
+                    `phases.main.settings.${key}`,
+                ),
+            ).toEqual([
+                {
+                    path: `phases.main.settings.${key}`,
+                    message: `A phase schedule replaces ${key}: remove one of them`,
+                },
+            ]);
+        });
+
+        test('a schedule and a binding of the setting it replaces are refused together', () => {
+            const bound = { kind: 'literal', value: 600, quantity: 'duration', unit: 'seconds' };
+            expect(
+                issueAt(
+                    doc({ phases: { main: { schedules: { submit }, bindings: { autoSubmitSchedule: bound } } } }),
+                    'phases.main.bindings.autoSubmitSchedule',
+                ),
+            ).toContainEqual({
+                path: 'phases.main.bindings.autoSubmitSchedule',
+                message: 'A phase schedule replaces autoSubmitSchedule: remove one of them',
+            });
+        });
+
+        test('a schedule beside settings it does not replace is accepted', () => {
+            expect(
+                validate(
+                    doc({ phases: { main: { schedules: { submit }, settings: { scheduledFillTime: ['12:00'] } } } }),
+                ).ok,
+            ).toBe(true);
+        });
+
+        test('a submit count appears once; equal deadlines are fine', () => {
+            const twice = {
+                alignment: 'end',
+                rows: [
+                    { count: 2, at: instant },
+                    { count: 2, at: instant },
+                ],
+            };
+            expect(issueAt(withSchedules({ submit: twice }), 'phases.main.schedules.submit.rows')).toEqual([
+                { path: 'phases.main.schedules.submit.rows', message: 'Each submit count can appear only once' },
+            ]);
+            const equal = {
+                alignment: 'end',
+                rows: [
+                    { count: 2, at: instant },
+                    { count: 3, at: instant },
+                ],
+            };
+            expect(validate(withSchedules({ submit: equal })).ok).toBe(true);
+        });
+
+        test('an instant is required for `at`, a duration for `duration`', () => {
+            const wrongAt = { kind: 'literal', value: 5, quantity: 'duration', unit: 'hours' };
+            const wrongDuration = { kind: 'literal', value: 5, quantity: 'instant' };
+            expect(
+                issueAt(
+                    withSchedules({ submit: { alignment: 'end', rows: [{ count: 2, at: wrongAt }] } }),
+                    'phases.main.schedules.submit.rows[0].at',
+                ),
+            ).toEqual([{ path: 'phases.main.schedules.submit.rows[0].at', message: 'at needs an instant' }]);
+            for (const kind of ['vote', 'pause']) {
+                const refused = issuesOf(
+                    withSchedules({ [kind]: { rows: [{ at: wrongAt, duration: wrongDuration }] } }),
+                );
+                expect(refused).toEqual([
+                    { path: `phases.main.schedules.${kind}.rows[0].at`, message: 'at needs an instant' },
+                    { path: `phases.main.schedules.${kind}.rows[0].duration`, message: 'duration needs a duration' },
+                ]);
+            }
+        });
+
+        test('an expression that is itself unsound is refused for that, not as a wrong type', () => {
+            const unsound = { kind: 'offset', from: instant, by: instant, direction: 'before' };
+            const refused = issuesOf(
+                withSchedules({ submit: { alignment: 'end', rows: [{ count: 2, at: unsound }] } }),
+            );
+            expect(refused.length).toBeGreaterThan(0);
+            expect(refused.some((issue) => issue.message === 'at needs an instant')).toBe(false);
+        });
+
+        test('a policy fact or an effective-view setting is refused with the bindings’ own message', () => {
+            const messagesAt = (expr: unknown) =>
+                issueAt(
+                    withSchedules({ submit: { alignment: 'end', rows: [{ count: 2, at: expr }] } }),
+                    'phases.main.schedules.submit.rows[0].at',
+                ).map((issue) => issue.message);
+            expect(messagesAt({ kind: 'fact', name: 'photos.hasEligible' })).toEqual(
+                expect.arrayContaining([
+                    'photos.hasEligible depends on the effective settings: a binding cannot read it',
+                ]),
+            );
+            expect(messagesAt({ kind: 'setting', key: 'exposure', view: 'effective' })).toEqual(
+                expect.arrayContaining(['exposure is read with the phase applied: a binding reads base settings only']),
+            );
+            // the base view is allowed
+            expect(messagesAt({ kind: 'setting', key: 'exposure', view: 'base' })).not.toEqual(
+                expect.arrayContaining([expect.stringContaining('base settings only')]),
+            );
+        });
+
+        test('a memory slot a schedule reads must be remembered by some action', () => {
+            const fromMemory = { kind: 'fact', name: 'entry.age', select: { by: 'memory', slot: 'kept' } };
+            expect(
+                issuesOf(withSchedules({ pause: { rows: [{ at: instant, duration: fromMemory }] } })).some(
+                    (issue) => issue.message === 'Memory slot "kept" is never remembered by any action',
+                ),
+            ).toBe(true);
+            // ... and a submit row's instant is read the same way
+            const instantFromMemory = { kind: 'offset', from: instant, by: fromMemory, direction: 'before' };
+            expect(
+                issuesOf(
+                    withSchedules({ submit: { alignment: 'end', rows: [{ count: 2, at: instantFromMemory }] } }),
+                ).some((issue) => issue.message === 'Memory slot "kept" is never remembered by any action'),
+            ).toBe(true);
+        });
+
+        test('an installation scenario takes no schedules', () => {
+            expect(
+                issueAt(
+                    doc({ scope: 'installation', phases: { main: { schedules: { submit } } } }),
+                    'phases.main.schedules',
+                ),
+            ).toEqual([{ path: 'phases.main.schedules', message: 'schedules is for a challenge scenario' }]);
+        });
+    });
+});

@@ -9,6 +9,7 @@
 
 import * as settings from '../../settings';
 import { evaluateExpression } from '../../scenarios/expressions';
+import { evaluateSchedules } from '../autoFill/schedule';
 import type { ExpressionContext } from '../../scenarios/expressions';
 import type { FactEvidence } from '../../scenarios/facts';
 import type { ScenarioExpr } from '../../types/scenario';
@@ -83,6 +84,7 @@ type PreparedSettings = ReturnType<typeof settings.prepareScenarioSnapshot>;
 const preparedSettings = (ctx: ChallengeContext, state: ScenarioState, raw: FactEvidence): PreparedSettings => {
     const { challenge, challengeId, scenario, timezone } = ctx;
     const observedAt = nowSec();
+    const { schedules } = scenario.phases[state.phase];
     const expressions = scenario.phases[state.phase].bindings ?? {};
     return settings.prepareScenarioSnapshot(
         challengeId,
@@ -102,6 +104,8 @@ const preparedSettings = (ctx: ChallengeContext, state: ScenarioState, raw: Fact
                     Object.entries(expressions).map(([key, expr]) => [key, evaluateExpression(expr, facts)]),
                 ),
                 validUntil: nextBindingInstant(Object.values(expressions), facts, observedAt),
+                // The schedules are worked out from the same evidence, at the same moment, as the bindings.
+                ...(schedules ? { schedules: evaluateSchedules(schedules, facts) } : {}),
             };
         },
         observedAt,

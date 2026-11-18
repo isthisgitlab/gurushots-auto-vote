@@ -292,6 +292,32 @@ const sameType = (a: ExprType, b: ExprType): boolean =>
     a.kind === b.kind && (a.kind !== 'number' || (b.kind === 'number' && a.quantity === b.quantity));
 
 /**
+ * What a binding or a schedule expression may not read, as it is worked out before the phase's overlay exists: a policy fact
+ * is derived from the effective settings, and an effective setting is the overlay itself. Only for a sound expression.
+ */
+const baseOnlyIssues = (expr: ScenarioExpr, path: string): ScenarioIssue[] => {
+    const issues: ScenarioIssue[] = [];
+    const { facts, settings } = exprReferences(expr);
+    for (const { name } of facts) {
+        if (FACTS[name].classification === 'policy') {
+            issues.push({
+                path,
+                message: `${name} depends on the effective settings: a binding cannot read it`,
+            });
+        }
+    }
+    for (const reference of settings) {
+        if (reference.view === 'effective') {
+            issues.push({
+                path,
+                message: `${reference.key} is read with the phase applied: a binding reads base settings only`,
+            });
+        }
+    }
+    return issues;
+};
+
+/**
  * The issues of one binding: its key is one a challenge phase may write and is not also set literally, the expression is
  * sound and of the type the setting holds, and it reads only what a binding may. A binding is worked out before the
  * phase's overlay exists, so it may read base settings and raw facts: a policy fact is derived from the effective
@@ -321,26 +347,89 @@ const bindingIssues = (
             message: `This gives ${describeType(checked.type)}, but ${key} takes ${describeType(target)}`,
         });
     }
-    if (checked.issues.length === 0) {
-        const { facts, settings } = exprReferences(expr);
-        for (const { name } of facts) {
-            if (FACTS[name].classification === 'policy') {
-                issues.push({
-                    path,
-                    message: `${name} depends on the effective settings: a binding cannot read it`,
-                });
-            }
-        }
-        for (const reference of settings) {
-            if (reference.view === 'effective') {
-                issues.push({
-                    path,
-                    message: `${reference.key} is read with the phase applied: a binding reads base settings only`,
-                });
+    if (checked.issues.length === 0) issues.push(...baseOnlyIssues(expr, path));
+    return issues;
+};
+
+/** The settings each dynamic schedule replaces: a phase holds the schedule or these, not both. */
+const SCHEDULE_REPLACED_KEYS = {
+    submit: ['autoSubmitSchedule'],
+    vote: ['scheduledFillTime', 'scheduledFillBeforeEnd', 'scheduledFillWindowMinutes'],
+    pause: ['votingPauseTime', 'votingPauseBeforeEnd', 'votingPauseDurationMinutes'],
+} as const;
+
+/** What a schedule row's expression must give. */
+const rowIssues = (
+    expr: ScenarioExpr,
+    path: string,
+    field: 'at' | 'duration',
+    scope: ScenarioScope,
+): ScenarioIssue[] => {
+    const checked = expressionIssues(expr, path, [stageOf(scope)]);
+    if (checked.issues.length > 0) return checked.issues;
+    const wanted = field === 'at' ? 'instant' : 'duration';
+    const right = checked.type?.kind === 'number' && checked.type.quantity === wanted;
+    return [
+        ...(right ? [] : [{ path, message: `${field} needs ${field === 'at' ? 'an instant' : 'a duration'}` }]),
+        ...baseOnlyIssues(expr, path),
+    ];
+};
+
+/**
+ * The issues of a phase's dynamic schedules: none replaces a setting the phase also sets or binds, a submit count appears
+ * once, and every row expression is sound, of the type its field needs, and reads only what a binding may (base settings and
+ * raw facts). The expressions of an installation scenario are not checked: it takes no schedules at all.
+ */
+const scheduleIssues = (
+    phase: ParsedScenarioDocument['phases'][string],
+    phasePath: string,
+    scope: ScenarioScope,
+): ScenarioIssue[] => {
+    const { schedules } = phase;
+    if (!schedules || scope === 'installation') return [];
+    const issues: ScenarioIssue[] = [];
+    for (const kind of ['submit', 'vote', 'pause'] as const) {
+        if (!schedules[kind]) continue;
+        for (const key of SCHEDULE_REPLACED_KEYS[kind]) {
+            for (const holder of ['settings', 'bindings'] as const) {
+                if (Object.prototype.hasOwnProperty.call(phase[holder] ?? {}, key)) {
+                    issues.push({
+                        path: `${phasePath}.${holder}.${key}`,
+                        message: `A phase schedule replaces ${key}: remove one of them`,
+                    });
+                }
             }
         }
     }
+    const submit = schedules.submit;
+    if (submit && new Set(submit.rows.map((row) => row.count)).size !== submit.rows.length) {
+        issues.push({ path: `${phasePath}.schedules.submit.rows`, message: 'Each submit count can appear only once' });
+    }
+    submit?.rows.forEach((row, index) =>
+        issues.push(...rowIssues(row.at, `${phasePath}.schedules.submit.rows[${index}].at`, 'at', scope)),
+    );
+    for (const kind of ['vote', 'pause'] as const) {
+        schedules[kind]?.rows.forEach((row, index) => {
+            const rowPath = `${phasePath}.schedules.${kind}.rows[${index}]`;
+            issues.push(...rowIssues(row.at, `${rowPath}.at`, 'at', scope));
+            issues.push(...rowIssues(row.duration, `${rowPath}.duration`, 'duration', scope));
+        });
+    }
     return issues;
+};
+
+/** Every memory slot the expressions of a phase's schedules read. */
+const scheduleMemoryReads = (phase: ParsedScenarioDocument['phases'][string]): string[] => {
+    const { schedules } = phase;
+    const exprs = [
+        ...(schedules?.submit?.rows.map((row) => row.at) ?? []),
+        ...(['vote', 'pause'] as const).flatMap((kind) =>
+            (schedules?.[kind]?.rows ?? []).flatMap((row) => [row.at, row.duration]),
+        ),
+    ];
+    return exprs.flatMap((expr) =>
+        exprReferences(expr).facts.flatMap(({ select }) => (select?.by === 'memory' ? [select.slot] : [])),
+    );
 };
 
 /**
@@ -484,7 +573,7 @@ const phaseHoldingIssues = (
 ): ScenarioIssue[] => {
     const issues: ScenarioIssue[] = [];
     if (scope === 'installation') {
-        for (const field of ['pins', 'photoPool'] as const) {
+        for (const field of ['pins', 'photoPool', 'schedules'] as const) {
             if (phase[field] !== undefined) {
                 issues.push({ path: `${phasePath}.${field}`, message: `${field} is for a challenge scenario` });
             }
@@ -550,6 +639,8 @@ export const semanticIssues = (
             if (refused) issues.push(refused);
         }
         issues.push(...phaseHoldingIssues(phaseDoc, phasePath, scope));
+        issues.push(...scheduleIssues(phaseDoc, phasePath, scope));
+        for (const slot of scheduleMemoryReads(phaseDoc)) reads.push({ slot, path: `${phasePath}.schedules` });
         (phaseDoc.rules ?? []).forEach((item, ruleIndex) => {
             const rulePath = `${phasePath}.rules[${ruleIndex}]`;
             if (item.id) {

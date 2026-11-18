@@ -5,7 +5,7 @@
 
 import { pickPhotosForChallenge } from '../photoPicker';
 import { getEntries, getSlotsRemaining, reflectNewEntry } from './challengeState';
-import { resolveScheduleTarget } from './schedule';
+import { submitCeiling } from './schedule';
 import { resolveAutoSubmitTrigger } from './staggeredFill';
 import { runFillAttempt } from './pipeline';
 import { isManualPhotosOnly } from '../manualPhotosOnly';
@@ -138,11 +138,10 @@ const evaluateEmergencyFill = (
         const trigger = resolveAutoSubmitTrigger(challenge, String(challengeId), now, settings);
         desired = trigger.desired;
         const max = finiteOr(challenge.max_photo_submits, 0);
-        // Highest target the schedule can ever demand = the target as time runs
-        // out (secondsRemaining → 0 matches every row) — the same figure the
-        // top-out warning in resolveAutoSubmitDue uses, over the schedule the
-        // trigger already read.
-        const maxTarget = resolveScheduleTarget(trigger.schedule, 0, max);
+        // Highest target the schedule can ever demand — the same figure the
+        // top-out warning in resolveAutoSubmitDue uses, over the resolved
+        // schedule the trigger already read.
+        const maxTarget = submitCeiling(trigger.resolved, max);
         behind = getEntries(challenge).length < desired;
         // Mirrors the top-out warning's condition: the schedule is met but no
         // later row or clock window will ever raise the target, so the slots
@@ -152,6 +151,7 @@ const evaluateEmergencyFill = (
         // (behind) until the challenge is full — which is inert above — so this
         // flag can only decide a verdict in the same state the warning names.
         toppedOut =
+            trigger.exactTarget !== null &&
             desired > 0 &&
             desired >= maxTarget &&
             maxTarget < max &&
