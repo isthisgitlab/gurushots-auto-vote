@@ -916,6 +916,18 @@ describe('createAutovoteController', () => {
             await expect(captured.chainDeps!.loadSettings()).rejects.toThrow('checkFrequencyMin is unavailable');
         });
 
+        it.each(['timezone', 'checkFrequencyMin', 'checkFrequencyMax'])(
+            'rejects the capture when %s is unavailable',
+            async (unavailable) => {
+                setup();
+                jest.mocked(host.getEffectiveSetting).mockImplementation(async (key) => {
+                    if (key === unavailable) return null;
+                    return key === 'timezone' ? 'Europe/Riga' : 5;
+                });
+                await expect(captured.chainDeps!.loadSettings()).rejects.toThrow('Cadence settings are unavailable');
+            },
+        );
+
         it('an obsolete-run notice that arrives after the run ended does nothing', async () => {
             setup();
             await controller!.start();

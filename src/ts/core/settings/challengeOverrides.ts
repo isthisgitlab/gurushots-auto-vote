@@ -458,15 +458,15 @@ const getEffectiveSetting = <K extends string>(
     challengeId: ChallengeIdInput = null,
 ): SettingValueOf<K> => {
     const entry = schemaEntry(settingKey);
+    // An installation-owned setting is read from the installation's published phase (getInstallationSetting). A key a
+    // challenge's own phase can also write (a card's compact view) keeps its challenge read when a challenge is named.
+    if (_installationOwns(settingKey) && !(challengeId && entry?.perChallenge)) {
+        return getInstallationSetting(settingKey) as SettingValueOf<K>;
+    }
+
     if (!entry) {
         logger.withCategory('settings').error(`Invalid setting key: ${settingKey}`, null);
         return undefined as SettingValueOf<K>;
-    }
-
-    // An installation-owned setting is read from the installation's published phase (getInstallationSetting). A key a
-    // challenge's own phase can also write (a card's compact view) keeps its challenge read when a challenge is named.
-    if (_installationOwns(settingKey) && !(challengeId && entry.perChallenge)) {
-        return getInstallationSetting(settingKey) as SettingValueOf<K>;
     }
 
     const settings = loadSettings();

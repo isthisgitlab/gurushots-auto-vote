@@ -45,6 +45,7 @@ import { parseJsonAs, parseJsonObject } from '../helpers/parseJson';
 import { isPlainObject } from '../../src/ts/core/plainObject';
 import { buildChallenge } from '../helpers/challengeFixtures';
 import settings = require('../../src/ts/core/settings');
+import { buildThinHandlers } from '../../src/ts/core/ipc/settingsThinHandlers';
 import type * as scenarioStateStoreModule from '../../src/ts/core/scenarioStateStore';
 import type * as votingOrchestratorModule from '../../src/ts/core/services/votingOrchestrator';
 import type * as expressionsModule from '../../src/ts/core/scenarios/expressions';
@@ -627,6 +628,43 @@ describe('the installation scenario publication', () => {
         await expect(publishAs()).resolves.toBe('none');
         expect(reads).not.toHaveBeenCalled();
         reads.mockRestore();
+    });
+
+    test('cadence IPC reads saved and published values and rejects a stale publication', async () => {
+        const saved = { timezone: 'UTC', checkFrequencyMin: 3, checkFrequencyMax: 5 };
+        const published = { timezone: 'Europe/Riga', checkFrequencyMin: 7, checkFrequencyMax: 9 };
+        for (const [key, value] of Object.entries(saved)) expect(settings.setSetting(key, value)).toBe(true);
+        const handler = buildThinHandlers({ broadcastSettingsChange: () => undefined })['get-effective-setting'];
+        for (const [key, value] of Object.entries(saved))
+            await expect(handler(null, key, 'global')).resolves.toBe(value);
+
+        select(
+            'android-service',
+            accountPlan({ settings: { checkFrequencyMin: 7, checkFrequencyMax: 9 }, bindings: {} }),
+        );
+        await expect(publishAs()).resolves.toBe('published');
+        save(accountPlan({ settings: published, bindings: {} }));
+        const state = record();
+        const snapshot = settings.prepareInstallationSnapshot(
+            settings.getScenario('Account plan')!,
+            state,
+            () => ({ bound: {}, validUntil: null }),
+            1,
+            Math.floor(Date.now() / 1000),
+        );
+        expect(snapshot.ok).toBe(true);
+        if (!snapshot.ok) throw new Error(snapshot.reason);
+        const publication = snapshot.publication;
+        expect(publication).not.toBeNull();
+        if (publication === null) throw new Error('Expected a publication');
+        expect(
+            scenarioStateLedger.change(INSTALLATION, (current) => ({ ...current!, published: publication })),
+        ).toMatchObject({ ok: true });
+        for (const [key, value] of Object.entries(published))
+            await expect(handler(null, key, 'global')).resolves.toBe(value);
+
+        expect(settings.transferInstallationOwner('electron', 1)).toMatchObject({ ok: true, generation: 2 });
+        for (const key of Object.keys(published)) await expect(handler(null, key, 'global')).resolves.toBeNull();
     });
 
     test('only the owner publishes: another runtime reads the publication and never writes it; the saved configuration is never rewritten', async () => {

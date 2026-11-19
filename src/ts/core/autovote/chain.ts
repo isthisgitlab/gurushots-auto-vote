@@ -58,6 +58,9 @@ const loadCadenceSettings = async (host: AutovoteHost) => {
         host.getEffectiveSetting('checkFrequencyMin', 'global'),
         host.getEffectiveSetting('checkFrequencyMax', 'global'),
     ]);
+    if (timezone === null || checkFrequencyMin === null || checkFrequencyMax === null) {
+        throw new Error('Cadence settings are unavailable');
+    }
     return { ...settings.app, timezone, checkFrequencyMin, checkFrequencyMax } as typeof settings.app;
 };
 
