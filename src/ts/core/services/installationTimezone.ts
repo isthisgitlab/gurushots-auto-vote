@@ -16,4 +16,16 @@ const captureInstallationTimezone = (): string | null => {
     return captured.ok ? effectiveTimezone(captured.values.timezone) : null;
 };
 
-export { captureInstallationTimezone };
+/**
+ * The zone the installation's own publication is computed under, for the publisher and the staging path alone: the zone in
+ * force before that publication. A phase that writes the zone with no publication of it that applies (none was made yet,
+ * or the one that stands is known not to) reads the saved baseline — without that, the first publication could never be
+ * made, for it waits on the zone and the zone waits on it. A zone that cannot be read is still null: the saved value
+ * never takes the place of one that cannot be read.
+ */
+const captureInstallationTimezoneForPublication = (): string | null => {
+    const captured = settings.captureInstallationSettingsForPublication(['timezone']);
+    return captured.ok ? effectiveTimezone(captured.values.timezone) : null;
+};
+
+export { captureInstallationTimezone, captureInstallationTimezoneForPublication };

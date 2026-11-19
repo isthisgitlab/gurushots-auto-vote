@@ -23,6 +23,7 @@ jest.mock('../../src/ts/core/settings', () => ({
     hasRuleJoinOptIn: jest.fn(() => false),
     getEffectiveSetting: jest.fn(),
     captureInstallationSettings: jest.fn(),
+    captureInstallationSettingsForPublication: jest.fn(),
     getTitleRules: jest.fn(() => []),
     getChallengeProfiles: jest.fn(() => ({})),
     scenarioSubjectAvailable: jest.fn(() => true),
@@ -218,6 +219,10 @@ beforeEach(() => {
         ok: true,
         values: Object.fromEntries(keys.map((key) => [key, config[key]])),
     })) as typeof settings.captureInstallationSettings);
+    settings.captureInstallationSettingsForPublication.mockImplementation(((keys: string[]) => ({
+        ok: true,
+        values: Object.fromEntries(keys.map((key) => [key, config[key]])),
+    })) as typeof settings.captureInstallationSettingsForPublication);
     settings.getTitleRules.mockReturnValue([]);
     settings.getChallengeProfiles.mockReturnValue({});
     settings.hasRuleJoinOptIn.mockReturnValue(false);
@@ -1998,14 +2003,24 @@ describe('the installation’s requests for the voting stages, and the Stop fenc
         ]);
         await lifecycle().installation({ rules: true });
         const zoneReads = () =>
-            settings.captureInstallationSettings.mock.calls.filter(([keys]) => keys.join() === 'timezone');
+            settings.captureInstallationSettingsForPublication.mock.calls.filter(
+                ([keys]) => keys.join() === 'timezone',
+            );
         // Published again after each confirmed action, and every one on the same capture.
         expect(settings.prepareInstallationSnapshot.mock.calls.length).toBeGreaterThan(2);
         expect(zoneReads()).toHaveLength(1);
 
-        settings.captureInstallationSettings.mockReturnValueOnce({ ok: false, key: 'timezone', reason: 'expired' });
+        settings.captureInstallationSettingsForPublication.mockReturnValueOnce({
+            ok: false,
+            key: 'timezone',
+            reason: 'expired',
+        });
         await expect(lifecycle().installation({ rules: true })).resolves.toBe('unavailable');
-        settings.captureInstallationSettings.mockReturnValueOnce({ ok: false, key: 'timezone', reason: 'expired' });
+        settings.captureInstallationSettingsForPublication.mockReturnValueOnce({
+            ok: false,
+            key: 'timezone',
+            reason: 'expired',
+        });
         await expect(lifecycle().installation({ rules: false })).resolves.toBe('unavailable');
     });
 

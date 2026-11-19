@@ -826,13 +826,23 @@ type InstallationRead = { ok: true; value: unknown } | { ok: false; reason: stri
  * A reader of installation settings over one loaded configuration: the saved value, or the installation phase's published
  * value over it, or why it is unavailable. The overlay is worked out once, and none is looked at for an installation
  * with no scenario assigned (its progress record is not read).
+ *
+ * @param publication - the step that publishes the installation's overlay reads with this: a key whose publication is
+ * known not to apply (none stands for the current phase — nothing was published yet, or what stands is expired, from
+ * another owner or an earlier visit, made from another document, or malformed) answers the saved value, the one in force
+ * before the publication that step is about to make. A progress record that cannot be read stays unavailable, as it is
+ * for every reader: the saved value never takes the place of one that cannot be read.
  */
-const _installationReader = (settings: ConfigV2): ((settingKey: string) => InstallationRead) => {
+const _installationReader = (settings: ConfigV2, publication = false): ((settingKey: string) => InstallationRead) => {
     const layer: InstallationLayer = installationLayer(settings, nowSec());
     return (settingKey) => {
         const found = _installationOwns(settingKey)
             ? readInstallationLayer(layer, settingKey)
             : { kind: 'saved' as const };
+        // The record was read and no publication of it applies: for the publishing step the saved value is in force.
+        if (found.kind === 'unavailable' && publication && layer.kind === 'phase') {
+            return { ok: true, value: _baseRawValue(settings, settingKey, null) };
+        }
         if (found.kind === 'unavailable') return { ok: false, reason: found.reason };
         return { ok: true, value: found.kind === 'overlay' ? found.value : _baseRawValue(settings, settingKey, null) };
     };
@@ -866,12 +876,11 @@ type InstallationCapture<K extends string> =
     | { ok: true; values: { [P in K]: InstallationValueOf<P> } }
     | { ok: false; key: K; reason: string };
 
-/**
- * Several installation settings at once, from one read of the configuration and of the publication, so that what a boundary
- * captures is consistent: the values, or the first key that is unavailable with the reason. Never throws.
- */
-const captureInstallationSettings = <K extends string>(settingKeys: readonly K[]): InstallationCapture<K> => {
-    const read = _installationReader(loadSettings());
+/** Several installation settings at once through one reader: the values, or the first key that is unavailable with the reason. */
+const _captureInstallationWith = <K extends string>(
+    settingKeys: readonly K[],
+    read: (settingKey: string) => InstallationRead,
+): InstallationCapture<K> => {
     const values: Partial<{ [P in K]: InstallationValueOf<P> }> = {};
     for (const key of settingKeys) {
         const found = read(key);
@@ -880,6 +889,24 @@ const captureInstallationSettings = <K extends string>(settingKeys: readonly K[]
     }
     return { ok: true, values: values as { [P in K]: InstallationValueOf<P> } };
 };
+
+/**
+ * Several installation settings at once, from one read of the configuration and of the publication, so that what a boundary
+ * captures is consistent: the values, or the first key that is unavailable with the reason. Never throws.
+ */
+const captureInstallationSettings = <K extends string>(settingKeys: readonly K[]): InstallationCapture<K> =>
+    _captureInstallationWith(settingKeys, _installationReader(loadSettings()));
+
+/**
+ * The same capture for the step that publishes the installation's overlay (the publication and the staging paths of
+ * services/scenarioRunner/installation.ts): a key whose publication is known not to apply reads the saved value — the one
+ * in force before that step's own publication — so the first publication of a phase that writes the zone can be made at
+ * all. A state that cannot be read still answers the first unavailable key with the reason; the saved value never takes
+ * the place of one that cannot be read. Never throws.
+ */
+const captureInstallationSettingsForPublication = <K extends string>(
+    settingKeys: readonly K[],
+): InstallationCapture<K> => _captureInstallationWith(settingKeys, _installationReader(loadSettings(), true));
 
 /**
  * Prepares the installation overlay of the current phase, the owner's to publish: the base values, the bindings resolved
@@ -1041,6 +1068,7 @@ export {
     getInstallationSetting,
     readInstallationSetting,
     captureInstallationSettings,
+    captureInstallationSettingsForPublication,
     prepareInstallationSnapshot,
     trimmedChallengeId,
     ownChallengeValues,

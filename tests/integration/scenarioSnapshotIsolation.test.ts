@@ -644,27 +644,35 @@ describe('the installation scenario publication', () => {
         );
         await expect(publishAs()).resolves.toBe('published');
         save(accountPlan({ settings: published, bindings: {} }));
-        const state = record();
-        const snapshot = settings.prepareInstallationSnapshot(
-            settings.getScenario('Account plan')!,
-            state,
-            () => ({ bound: {}, validUntil: null }),
-            1,
-            Math.floor(Date.now() / 1000),
-        );
-        expect(snapshot.ok).toBe(true);
-        if (!snapshot.ok) throw new Error(snapshot.reason);
-        const publication = snapshot.publication;
-        expect(publication).not.toBeNull();
-        if (publication === null) throw new Error('Expected a publication');
-        expect(
-            scenarioStateLedger.change(INSTALLATION, (current) => ({ ...current!, published: publication })),
-        ).toMatchObject({ ok: true });
+        // the edited plan writes the zone itself: its publication is made again over the saved zone, not grafted in
+        await expect(publishAs()).resolves.toBe('published');
         for (const [key, value] of Object.entries(published))
             await expect(handler(null, key, 'global')).resolves.toBe(value);
 
         expect(settings.transferInstallationOwner('electron', 1)).toMatchObject({ ok: true, generation: 2 });
         for (const key of Object.keys(published)) await expect(handler(null, key, 'global')).resolves.toBeNull();
+    });
+
+    test('a newly selected plan that writes the zone publishes its first publication over the saved one', async () => {
+        const saved = { timezone: 'UTC', checkFrequencyMin: 3, checkFrequencyMax: 5 };
+        for (const [key, value] of Object.entries(saved)) expect(settings.setSetting(key, value)).toBe(true);
+        select(
+            'android-service',
+            accountPlan({
+                settings: { timezone: 'Europe/Riga', checkFrequencyMin: 7, checkFrequencyMax: 9 },
+                bindings: {},
+            }),
+        );
+        // the phase writes the zone and nothing is published for it yet — no publication is seeded: the first one is
+        // the publisher's own to make, over the zone in force before it (the saved one)
+        expect(record()?.published).toBeUndefined();
+        await expect(publishAs()).resolves.toBe('published');
+        expect(record()?.published).toMatchObject({ phase: 'tune', generation: 1 });
+        // the published zone is the effective one from here on; the saved configuration keeps its own
+        expect(settings.getInstallationSetting('timezone')).toBe('Europe/Riga');
+        expect(settings.getEffectiveSetting('timezone')).toBe('Europe/Riga');
+        expect(settings.getInstallationSetting('checkFrequencyMin')).toBe(7);
+        expect(settings.getSetting('timezone')).toBe('UTC');
     });
 
     test('only the owner publishes: another runtime reads the publication and never writes it; the saved configuration is never rewritten', async () => {
@@ -1034,6 +1042,107 @@ describe('the installation scenario publication', () => {
             unavailable('apiTimeout', 'cannot be read');
             unavailable('currencyReserveKeys', 'cannot be read');
             expect(settings.getInstallationSetting('apiMaxRetries')).toBe(3);
+        });
+
+        test('a record that cannot be read publishes nothing: the saved zone never takes the place of an unreadable one', async () => {
+            select('android-service', accountPlan({ settings: { timezone: 'Europe/Riga' }, bindings: {} }));
+            await corrupt();
+            await expect(publishAs()).resolves.toBe('unreadable');
+            unavailable('timezone', 'cannot be read');
+        });
+
+        test.each([
+            ['nothing is published for the phase yet', async () => scenarioStateLedger.removeAll()],
+            [
+                'the publication is from an earlier visit to the phase',
+                async () => edit((held) => ({ ...held, phaseEnteredAt: held.phaseEnteredAt + 10 })),
+            ],
+            [
+                'the publication was made under another owner',
+                async () =>
+                    edit((held) => {
+                        const published = { ...(held.published as NonNullable<ScenarioState['published']>) };
+                        delete published.generation;
+                        return { ...held, published };
+                    }),
+            ],
+            [
+                'the publication has expired',
+                async () =>
+                    edit((held) => ({
+                        ...held,
+                        published: {
+                            ...(held.published as NonNullable<ScenarioState['published']>),
+                            validUntil: NOW - 1,
+                        },
+                    })),
+            ],
+            [
+                'the publication is malformed',
+                async () =>
+                    edit((held) => ({ ...held, published: invalid<ScenarioState['published']>({ unexpected: true }) })),
+            ],
+            [
+                'the scenario changed after its publication',
+                async () => save(accountPlan({ settings: { apiTimeout: 15 } })),
+            ],
+        ])(
+            'the publishing capture reads the saved baseline when %s; the reader never does',
+            async (_label, arrange) => {
+                select('android-service', accountPlan({ settings: { apiTimeout: 12 }, bindings: {} }));
+                await expect(publishAs()).resolves.toBe('published');
+                await arrange();
+                expect(settings.captureInstallationSettings(['apiTimeout'])).toMatchObject({
+                    ok: false,
+                    key: 'apiTimeout',
+                });
+                expect(settings.captureInstallationSettingsForPublication(['apiTimeout'])).toEqual({
+                    ok: true,
+                    values: { apiTimeout: 30 },
+                });
+            },
+        );
+
+        test('a record that cannot be read fails the publishing capture too: no baseline takes the place of an unreadable one', async () => {
+            select('android-service', accountPlan({ settings: { apiTimeout: 12 }, bindings: {} }));
+            await publishAs();
+            await corrupt();
+            expect(settings.captureInstallationSettings(['apiTimeout'])).toMatchObject({
+                ok: false,
+                key: 'apiTimeout',
+            });
+            expect(settings.captureInstallationSettingsForPublication(['apiTimeout'])).toMatchObject({
+                ok: false,
+                key: 'apiTimeout',
+            });
+        });
+
+        test('a valid publication and a paused installation answer the publishing capture as the reader', async () => {
+            select('android-service', accountPlan({ settings: { apiTimeout: 12 }, bindings: {} }));
+            await publishAs();
+            expect(settings.captureInstallationSettings(['apiTimeout'])).toEqual({
+                ok: true,
+                values: { apiTimeout: 12 },
+            });
+            expect(settings.captureInstallationSettingsForPublication(['apiTimeout'])).toEqual({
+                ok: true,
+                values: { apiTimeout: 12 },
+            });
+            expect(
+                scenarioStateLedger.change(INSTALLATION, (current) => ({
+                    ...(current as ScenarioState),
+                    paused: { at: NOW, reason: 'test' },
+                })),
+            ).toMatchObject({ ok: true });
+            // paused: the saved values apply at once for both — no fallback in play
+            expect(settings.captureInstallationSettings(['apiTimeout'])).toEqual({
+                ok: true,
+                values: { apiTimeout: 30 },
+            });
+            expect(settings.captureInstallationSettingsForPublication(['apiTimeout'])).toEqual({
+                ok: true,
+                values: { apiTimeout: 30 },
+            });
         });
 
         test('a record that cannot be read costs nothing when no phase sets a key', async () => {

@@ -117,6 +117,9 @@ export const ScenarioSettingUnavailableError = challengeOverrides.ScenarioSettin
 export const getInstallationSetting = challengeOverrides.getInstallationSetting;
 export const readInstallationSetting = challengeOverrides.readInstallationSetting;
 export const captureInstallationSettings = challengeOverrides.captureInstallationSettings;
+// The same capture read by the step that publishes the installation's overlay: a key with no publication that applies
+// answers the saved value (the one in force before that publication); an unreadable state still fails.
+export const captureInstallationSettingsForPublication = challengeOverrides.captureInstallationSettingsForPublication;
 export const prepareInstallationSnapshot = challengeOverrides.prepareInstallationSnapshot;
 export type InstallationCapture<K extends string> = challengeOverrides.InstallationCapture<K>;
 export type ScenarioOverlayStatus = challengeOverrides.ScenarioOverlayStatus;

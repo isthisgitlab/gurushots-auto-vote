@@ -19,7 +19,7 @@
 import * as settings from '../../settings';
 import { errorMessage } from '../../errorMessage';
 import { platform } from '../../platform/port';
-import { captureInstallationTimezone } from '../installationTimezone';
+import { captureInstallationTimezoneForPublication } from '../installationTimezone';
 import { announceEffectiveChange } from '../effectiveEvents';
 import { evaluateExpression } from '../../scenarios/expressions';
 import { INSTALLATION_KEY, initialState } from '../../scenarioStateStore';
@@ -64,8 +64,9 @@ type InstallationPass = {
  * handoff not finished), `busy` (another process holds the step), `unreadable` (the progress cannot be read), `blocked`
  * (the phase could not be prepared: its publication is cleared and the reason recorded), `published`, `cleared` (the
  * phase sets nothing: no publication stands), `fenced` (a full Stop came after this cycle began: nothing is published),
- * `unavailable` (the installation's effective time zone cannot be read: nothing is published or run, and the saved zone never
- * takes its place) and `failed` (a write did not land).
+ * `unavailable` (the zone this publication would run under cannot be read — a state that cannot be read, never one where
+ * no publication applies, for that reads the saved zone in force before it: nothing is published or run) and `failed`
+ * (a write did not land).
  */
 type InstallationPublishStatus =
     | 'none'
@@ -134,8 +135,9 @@ const ownedScenario = (): { owned: Owned } | { status: InstallationPublishStatus
 const publishUnderOwnership = async (pass: InstallationPass): Promise<InstallationPublishStatus> => {
     const own = ownedScenario();
     if ('status' in own) return own.status;
-    // Captured once for this cycle, after ownership (an installation with no scenario here reads nothing).
-    const timezone = captureInstallationTimezone();
+    // Captured once for this cycle, after ownership (an installation with no scenario here reads nothing): the zone in
+    // force before this publication, so a phase that writes the zone can be published at all.
+    const timezone = captureInstallationTimezoneForPublication();
     if (timezone === null) return 'unavailable';
     const lock = pass.lock ? pass.lock(INSTALLATION_KEY) : NO_LOCK;
     if (!lock.ok) return 'busy';
@@ -187,8 +189,9 @@ const runInstallationStage = async (
     try {
         const own = ownedScenario();
         if ('status' in own) return own.status;
-        // Captured once for this cycle, after ownership: the publication, the rules and every republish run on this one value.
-        const timezone = captureInstallationTimezone();
+        // Captured once for this cycle, after ownership: the publication, the rules and every republish run on this one
+        // value — the zone in force before this publication, so a phase that writes the zone can be published at all.
+        const timezone = captureInstallationTimezoneForPublication();
         if (timezone === null) return 'unavailable';
         const lock = pass.lock ? pass.lock(INSTALLATION_KEY) : NO_LOCK;
         if (!lock.ok) return 'busy';

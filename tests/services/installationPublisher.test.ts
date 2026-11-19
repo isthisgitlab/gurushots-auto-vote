@@ -16,6 +16,8 @@ jest.mock('../../src/ts/core/settings', () => ({
     getSetting: jest.fn(() => 'UTC'),
     // The installation's own read of the time zone: the saved one while no installation scenario overlays it.
     captureInstallationSettings: jest.fn(() => ({ ok: true, values: { timezone: 'UTC' } })),
+    // The publisher's read: the zone in force before the publication (the saved baseline while none applies).
+    captureInstallationSettingsForPublication: jest.fn(() => ({ ok: true, values: { timezone: 'UTC' } })),
 }));
 
 import { createStateLedger, initialState } from '../../src/ts/core/scenarioStateStore';
@@ -135,13 +137,16 @@ describe('who publishes', () => {
 
 describe('the time zone of the cycle', () => {
     const zoneReads = () =>
-        jest.mocked(settings.captureInstallationSettings).mock.calls.filter(([keys]) => keys.join() === 'timezone');
+        jest
+            .mocked(settings.captureInstallationSettingsForPublication)
+            .mock.calls.filter(([keys]) => keys.join() === 'timezone');
 
-    test('is the installation’s effective one, captured once, after ownership', async () => {
+    test('is the one in force before the publication, captured once, after ownership; the reader capture is not asked', async () => {
         await expect(publishInstallationOverlay(pass())).resolves.toBe('published');
         expect(zoneReads()).toHaveLength(1);
+        expect(settings.captureInstallationSettings).not.toHaveBeenCalled();
         // An installation with no scenario here (or one another runtime owns) reads no zone.
-        jest.mocked(settings.captureInstallationSettings).mockClear();
+        jest.mocked(settings.captureInstallationSettingsForPublication).mockClear();
         settings.getInstallationScenario.mockReturnValue(null);
         await publishInstallationOverlay(pass());
         settings.getInstallationScenario.mockReturnValue({ scenario: 'Account plan', executor: 'cli', generation: 1 });
@@ -150,10 +155,10 @@ describe('the time zone of the cycle', () => {
     });
 
     test('one that cannot be read publishes nothing: the saved zone never takes its place', async () => {
-        jest.mocked(settings.captureInstallationSettings).mockReturnValueOnce({
+        jest.mocked(settings.captureInstallationSettingsForPublication).mockReturnValueOnce({
             ok: false,
             key: 'timezone',
-            reason: 'the published settings of this phase have expired',
+            reason: 'the saved progress of the installation scenario cannot be read',
         });
         await expect(publishInstallationOverlay(pass())).resolves.toBe('unavailable');
         expect(settings.prepareInstallationSnapshot).not.toHaveBeenCalled();
