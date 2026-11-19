@@ -124,12 +124,12 @@ export const createRemoteAutovoteController = (deps: RemoteAutovoteDeps): Autovo
             if (pendingStart !== null && pendingStart.order < pendingStop.order) pendingStart = null;
             pendingStop = null;
         }
-        // A Run / Resume is answered by its acknowledgment, or by a state that shows what came of it.
+        // A Run / Resume is answered by its acknowledgment, or by a state that shows it running. A refusal in a state is
+        // the host's last one: only the acknowledgment says which request it answered, so a refusal left over from an
+        // earlier attempt cannot end a newer pending Run.
         if (
             pendingStart !== null &&
-            (message.ack?.requestId === pendingStart.requestId ||
-                message.state.executionMode !== 'stopped' ||
-                message.state.startRefusal !== null)
+            (message.ack?.requestId === pendingStart.requestId || message.state.executionMode !== 'stopped')
         ) {
             pendingStart = null;
         }

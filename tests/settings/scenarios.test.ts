@@ -72,6 +72,12 @@ describe('settings facade — scenarios', () => {
         expect(settings.getScenario('EVENING boost before the last day')!.start).toBe('main');
     });
 
+    test('every template passes checkScenario, the check the builder and check-scenario run', () => {
+        for (const { id, scenario } of SCENARIO_TEMPLATES) {
+            expect({ id, result: settings.checkScenario(structuredClone(scenario)).ok }).toEqual({ id, result: true });
+        }
+    });
+
     test('checkScenario validates without storing', () => {
         expect(settings.checkScenario(simple())).toEqual(expect.objectContaining({ ok: true }));
         expect(settings.checkScenario({ ...simple(), start: 'x' }).ok).toBe(false);
@@ -115,7 +121,12 @@ describe('settings facade — scenarios', () => {
 
     test('the read-side validation cache stays bounded', () => {
         for (let i = 0; i < 210; i++) {
-            settings.saveScenario({ ...simple(`Plan ${i % 10}`), description: `revision ${i}` });
+            // An overwrite names the revision it was read at, so each save lands and the next read validates a new document.
+            const saved = settings.saveScenario(
+                { ...simple(`Plan ${i % 10}`), description: `revision ${i}` },
+                { expectedDefinitionRevision: revision() },
+            );
+            expect(saved.ok).toBe(true);
             expect(Object.keys(settings.getScenarios())).toHaveLength(Math.min(i + 1, 10));
         }
     });

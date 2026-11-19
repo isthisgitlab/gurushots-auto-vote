@@ -416,9 +416,51 @@ describe('createRemoteAutovoteController', () => {
             expect(controller.getStartPending?.()).toBe(false);
         });
 
-        test('a refusal ends it', async () => {
+        test('a refusal carried by the acknowledgment of that identity ends it', async () => {
             await controller.start();
-            phone.receiveFromPeer(stampedAt(stateOf({ startRefusal: 'stop-epoch-moved' }), 1), 'host');
+            phone.receiveFromPeer(
+                stampedAt(stateOf({ startRefusal: 'stop-epoch-moved' }), 1, {
+                    requestId: sentStartId(),
+                    command: 'start',
+                    outcome: 'ran',
+                }),
+                'host',
+            );
+            expect(controller.getStartPending?.()).toBe(false);
+        });
+
+        test('a refusal left over from an earlier attempt does not end a newer pending Run', async () => {
+            await controller.start();
+            // The host answers the first Run: refused.
+            phone.receiveFromPeer(
+                stampedAt(stateOf({ startRefusal: 'stop-epoch-moved' }), 1, {
+                    requestId: sentStartId(),
+                    command: 'start',
+                    outcome: 'ran',
+                }),
+                'host',
+            );
+            expect(controller.getStartPending?.()).toBe(false);
+            // A second Run goes out; before the host answers it, an unrelated push still carries the old refusal.
+            await controller.start();
+            expect(controller.getStartPending?.()).toBe(true);
+            phone.receiveFromPeer(stampedAt(stateOf({ startRefusal: 'stop-epoch-moved' }), 2), 'host');
+            expect(controller.getStartPending?.()).toBe(true);
+            // Its own answer still ends it.
+            const secondId = (
+                phone.sent
+                    .map(({ message }) => message as { command?: string; requestId?: string })
+                    .filter((message) => message.command === 'start')
+                    .at(-1) as { requestId: string }
+            ).requestId;
+            phone.receiveFromPeer(
+                stampedAt(stateOf({ startRefusal: 'stop-epoch-moved' }), 3, {
+                    requestId: secondId,
+                    command: 'start',
+                    outcome: 'ran',
+                }),
+                'host',
+            );
             expect(controller.getStartPending?.()).toBe(false);
         });
 

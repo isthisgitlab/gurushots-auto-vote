@@ -1818,6 +1818,7 @@ export const app = {
     themeDesc: 'Choose the color theme of the app.',
     time: 'Time',
     timezone: 'Timezone',
+    customTimezones: 'Custom timezones',
     timezoneDesc: 'The timezone used to show challenge start and end times in your local time.',
     timezonePlaceholder: 'Enter timezone',
     timezoneInvalid: 'Not a valid timezone. Use a name like Europe/Riga.',
@@ -1938,6 +1939,7 @@ export const app = {
     challengeOverridesLoadError:
         "Couldn't load this challenge's saved settings, so they can't be edited now — saving would overwrite them. Close this dialog and open it again; if it keeps failing, check the error log.",
     mockMode: 'Test Mode',
+    mock: 'Test mode',
     logout: 'Log out',
     status: 'Status',
     title: 'GuruShots Auto Vote',

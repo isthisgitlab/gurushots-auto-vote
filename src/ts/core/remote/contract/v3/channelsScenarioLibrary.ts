@@ -9,6 +9,12 @@
 
 import type { ScenarioDocumentV3 } from './shapesScenarios';
 
+// The four examples after the first four were added before link version 3 first shipped (master was still on 2). Their
+// live values resolved to these shapes.
+type TemplateFactV3 = { kind: string; name: string };
+type TemplateLiteralV3 = { kind: string; value: number; quantity: string; unit?: string };
+type TemplateOffsetV3 = { kind: string; from: TemplateFactV3; by: TemplateLiteralV3; direction: string };
+
 export type ScenarioLibraryChannelsV3 = {
     'get-scenarios': {
         args: [];
@@ -397,6 +403,107 @@ export type ScenarioLibraryChannelsV3 = {
                                     done?: undefined;
                                 };
                                 limits?: undefined;
+                            };
+                        }
+                      | {
+                            id: string;
+                            scenario: {
+                                name: string;
+                                version: number;
+                                description: string;
+                                start: string;
+                                phases: {
+                                    push: {
+                                        settings: { autoSubmit: boolean };
+                                        schedules: {
+                                            submit: {
+                                                alignment: string;
+                                                rows: {
+                                                    count: number;
+                                                    at: { kind: string; of: TemplateOffsetV3[] } | TemplateOffsetV3;
+                                                }[];
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        }
+                      | {
+                            id: string;
+                            scenario: {
+                                name: string;
+                                version: number;
+                                description: string;
+                                start: string;
+                                phases: {
+                                    candidate: {
+                                        rules: {
+                                            id: string;
+                                            label: string;
+                                            repeat: string;
+                                            stages: string[];
+                                            if: {
+                                                type: string;
+                                                left: TemplateFactV3;
+                                                op: string;
+                                                right: TemplateLiteralV3;
+                                            }[];
+                                            do: { type: string; maxCoins: TemplateLiteralV3 }[];
+                                        }[];
+                                    };
+                                };
+                            };
+                        }
+                      | {
+                            id: string;
+                            scenario: {
+                                name: string;
+                                version: number;
+                                description: string;
+                                start: string;
+                                phases: {
+                                    queue: {
+                                        photoPool: { name: string; only: boolean; inOrder: boolean };
+                                        pins: { turbo: null };
+                                        rules: {
+                                            id: string;
+                                            label: string;
+                                            repeat: string;
+                                            if: { type: string; max: string }[];
+                                            do: { type: string; power: string; entry: { by: string } }[];
+                                        }[];
+                                    };
+                                };
+                            };
+                        }
+                      | {
+                            id: string;
+                            scenario: {
+                                name: string;
+                                version: number;
+                                description: string;
+                                scope: string;
+                                start: string;
+                                phases: {
+                                    policy: {
+                                        settings: {
+                                            currencyReserveKeys: number;
+                                            currencyReserveSwaps: number;
+                                            currencyReserveFills: number;
+                                            autoJoinCycleCoinBudget: number;
+                                            autoClaimPrizes: boolean;
+                                            missionSaveTurbos: boolean;
+                                            missionJoinEarly: boolean;
+                                        };
+                                        rules: {
+                                            id: string;
+                                            label: string;
+                                            repeat: string;
+                                            if: { type: string; currency: string; op: string; value: number }[];
+                                            do: { type: string; message: string }[];
+                                        }[];
+                                    };
+                                };
                             };
                         }
                   )[];

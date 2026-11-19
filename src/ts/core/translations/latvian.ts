@@ -1835,6 +1835,7 @@ export const app: LatvianApp = {
     themeDesc: 'Izvēlies lietotnes krāsu tēmu.',
     time: 'Laiks',
     timezone: 'Laika josla',
+    customTimezones: 'Pielāgotās laika joslas',
     timezoneDesc: 'Laika josla, kurā rādīt izaicinājumu sākuma un beigu laikus tavā vietējā laikā.',
     timezonePlaceholder: 'Ievadi laika joslu',
     timezoneInvalid: 'Nederīga laika josla. Izmanto nosaukumu, piemēram, Europe/Riga.',
@@ -1959,6 +1960,7 @@ export const app: LatvianApp = {
     challengeOverridesLoadError:
         'Neizdevās ielādēt šī izaicinājuma saglabātos uzstādījumus, tāpēc tos tagad nevar labot — saglabāšana tos pārrakstītu. Aizver dialoglodziņu un atver vēlreiz; ja atkārtojas, skaties kļūdu žurnālā.',
     mockMode: 'Testa režīms',
+    mock: 'Testa režīms',
     logout: 'Izrakstīties',
     status: 'Statuss',
     title: 'GuruShots Auto Vote',
