@@ -898,6 +898,7 @@ export const app = {
     installationSave: 'Save',
     installationGeneration: 'Change {n}',
     installationFailed: 'The change was not made.',
+    scenarioNotStartedYet: 'Nothing applies yet. This fills in after the first run.',
     scenarioWhatApplies: 'What applies now',
     scenarioValueAbsent: 'Not applicable',
     scenarioValueUnknown: 'Missing data ({reason})',

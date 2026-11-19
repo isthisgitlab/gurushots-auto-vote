@@ -908,6 +908,7 @@ export const app: LatvianApp = {
     installationSave: 'Saglabāt',
     installationGeneration: 'Izmaiņa {n}',
     installationFailed: 'Izmaiņa netika veikta.',
+    scenarioNotStartedYet: 'Pagaidām nekas nedarbojas. Šeit parādīsies pēc pirmās palaišanas.',
     scenarioWhatApplies: 'Kas tagad darbojas',
     scenarioValueAbsent: 'Nav attiecināms',
     scenarioValueUnknown: 'Trūkst datu ({reason})',

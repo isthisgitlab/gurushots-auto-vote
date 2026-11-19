@@ -62,11 +62,15 @@ type ScenarioStatus = Extract<Awaited<ReturnType<WindowApi['getScenarioStatus']>
 export type ScenarioSnapshotView = Extract<Awaited<ReturnType<WindowApi['getScenarioSnapshot']>>, { success: true }>;
 
 /**
- * One subject's scenario snapshot (get-scenario-snapshot), for the card's "what applies now" detail: read once per
- * progress change (the same signal the card's own status reads), null while disabled or when the read fails — the
- * card keeps its line either way.
+ * One subject's scenario snapshot (get-scenario-snapshot), for the card's "what applies now" detail: read again
+ * whenever the card's own status is (`status`: a pass, a phase change, a settings change, or a status refresh gives
+ * the card a new summary) and on every progress reset or resume (the same signal the card's status reads). No timer.
+ * Null while disabled or when the read fails — the card keeps its line either way.
+ *
+ * @param subject - the challenge id
+ * @param status - the card's current summary; a new one means its status was read again
  */
-export function useScenarioSnapshot(subject: string): ScenarioSnapshotView | null {
+export function useScenarioSnapshot(subject: string, status: ScenarioSummary | null): ScenarioSnapshotView | null {
     const [snapshot, setSnapshot] = useState<ScenarioSnapshotView | null>(null);
     // Read while rendering, so a reset anywhere renders this card again.
     const resets = scenarioResets.value;
@@ -79,7 +83,7 @@ export function useScenarioSnapshot(subject: string): ScenarioSnapshotView | nul
         return () => {
             cancelled = true;
         };
-    }, [subject, resets]);
+    }, [subject, resets, status]);
     return snapshot;
 }
 

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { ToneNote } from '@/components/ui/ToneNote';
 import { EffectOutcomeNotice } from '@/components/ui/EffectOutcomeNotice';
@@ -9,6 +9,7 @@ import { scenarioRefusalText, statusReasonText } from '@/utils/scenarioIssueText
 import { refreshScenarioStatuses, usePendingRequest, useScenarioSnapshot } from '@/api/useScenarioStatus';
 import { useAsyncIpcAction } from '@/api/useAsyncIpcAction';
 import { checkEffectStatus, resumeScenario } from '@/api/ipc';
+import { formatSecondsAsHoursMinutes } from '@/utils/timeFieldUnits';
 
 import type { Challenge } from '../../../core/types/gurushots';
 import type { ScenarioSnapshotView } from '@/api/useScenarioStatus';
@@ -16,6 +17,7 @@ import type * as useScenarioStatusModule from '@/api/useScenarioStatus';
 import type { Translate } from '../../../core/translations/translator';
 import type { ResolvedSchedules, ResolvedSubmitRow, ResolvedWindowRow } from '../../../core/types/autoFill';
 import type { ValueState } from '../../../core/scenarios/valueState';
+import type { ExprValue } from '../../../core/scenarios/expressions';
 import type { EffectOutcome } from '@/api/ipc';
 
 /**
@@ -41,7 +43,7 @@ export function ScenarioStatusPanel({
                 status={status}
                 onReset={() => setResetting(status?.corrupt === 'file' ? 'all' : 'one')}
             />
-            {hasPlan && <SnapshotDetail subject={String(challenge.id)} />}
+            {hasPlan && <SnapshotDetail subject={String(challenge.id)} status={status} />}
             <ScenarioResetModal
                 challenge={resetting ? challenge : null}
                 everyChallenge={resetting === 'all'}
@@ -52,9 +54,41 @@ export function ScenarioStatusPanel({
     );
 }
 
+/** The quantities that read as a number with their name beside it ("2 Keys"); the rest are worded by their own kind. */
+const NAMED_QUANTITIES = ['votes', 'votesPerHour', 'keys', 'swaps', 'fills', 'coins'];
+
+/** A typed value in plain words: On / Off, a percent, a length of time, a moment, a number with its name, or the text. */
+const exprValueText = (value: ExprValue, t: Translate): string => {
+    switch (value.kind) {
+        case 'boolean':
+            return t(value.value ? 'common.on' : 'common.off');
+        case 'string':
+            return value.value;
+        case 'list':
+            return value.value.join(', ');
+        default:
+            break;
+    }
+    switch (value.quantity) {
+        case 'percent':
+            return `${value.value}%`;
+        case 'instant':
+            return new Date(value.value * 1000).toLocaleString();
+        case 'duration':
+            // Under a minute the hours-and-minutes line would read zero.
+            return value.value > 0 && value.value < 60
+                ? `${value.value} ${t('app.sbUnit_seconds')}`
+                : formatSecondsAsHoursMinutes(value.value, t('app.hours'), t('app.minutes'));
+        default:
+            return NAMED_QUANTITIES.includes(value.quantity)
+                ? `${value.value} ${t(`app.sbQuantity_${value.quantity}`)}`
+                : String(value.value);
+    }
+};
+
 /** One overlaid setting's value in plain words: the value, "Not applicable", or "Missing data" and why. */
-const valueStateText = (state: ValueState<unknown>, t: Translate): string => {
-    if (state.state === 'known') return String(state.value);
+const valueStateText = (state: ValueState<ExprValue>, t: Translate): string => {
+    if (state.state === 'known') return exprValueText(state.value, t);
     if (state.state === 'absent') return t('app.scenarioValueAbsent');
     return t('app.scenarioValueUnknown', { reason: statusReasonText(state.reason, t) });
 };
@@ -96,15 +130,23 @@ const SOURCE_KEYS = {
  * The "what applies now" of one running scenario: its overlay's keys with their effective values and sources, its
  * resolved schedule rows, the pause with its Resume, and a lifecycle request that is still open.
  */
-function SnapshotDetail({ subject }: { subject: string }) {
+function SnapshotDetail({
+    subject,
+    status,
+}: {
+    subject: string;
+    status: ReturnType<typeof useScenarioStatusModule.useScenarioStatus>;
+}) {
     const { t } = useTranslation();
-    const snapshot = useScenarioSnapshot(subject);
+    const snapshot = useScenarioSnapshot(subject, status);
+    // The control the keyboard stays on when the one it was on turns off or goes (the Resume button).
+    const summary = useRef<HTMLElement>(null);
     const pending = usePendingRequest(subject);
     const resume = useAsyncIpcAction(
         useCallback(() => resumeScenario(subject), [subject]),
-        {
-            failureMessage: 'busy',
-        },
+        { failureMessage: 'busy' },
+        // A change that turned out to have gone through after a status check: the panel reads it as a run's own answer.
+        { onApplied: refreshScenarioStatuses },
     );
     // A pending request the target read found, as the shared notice reads an outcome (it checks by identity). The
     // host owns it, so giving it up only hides it here.
@@ -123,8 +165,11 @@ function SnapshotDetail({ subject }: { subject: string }) {
     }
     return (
         <details className="text-xs text-base-content/80">
-            <summary className="cursor-pointer">{t('app.scenarioWhatApplies')}</summary>
+            <summary ref={summary} className="cursor-pointer">
+                {t('app.scenarioWhatApplies')}
+            </summary>
             <div className="space-y-2 mt-1">
+                {status?.started === false && <p>{t('app.scenarioNotStartedYet')}</p>}
                 {snapshot.overlay === null ? null : snapshot.overlay.available ? (
                     <OverlayRows overlay={snapshot.overlay} snapshot={snapshot} />
                 ) : (
@@ -149,7 +194,13 @@ function SnapshotDetail({ subject }: { subject: string }) {
                             type="button"
                             className="btn btn-sm max-sm:min-h-10"
                             disabled={resume.loading}
-                            onClick={() => void resume.run()}
+                            onClick={() => {
+                                // The button turns off while the request runs and goes once it is through: keep the focus.
+                                summary.current?.focus();
+                                void resume.run().then((result) => {
+                                    if (result.success) refreshScenarioStatuses();
+                                });
+                            }}
                         >
                             {t('app.scenarioResume')}
                         </button>
