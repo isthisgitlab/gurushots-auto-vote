@@ -10,6 +10,8 @@ import { AutovoteProvider, useAutovote } from '@/contexts/AutovoteContext';
 import { noopBackgroundHost } from '@/contexts/noopBackgroundHost';
 import { UpdateProvider } from '@/contexts/UpdateContext';
 import { useSettings } from '@/api/useSettings';
+import { useEffectiveSettings } from '@/api/useEffectiveSettings';
+import { EffectiveUnavailableNotice } from '@/components/ui/EffectiveUnavailableNotice';
 import { LOGOUT_NOT_SAVED } from '../../core/ipc/logoutCode';
 import { useBankroll } from '@/api/useBankroll';
 import { useAutoJoinActive } from '@/api/useAutoJoinActive';
@@ -237,7 +239,21 @@ function AppContent() {
     const notice = useNoticeGate(settings, settingsLoading, updateSetting);
     const { welcomeOpen, handleWelcomeClose } = useWelcomeGate(settings, settingsLoading, updateSetting);
 
-    useDocumentTheme(settings?.app.theme);
+    // What the installation paints now: the saved theme, or a running scenario's over it. The saved value is only the
+    // fallback before the host has published one; a form's preview is the form's own and is painted over by the next projection.
+    const { settings: effective, applied: effectiveApplied } = useEffectiveSettings();
+    useDocumentTheme(effective?.theme ?? settings?.app.theme, effectiveApplied);
+    const effectiveDensity = useMemo(
+        () =>
+            effective === null
+                ? null
+                : {
+                      compactCards: effective.compactCards,
+                      compactCardActions: effective.compactCardActions,
+                      revision: effective.revision,
+                  },
+        [effective],
+    );
 
     // After a join changes state, refresh balances + the active-challenge list.
     const handleJoined = useCallback(() => {
@@ -258,7 +274,8 @@ function AppContent() {
         let stopped = false;
         try {
             // Stop autovote if running, or held at launch for a resume
-            if (autovote.running || autovote.pendingStartAt !== null) {
+            // Armed (a scenario active, voting paused) is running too: only the mode says whether anything is.
+            if (autovote.executionMode !== 'stopped' || autovote.pendingStartAt !== null) {
                 await autovote.stop();
                 stopped = true;
             }
@@ -279,16 +296,13 @@ function AppContent() {
             await ipc.logRendererError(`Autovote ${action} failed: ${errorMessage(err) || err}`);
         }
     }, []);
-    const handleAutovoteToggle = useCallback(
-        () => logAutovoteFailure('toggle', autovote.toggle),
-        [autovote.toggle, logAutovoteFailure],
-    );
-    const handleStartNow = useCallback(
+    // Start now (a held resume) and Run / Resume voting are the same request: the controller tells them apart by its mode.
+    const handleStart = useCallback(
         () => logAutovoteFailure('start', autovote.start),
         [autovote.start, logAutovoteFailure],
     );
-    const handleCancelResume = useCallback(
-        () => logAutovoteFailure('resume cancel', autovote.stop),
+    const handleStop = useCallback(
+        () => logAutovoteFailure('stop', autovote.stop),
         [autovote.stop, logAutovoteFailure],
     );
 
@@ -310,6 +324,7 @@ function AppContent() {
                     {logoutProblem && (
                         <LogoutProblemAlert problem={logoutProblem} onDismiss={() => setLogoutProblem(null)} />
                     )}
+                    <EffectiveUnavailableNotice reasons={Object.values(effective?.unavailable ?? {})} />
 
                     <Navbar
                         isMock={isMock}
@@ -328,17 +343,20 @@ function AppContent() {
                 <ErrorBoundary>
                     {/* Autovote Controls */}
                     <AutoVoteControls
-                        running={autovote.running}
+                        executionMode={autovote.executionMode}
+                        lastStop={autovote.lastStop}
+                        startPending={autovote.startPending}
                         status={autovote.status}
                         statusClass={autovote.statusClass}
                         error={autovote.error}
                         lastRun={autovote.lastRun}
                         cycles={autovote.cycles}
-                        onToggle={handleAutovoteToggle}
+                        onStart={handleStart}
+                        onStop={handleStop}
                         autoJoinActive={autoJoinActive}
                         pendingStartAt={autovote.pendingStartAt}
-                        onStartNow={handleStartNow}
-                        onCancelResume={handleCancelResume}
+                        onStartNow={handleStart}
+                        onCancelResume={handleStop}
                     />
 
                     {/* At-a-glance status summary — counts + next-action countdown + bankroll */}
@@ -360,6 +378,7 @@ function AppContent() {
                         onChallengeSettingsClick={challengeSettings.open}
                         bankroll={bankroll}
                         onBankrollChanged={refetchBankroll}
+                        effectiveDensity={effectiveDensity}
                     />
 
                     {/* Discover — un-joined challenges, collapsed below the main list */}

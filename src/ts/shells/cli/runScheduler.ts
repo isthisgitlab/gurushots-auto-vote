@@ -57,6 +57,7 @@ const createScheduler = ({
     getActiveChallenges,
     runArmedCycle = null,
     stopFence = nodeStopFence,
+    onModeChange = null,
 }: {
     runVotingCycle: (cycleNumber: number) => Promise<{ success: boolean; challenges: Challenge[] | null }>;
     getActiveChallenges: () => Promise<ActiveChallengesResponse>;
@@ -64,6 +65,8 @@ const createScheduler = ({
     runArmedCycle?: ((cycleNumber: number) => Promise<{ success: boolean; challenges: Challenge[] | null }>) | null;
     /** The priority Stop fence (the settings facade by default); null: a Stop is local only and says so. */
     stopFence?: StopFencePort | null;
+    /** Told each time the mode changes (to armed, to voting, to stopped), whoever changed it. */
+    onModeChange?: ((mode: ExecutionMode) => void) | null;
 }): {
     start: () => Promise<void>;
     /** Full Stop: cancels at once (the result is the fence's, for the caller that wants to wait for it). */
@@ -78,6 +81,11 @@ const createScheduler = ({
     let cycleCount = 0;
     // What the scheduler is doing: `armed` keeps the chain alive for the installation scenario with the voting stages paused.
     let mode: ExecutionMode = 'stopped';
+    const setMode = (next: ExecutionMode) => {
+        if (mode === next) return;
+        mode = next;
+        onModeChange?.(next);
+    };
     let timer: TimerHandle | null = null;
     const gate = createRunGate(stopFence);
 
@@ -102,7 +110,7 @@ const createScheduler = ({
         onObsolete: () => {
             // A Stop recorded elsewhere: this run is over (no second Stop is recorded).
             gate.latch();
-            mode = 'stopped';
+            setMode('stopped');
             clearTimer();
         },
         isRunning: () => mode !== 'stopped',
@@ -171,7 +179,7 @@ const createScheduler = ({
             return;
         }
         const wasArmed = mode === 'armed';
-        mode = 'voting';
+        setMode('voting');
         register();
         if (wasArmed) {
             clearTimer();
@@ -201,7 +209,7 @@ const createScheduler = ({
         if (mode !== 'stopped' || !runArmedCycle) return false;
         const admitted = gate.fenced ? await gate.admitUser(gate.capture()) : gate.admitLocal('user', gate.capture());
         if (!admitted.ok) return false;
-        mode = 'armed';
+        setMode('armed');
         register();
         liftWithdrawal();
         const first = await runArmedCycle(++cycleCount);
@@ -221,7 +229,7 @@ const createScheduler = ({
         if (mode === 'stopped') return { ok: false, reason: 'not-armed' };
         if (on === (mode === 'voting')) return { ok: true, mode, changed: false };
         if (!on && !runArmedCycle) return { ok: false, reason: 'unsupported' };
-        mode = on ? 'voting' : 'armed';
+        setMode(on ? 'voting' : 'armed');
         const run = gate.run();
         clearTimer();
         await chain.scheduleNext();
@@ -232,6 +240,7 @@ const createScheduler = ({
     let unregister: (() => void) | null = null;
     const register = () => {
         unregister ??= registerAutovoteControl({
+            mode: () => mode,
             capture: gate.capture,
             admits: gate.admits,
             request: requestVotingStages,
@@ -245,7 +254,7 @@ const createScheduler = ({
     const stopAll = async (): Promise<StopResult> => {
         gate.latch();
         clearTimer();
-        mode = 'stopped';
+        setMode('stopped');
         unregister?.();
         unregister = null;
         const withdrawal: WithdrawalOutcome = withdrawInstallation((gate.knownEpoch() ?? 0) + 1);

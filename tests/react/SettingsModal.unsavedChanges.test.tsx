@@ -10,6 +10,8 @@ import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal'
 import { selectTab } from '../helpers/selectTab';
 import { fireSettingsChanged, mockApi } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
+import { useDocumentTheme } from '@/hooks/useDocumentTheme';
+import { installEffectiveBus, settingsOf, text } from './helpers/effective';
 
 const APP_SETTINGS = { theme: 'light', language: 'en', timezone: 'Europe/Riga' };
 
@@ -200,6 +202,28 @@ describe('SettingsModal — after a Save that failed partway', () => {
         click('app.settingsDiscard');
         expect(onClose).toHaveBeenCalledTimes(1);
         expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+    });
+
+    test('a refused key of an app-tier group reveals the Application tab and its input', async () => {
+        // The same schema key, but its group is an app-tier one: it renders inside the Application
+        // section, and a refused write is revealed there, not on a tier tab.
+        mockApi.getSettingsSchema.mockReset().mockResolvedValue(
+            invalid({
+                schema: SCHEMA,
+                defaults: { exposure: 70 },
+                groups: [{ id: 'g', label: 'app.groupG', tier: 'app' }],
+                tiers: [{ id: 'app', label: 'app.tierApp' }],
+            }),
+        );
+        mockApi.setGlobalDefault.mockResolvedValue(false);
+        render(<SettingsModal isOpen onClose={onClose} />);
+        await waitFor(() => expect(exposureInput().value).toBe('70'));
+        fireEvent.change(exposureInput(), { target: { value: '80' } });
+
+        click('app.save');
+        await screen.findByText('app.settingsSaveError');
+        await waitFor(() => expect(document.activeElement).toBe(document.getElementById('setting-exposure')));
+        expect(onClose).not.toHaveBeenCalled();
     });
 });
 
@@ -417,5 +441,104 @@ describe('ChallengeSettingsModal — dismissing', () => {
         rerender(<ChallengeSettingsModal isOpen onClose={onClose} challengeId="1" challengeTitle="One" />);
         await waitFor(() => expect(exposureInput().value).toBe('50'));
         expect(asked()).toBe(false);
+    });
+});
+
+describe('SettingsModal — a theme previewed over an effective one', () => {
+    // The window paints a running scenario's theme over the saved one, as App does through useDocumentTheme.
+    function Painter({ theme, applied = 0 }: { theme: string; applied?: number }) {
+        useDocumentTheme(theme, applied);
+        return null;
+    }
+    const openWithEffective = async (effective: string) => {
+        const view = render(
+            <>
+                <Painter theme={effective} />
+                <SettingsModal isOpen onClose={onClose} />
+            </>,
+        );
+        await screen.findByLabelText(/^app\.theme/);
+        return view;
+    };
+
+    test('Cancel puts the effective theme back, not the saved one', async () => {
+        await openWithEffective('dark');
+        expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+        pick(screen.getByLabelText<HTMLSelectElement>(/^app\.theme/), 'cupcake');
+        expect(document.documentElement.getAttribute('data-theme')).toBe('cupcake');
+
+        click('app.cancel');
+        click('app.settingsDiscard');
+
+        expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+        expect(mockApi.setSetting).not.toHaveBeenCalled();
+    });
+
+    test('a preview is local: nothing is saved by previewing, and the form still shows the saved theme', async () => {
+        await openWithEffective('dark');
+        expect(screen.getByLabelText<HTMLSelectElement>(/^app\.theme/).value).toBe('light');
+        pick(screen.getByLabelText<HTMLSelectElement>(/^app\.theme/), 'cupcake');
+        expect(mockApi.setSetting).not.toHaveBeenCalled();
+        expect(mockApi.setGlobalDefault).not.toHaveBeenCalled();
+    });
+
+    test('the next projection paints over a preview, and Cancel then goes back to that one', async () => {
+        const view = await openWithEffective('dark');
+        pick(screen.getByLabelText<HTMLSelectElement>(/^app\.theme/), 'cupcake');
+        view.rerender(
+            <>
+                <Painter theme="forest" applied={1} />
+                <SettingsModal isOpen onClose={onClose} />
+            </>,
+        );
+        expect(document.documentElement.getAttribute('data-theme')).toBe('forest');
+        pick(screen.getByLabelText<HTMLSelectElement>(/^app\.theme/), 'cupcake');
+        click('app.cancel');
+        click('app.settingsDiscard');
+        expect(document.documentElement.getAttribute('data-theme')).toBe('forest');
+    });
+
+    test('without an effective theme Cancel still goes back to the saved one', async () => {
+        render(<SettingsModal isOpen onClose={onClose} />);
+        await screen.findByLabelText(/^app\.theme/);
+        pick(screen.getByLabelText<HTMLSelectElement>(/^app\.theme/), 'cupcake');
+        click('app.cancel');
+        click('app.settingsDiscard');
+        expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+    });
+});
+
+describe('SettingsModal — what a running scenario paints', () => {
+    const open = async () => {
+        render(<SettingsModal isOpen onClose={onClose} />);
+        await waitFor(() => expect(exposureInput().value).toBe('70'));
+    };
+
+    test.each([['theme'], ['language']])(
+        'says so when a scenario paints the %s, and still shows the saved value',
+        async (key) => {
+            const bus = installEffectiveBus();
+            bus.answer({
+                settings: {
+                    success: true,
+                    ...settingsOf(5, {
+                        theme: text('dark', key === 'theme' ? 'scenario' : 'saved'),
+                        language: text('en', key === 'language' ? 'scenario' : 'saved'),
+                    }),
+                },
+            });
+            await open();
+            await screen.findByText('app.effectiveScenarioNote');
+            expect(screen.getByLabelText<HTMLSelectElement>(/^app\.theme/).value).toBe('light');
+        },
+    );
+
+    test('says nothing while the saved values are what is painted, and goes away on withdrawal', async () => {
+        const bus = installEffectiveBus();
+        bus.answer({ settings: { success: true, ...settingsOf(5, { theme: text('dark', 'scenario') }) } });
+        await open();
+        await screen.findByText('app.effectiveScenarioNote');
+        act(() => bus.fireSettings(settingsOf(6, { theme: text('light') })));
+        expect(screen.queryByText('app.effectiveScenarioNote')).toBeNull();
     });
 });

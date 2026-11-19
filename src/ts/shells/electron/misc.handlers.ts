@@ -69,7 +69,7 @@ const buildHandlers = (deps: MiscHandlerDeps) => {
 
         'refresh-menu': async () => {
             try {
-                // Adopt the saved language in the main-process translator,
+                // Adopt the effective language in the main-process translator,
                 // then rebuild the menu so its labels reflect it.
                 await translationManager.loadLanguageFromSettings();
                 updateMenuTranslations();

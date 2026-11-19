@@ -6,6 +6,7 @@ import { currentAutovoteControl, registerAutovoteControl } from '../../src/ts/co
 import type { AutovoteControl } from '../../src/ts/core/autovote/control';
 
 const control = (): AutovoteControl => ({
+    mode: () => 'voting',
     capture: () => ({ epoch: 1, generation: 0 }),
     admits: async () => true,
     request: async () => ({ ok: true, mode: 'voting', changed: true }),

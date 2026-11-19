@@ -38,8 +38,18 @@ jest.mock('../../src/ts/core/settings', () => ({
         challenges: {},
     })),
     getEffectiveSetting: jest.fn(() => 1),
+    // The execution-mode lines: no running flag, no fence, no installation scenario.
+    getSetting: jest.fn(() => false),
+    readStopFence: jest.fn(() => ({ state: 'missing' })),
+    getInstallationScenario: jest.fn(() => null),
     getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
 }));
+
+// The mode lines read the installation's pause through the lifecycle handlers.
+jest.mock('../../src/ts/core/ipc/scenarioLifecycle.handlers', () => {
+    const handlers = { 'get-scenario-snapshot': jest.fn(async () => ({ success: true as const, paused: null })) };
+    return { __handlers: handlers, buildLifecycleHandlers: () => handlers };
+});
 
 jest.mock('../../src/ts/shells/cli/runScheduler', () => ({ createScheduler: jest.fn() }));
 
@@ -162,5 +172,154 @@ describe('CLI status — automation lines', () => {
         expect(printedLines()).toContain('Auto-join: armed');
         // The sections that need the API stay out.
         expect(printedLines()).not.toContain('\nBoost Window Open:');
+    });
+});
+
+describe('CLI status — the execution mode lines', () => {
+    const settings = jest.mocked(require('../../src/ts/core/settings') as typeof import('../../src/ts/core/settings'));
+    const lifecycleMock = require('../../src/ts/core/ipc/scenarioLifecycle.handlers') as {
+        __handlers: { 'get-scenario-snapshot': jest.MockedFunction<() => Promise<unknown>> };
+    };
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        apiFactory.__isAuthenticated.mockReturnValue(false);
+        // The module-factory defaults, restored: a test that overrides one leaves nothing for the next.
+        settings.getSetting.mockReset().mockReturnValue(false);
+        settings.readStopFence.mockReset().mockReturnValue(invalid({ state: 'missing' }));
+        settings.getInstallationScenario.mockReset().mockReturnValue(null);
+        lifecycleMock.__handlers['get-scenario-snapshot']
+            .mockReset()
+            .mockResolvedValue(invalid({ success: true, paused: null }));
+    });
+
+    test('a controller in this process answers the live mode', async () => {
+        const { registerAutovoteControl } =
+            require('../../src/ts/core/autovote/control') as typeof import('../../src/ts/core/autovote/control');
+        const unregister = registerAutovoteControl({
+            mode: () => 'armed',
+            capture: () => ({ epoch: 0, generation: 0 }),
+            admits: async () => true,
+            request: async () => ({ ok: true, mode: 'armed', changed: false }),
+        });
+        try {
+            await showStatus();
+            expect(printedLines()).toContain('Execution mode: Scenario active; voting paused');
+            // The live controller is its own authority: no last-reported line, no unavailable owner note.
+            expect(printedLines().some((line) => line.startsWith('Last reported mode'))).toBe(false);
+        } finally {
+            unregister();
+        }
+    });
+
+    test('the recorded running flag says Voting with its launch time', async () => {
+        settings.getSetting.mockImplementation((key: string) =>
+            key === 'autovoteRunning' ? true : key === 'autovoteStartedLaunch' ? 1_700_000_000_000 : false,
+        );
+        await showStatus();
+        const line = printedLines().find((l) => l.startsWith('Last reported mode'));
+        expect(line).toMatch(/^Last reported mode: Voting \((?!.*time unknown)/);
+    });
+
+    test('a running flag without a usable launch time says Voting with an unknown time', async () => {
+        settings.getSetting.mockImplementation((key: string) => key === 'autovoteRunning');
+        await showStatus();
+        expect(printedLines()).toContain('Last reported mode: Voting (time unknown)');
+    });
+
+    test('a readable fence that never recorded a Stop says Stopped with an unknown time', async () => {
+        settings.readStopFence.mockReturnValue(
+            invalid({ state: 'ok', fence: { stopEpoch: 0, blocked: false, lastStop: null, lastArm: null } }),
+        );
+        await showStatus();
+        expect(printedLines()).toContain('Last reported mode: Stopped (time unknown)');
+    });
+
+    test('a fence arm after the last Stop is never read as a live armed mode', async () => {
+        settings.readStopFence.mockReturnValue(
+            invalid({
+                state: 'ok',
+                fence: {
+                    stopEpoch: 2,
+                    blocked: true,
+                    lastStop: { requestId: 'r1', at: 1_700_000_000_000, durable: true },
+                    lastArm: { epoch: 2, at: 1_700_000_999_999 },
+                },
+            }),
+        );
+        await showStatus();
+        const line = printedLines().find((l) => l.startsWith('Last reported mode'));
+        expect(line).toMatch(/^Last reported mode: Stopped \(/);
+        expect(line).not.toContain('time unknown');
+        expect(line).not.toContain('armed');
+    });
+
+    test('an unreadable fence says Stopped with an unknown time', async () => {
+        settings.readStopFence.mockReturnValue(invalid({ state: 'unreadable', reason: 'malformed' }));
+        await showStatus();
+        expect(printedLines()).toContain('Last reported mode: Stopped (time unknown)');
+    });
+
+    test('an installation scenario names its owner; a separate process cannot reach it, and the pause reason shows', async () => {
+        settings.getInstallationScenario.mockReturnValue(
+            invalid({ scenario: 'Night guard', executor: 'electron', generation: 1 }),
+        );
+        lifecycleMock.__handlers['get-scenario-snapshot'].mockResolvedValue(
+            invalid({ success: true, paused: { reason: 'user asked', at: 100 } }),
+        );
+        await showStatus();
+        const lines = printedLines();
+        expect(lines).toContain('Installation scenario: Night guard');
+        expect(lines).toContain('Installation owner: electron — owner status unavailable');
+        expect(lines).toContain('Scenario paused: user asked');
+    });
+
+    test('a live scenario that is not paused prints no pause line', async () => {
+        settings.getInstallationScenario.mockReturnValue(
+            invalid({ scenario: 'Night guard', executor: 'electron', generation: 1 }),
+        );
+        await showStatus();
+        const lines = printedLines();
+        expect(lines.some((line) => line.startsWith('Scenario pause'))).toBe(false);
+    });
+
+    test('a controller in this process vouches for the owner: no unavailable note beside it', async () => {
+        const { registerAutovoteControl } =
+            require('../../src/ts/core/autovote/control') as typeof import('../../src/ts/core/autovote/control');
+        settings.getInstallationScenario.mockReturnValue(
+            invalid({ scenario: 'Night guard', executor: 'electron', generation: 1 }),
+        );
+        const unregister = registerAutovoteControl({
+            mode: () => 'voting',
+            capture: () => ({ epoch: 0, generation: 0 }),
+            admits: async () => true,
+            request: async () => ({ ok: true, mode: 'voting', changed: false }),
+        });
+        try {
+            await showStatus();
+            expect(printedLines()).toContain('Installation owner: electron');
+            expect(printedLines()).not.toContain('Installation owner: electron — owner status unavailable');
+        } finally {
+            unregister();
+        }
+    });
+
+    test('a pause that cannot be read says so, on a failed reply and on a throw', async () => {
+        settings.getInstallationScenario.mockReturnValue(
+            invalid({ scenario: 'Night guard', executor: 'cli', generation: 1 }),
+        );
+        lifecycleMock.__handlers['get-scenario-snapshot'].mockResolvedValue(invalid({ success: false }));
+        await showStatus();
+        expect(printedLines()).toContain('Scenario pause: could not be read');
+        lifecycleMock.__handlers['get-scenario-snapshot'].mockRejectedValue(new Error('disk'));
+        await showStatus();
+        expect(printedLines()).toContain('Scenario pause: could not be read');
+    });
+
+    test('without an installation scenario the owner status is still unavailable to a separate process', async () => {
+        await showStatus();
+        const lines = printedLines();
+        expect(lines).toContain('Installation scenario: none');
+        expect(lines).toContain('Owner status unavailable (a running app reports its own state)');
     });
 });

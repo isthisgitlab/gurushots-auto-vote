@@ -10,15 +10,8 @@
 import { isPlainObject } from '../../../core/plainObject';
 import { isInteger } from '../../../core/numbers';
 
+import type { HostPresentation } from '../../../core/remote/hostPresentation';
 import type { Stored } from './viewPrefsStore';
-
-/** What the computer paints now: the last presentation projection a host event carried. */
-type HostPresentation = {
-    revision: number;
-    available: boolean;
-    theme: string | null;
-    language: string | null;
-};
 
 export type HostProjections = {
     /**
@@ -26,6 +19,12 @@ export type HostProjections = {
      * when the event is stale or is not a projection at all.
      */
     ingest: (channel: 'effective-settings-changed' | 'effective-presentation-changed', payload: unknown) => unknown;
+    /**
+     * The answer of a `get-effective-*` read with the phone's own four preferences in place, as an event would carry them. It
+     * is no event: a revision equal to one already heard is as good, and a stale one never lowers what the host paints.
+     * Anything that is not a successful projection passes through unchanged.
+     */
+    answer: (channel: 'get-effective-installation-settings' | 'get-effective-presentation', answer: unknown) => unknown;
     /** The host's own presentation (never the phone's), or null before one arrived. */
     hostPresentation: () => HostPresentation | null;
 };
@@ -58,7 +57,8 @@ export const createHostProjections = (stored: Stored): HostProjections => {
     const presentationEvent = (payload: Record<string, unknown>, revision: number): unknown => {
         const theme = typeof payload.theme === 'string' ? payload.theme : null;
         const language = typeof payload.language === 'string' ? payload.language : null;
-        host = { revision, available: payload.available === true, theme, language };
+        if (host === null || revision >= host.revision)
+            host = { revision, available: payload.available === true, theme, language };
         return { ...payload, theme: stored.theme ?? theme, language: stored.language ?? language };
     };
 
@@ -72,5 +72,15 @@ export const createHostProjections = (stored: Stored): HostProjections => {
         return heard;
     };
 
-    return { ingest, hostPresentation: () => host };
+    const answer: HostProjections['answer'] = (channel, reply) => {
+        if (!isPlainObject(reply) || reply.success !== true || !isInteger(reply.revision) || reply.revision < 0)
+            return reply;
+        const heard =
+            channel === 'get-effective-installation-settings'
+                ? settingsEvent(reply)
+                : presentationEvent(reply, reply.revision);
+        return heard ?? reply;
+    };
+
+    return { ingest, answer, hostPresentation: () => host };
 };

@@ -1935,6 +1935,7 @@ describe('the installation’s requests for the voting stages, and the Stop fenc
         const request = jest.fn(async () => answer);
         const captured = { epoch: 3, generation: 1 };
         const unregister = registerAutovoteControl({
+            mode: () => 'armed',
             capture: () => captured,
             admits: jest.fn(async () => admitted),
             request,

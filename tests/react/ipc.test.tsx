@@ -289,3 +289,93 @@ describe("the window controller's routes to the host", () => {
         });
     });
 });
+
+describe('effects that have no final result', () => {
+    const lost = { success: false, error: 'x', unclear: true, requestId: 'req-1' };
+
+    test.each([
+        ['a lost reply that carries its identity', lost, { kind: 'unclear', requestId: 'req-1', checked: null }],
+        [
+            'an Android request the service has queued',
+            { success: true, pending: true, requestId: 'app-1', target: 't', revision: 2 },
+            { kind: 'queued', requestId: 'app-1', checked: null },
+        ],
+    ])('%s is an open outcome', (_name, result, outcome) => {
+        expect(ipc.effectOutcomeOf(result)).toEqual(outcome);
+    });
+
+    test.each([
+        ["a lost reply with no identity (the spend channels' own unclear answer)", { success: false, unclear: true }],
+        ['a lost reply whose identity is not text', { success: false, unclear: true, requestId: 7 }],
+        ['a plain failure', { success: false, error: 'x', requestId: 'r' }],
+        ['a final success', { success: true, requestId: 'r' }],
+        ['a pending flag on a failure', { success: false, pending: true, requestId: 'r' }],
+        ['nothing', undefined],
+        ['a non-object', 'x'],
+    ])('%s is not', (_name, result) => {
+        expect(ipc.effectOutcomeOf(result)).toBeNull();
+    });
+
+    const open = { kind: 'unclear', requestId: 'req-1', checked: null } as const;
+    const asks = () => expect(mockApi.getScenarioRequestStatus).toHaveBeenCalledWith({ requestId: 'req-1' });
+    const record = (status: string, error: string | null = null) => ({
+        success: true,
+        state: 'request',
+        record: { requestId: 'req-1', operation: 'o', target: 't', status, error, revision: 1, at: 1 },
+    });
+
+    test('asks the host by the identity, and an applied change is settled', async () => {
+        mockApi.getScenarioRequestStatus.mockResolvedValue(invalid(record('applied')));
+        await expect(ipc.checkEffectStatus(open)).resolves.toEqual({ settled: true, applied: true });
+        asks();
+    });
+
+    test.each([
+        ['failed', 'reason', 'reason'],
+        ['failed', null, 'failed'],
+        ['superseded', null, 'superseded'],
+        ['interrupted', null, 'interrupted'],
+    ])('a recorded %s (error %p) is a settled failure that says %p', async (status, error, said) => {
+        mockApi.getScenarioRequestStatus.mockResolvedValue(invalid(record(status, error)));
+        await expect(ipc.checkEffectStatus(open)).resolves.toEqual({ settled: true, applied: false, error: said });
+    });
+
+    test('a request still pending stays open, as waiting (a queued one stays queued)', async () => {
+        mockApi.getScenarioRequestStatus.mockResolvedValue(invalid(record('pending')));
+        await expect(ipc.checkEffectStatus(open)).resolves.toEqual({
+            settled: false,
+            outcome: { kind: 'waiting', requestId: 'req-1', checked: null },
+        });
+        await expect(ipc.checkEffectStatus({ ...open, kind: 'queued' })).resolves.toEqual({
+            settled: false,
+            outcome: { kind: 'queued', requestId: 'req-1', checked: null },
+        });
+    });
+
+    test.each([
+        ['a request the host has no record of', { success: true, state: 'not-recorded' }, 'not-recorded'],
+        ['a status that cannot be read', { success: true, state: 'unknown' }, 'unreadable'],
+        ['an answer for a target, which was not asked', { success: true, state: 'target' }, 'unreadable'],
+        ['a refused read', { success: false, error: 'invalid-args' }, 'unreadable'],
+    ])('%s leaves the outcome open with the identity kept', async (_name, answer, checked) => {
+        mockApi.getScenarioRequestStatus.mockResolvedValue(invalid(answer));
+        await expect(ipc.checkEffectStatus(open)).resolves.toEqual({
+            settled: false,
+            outcome: { ...open, checked },
+        });
+    });
+
+    test('a read that throws (the connection is still down) leaves it open as unreadable', async () => {
+        mockApi.getScenarioRequestStatus.mockRejectedValue(new Error('offline'));
+        await expect(ipc.checkEffectStatus(open)).resolves.toEqual({
+            settled: false,
+            outcome: { ...open, checked: 'unreadable' },
+        });
+    });
+
+    test('an outcome with no identity cannot be asked about, and nothing is sent', async () => {
+        const nameless = { kind: 'unclear', requestId: null, checked: null } as const;
+        await expect(ipc.checkEffectStatus(nameless)).resolves.toEqual({ settled: false, outcome: nameless });
+        expect(mockApi.getScenarioRequestStatus).not.toHaveBeenCalled();
+    });
+});

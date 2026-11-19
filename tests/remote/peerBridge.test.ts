@@ -17,6 +17,7 @@ import {
 } from '../../src/ts/core/remote/protocol';
 import { REMOTE_SAY_HELLO_FIRST } from '../../src/ts/core/remote/dispatch';
 import { TransportStub } from '../helpers/remoteTransport';
+import { readHostPresentation } from '../../src/ts/core/remote/hostPresentation';
 import {
     remoteConnectionState,
     remoteHostPath,
@@ -1032,6 +1033,49 @@ describe('installPeerBridge: which peer counts', () => {
             phone.receiveFromPeer({ t: 'event', channel: 'effective-settings-changed', payload: 'nonsense' }, 'host');
             expect(effective).toHaveBeenCalledTimes(1);
             expect(effective).toHaveBeenCalledWith(projected);
+        });
+
+        test("the page reads what the computer paints through the bridge, and the read answer keeps the phone's own choices", async () => {
+            connect();
+            expect(readHostPresentation()).toBeNull();
+            await expect(api.setSetting('theme', 'dark')).resolves.toBe(true);
+            phone.receiveFromPeer(
+                {
+                    t: 'event',
+                    channel: 'effective-presentation-changed',
+                    payload: { revision: 4, available: true, theme: 'host-theme', language: 'en', reason: null },
+                },
+                'host',
+            );
+            expect(readHostPresentation()).toEqual({
+                revision: 4,
+                available: true,
+                theme: 'host-theme',
+                language: 'en',
+            });
+
+            const read = api.getEffectivePresentation() as Promise<unknown>;
+            const sentRead = phone.sent.filter(
+                ({ message }) => (message as { channel?: string }).channel === 'get-effective-presentation',
+            );
+            phone.receiveFromPeer(
+                {
+                    t: 'result',
+                    id: (sentRead[sentRead.length - 1].message as { id: number }).id,
+                    ok: true,
+                    result: {
+                        success: true,
+                        revision: 5,
+                        available: true,
+                        theme: 'host-two',
+                        language: 'en',
+                        reason: null,
+                    },
+                },
+                'host',
+            );
+            await expect(read).resolves.toMatchObject({ revision: 5, theme: 'dark' });
+            expect(readHostPresentation()).toMatchObject({ revision: 5, theme: 'host-two' });
         });
 
         test('the current projection is an ordinary read, which a reconnected phone asks for itself', () => {

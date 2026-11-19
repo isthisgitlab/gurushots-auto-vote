@@ -38,7 +38,7 @@ type Browser = {
 };
 
 /** One browser: its own localStorage, its own bridge context and view-prefs store. */
-const browserOn = (storage: Storage): Browser => {
+const browserOn = (storage: Storage, answers: Record<string, unknown> = {}): Browser => {
     Object.defineProperty(globalThis, 'localStorage', { configurable: true, writable: true, value: storage });
     const ctx = createPeerBridgeContext(new TransportStub('phone'));
     const sent: Browser['sent'] = [];
@@ -46,7 +46,7 @@ const browserOn = (storage: Storage): Browser => {
         ctx,
         sendInvoke: (channel, args) => {
             sent.push({ channel, args });
-            return Promise.resolve(undefined);
+            return Promise.resolve(answers[channel]);
         },
     });
     return { storage, prefs, sent, heard: [] };
@@ -288,5 +288,112 @@ describe('the host effective-settings event', () => {
         expect(
             browser.prefs.ingestEffective('effective-presentation-changed', presentation(1, DARK, 'en')),
         ).not.toBeNull();
+    });
+});
+
+describe('the host effective reads (what a mount, a focus or a reconnect fetches)', () => {
+    const phoneWith = (answers: Record<string, unknown>) => {
+        const browser = browserOn(memoryStorage(), answers);
+        as(browser, () => {
+            void browser.prefs.route('set-setting', ['theme', DARK]);
+            void browser.prefs.route('set-setting', ['language', 'lv']);
+            void browser.prefs.route('set-global-default', ['compactCards', true]);
+        });
+        browser.sent.length = 0;
+        return browser;
+    };
+
+    test("the presentation read is forwarded and answers with the phone's own theme and language in place", async () => {
+        const browser = phoneWith({
+            'get-effective-presentation': { success: true, ...presentation(7, LIGHT, 'en') },
+        });
+        const before = browser.storage.getItem(VIEW_PREFS_STORAGE);
+        const answer = await as(browser, () => browser.prefs.route('get-effective-presentation', []));
+        expect(answer).toEqual({
+            success: true,
+            revision: 7,
+            available: true,
+            theme: DARK,
+            language: 'lv',
+            reason: null,
+        });
+        expect(browser.sent).toEqual([{ channel: 'get-effective-presentation', args: [] }]);
+        expect(browser.storage.getItem(VIEW_PREFS_STORAGE)).toBe(before);
+        // What the computer paints is kept apart.
+        expect(browser.prefs.hostPresentation()).toEqual({
+            revision: 7,
+            available: true,
+            theme: LIGHT,
+            language: 'en',
+        });
+    });
+
+    test("the complete read keeps the phone's four preferences over the computer's, and the rest as published", async () => {
+        const browser = phoneWith({
+            'get-effective-installation-settings': {
+                success: true,
+                ...settingsEvent(4, {
+                    theme: known({ kind: 'string', value: LIGHT }),
+                    language: known({ kind: 'string', value: 'en' }),
+                    compactCards: known({ kind: 'boolean', value: false }),
+                    customTimezones: known({ kind: 'list', value: ['Asia/Tokyo'] }),
+                }),
+            },
+        });
+        const answer = (await as(browser, () => browser.prefs.route('get-effective-installation-settings', []))) as {
+            values: Record<string, unknown>;
+        };
+        expect(answer.values.theme).toEqual({
+            available: true,
+            source: 'saved',
+            value: { kind: 'string', value: DARK },
+        });
+        expect(answer.values.language).toMatchObject({ value: { value: 'lv' } });
+        expect(answer.values.compactCards).toMatchObject({ value: { kind: 'boolean', value: true } });
+        expect(answer.values.customTimezones).toEqual(known({ kind: 'list', value: ['Asia/Tokyo'] }));
+    });
+
+    test('a read at the same revision as an event already heard is taken, and an older one never lowers what the host paints', async () => {
+        const browser = phoneWith({
+            'get-effective-presentation': { success: true, ...presentation(7, LIGHT, 'en') },
+        });
+        as(browser, () =>
+            browser.prefs.ingestEffective('effective-presentation-changed', presentation(7, 'event', 'en')),
+        );
+        expect(browser.prefs.hostPresentation()?.theme).toBe('event');
+        await as(browser, () => browser.prefs.route('get-effective-presentation', []));
+        expect(browser.prefs.hostPresentation()).toMatchObject({ revision: 7, theme: LIGHT });
+        const lower = browserOn(memoryStorage(), {
+            'get-effective-presentation': { success: true, ...presentation(3, 'old', 'en') },
+        });
+        as(lower, () => lower.prefs.ingestEffective('effective-presentation-changed', presentation(9, 'newer', 'en')));
+        await as(lower, () => lower.prefs.route('get-effective-presentation', []));
+        expect(lower.prefs.hostPresentation()).toMatchObject({ revision: 9, theme: 'newer' });
+    });
+
+    test.each([
+        ['a refusal', { success: false, error: 'invalid-args' }],
+        ['a non-projection', 'text'],
+        ['no answer', undefined],
+        ['a revision that is not a count', { success: true, revision: -2, available: true }],
+        ['a fractional revision', { success: true, revision: 1.5, available: true }],
+    ])('%s passes through unchanged', async (_label, reply) => {
+        const browser = phoneWith({
+            'get-effective-presentation': reply,
+            'get-effective-installation-settings': reply,
+        });
+        await expect(as(browser, () => browser.prefs.route('get-effective-presentation', []))).resolves.toBe(reply);
+        await expect(as(browser, () => browser.prefs.route('get-effective-installation-settings', []))).resolves.toBe(
+            reply,
+        );
+        expect(browser.prefs.hostPresentation()).toBeNull();
+    });
+
+    test('a settings answer with no values passes through unchanged', async () => {
+        const reply = { success: true, revision: 3, values: 4 };
+        const browser = phoneWith({ 'get-effective-installation-settings': reply });
+        await expect(as(browser, () => browser.prefs.route('get-effective-installation-settings', []))).resolves.toBe(
+            reply,
+        );
     });
 });

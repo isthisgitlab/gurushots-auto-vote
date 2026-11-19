@@ -1,6 +1,8 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { errorMessage } from '../../core/errorMessage';
-import { logRendererError, logRendererWarning } from './ipc';
+import { checkEffectStatus, effectOutcomeOf, logRendererError, logRendererWarning } from './ipc';
+
+import type { EffectOutcome } from './ipc';
 
 /**
  * Fallback codes for a failed action, used when the handler or the throw carries no text of its own. They are
@@ -17,6 +19,16 @@ export interface AsyncIpcAction<A extends unknown[], R> {
     loading: boolean;
     error: string | null;
     clearError: () => void;
+    /**
+     * The change the last run left open: its reply was lost (`{ success: false, unclear: true, requestId }`) or an Android service
+     * has it queued (`{ success: true, pending: true, requestId }`). Null once it has a final result, or none was left open.
+     * While one is open with its identity, `run` sends nothing (`effect-unresolved`): it is checked first, never sent again.
+     */
+    outcome: EffectOutcome | null;
+    /** Asks the host where the open change stands by its identity. Resolves true when it reached a final result. */
+    checkStatus: () => Promise<boolean>;
+    /** Gives up on the open change without a result (the user's choice). */
+    dismissOutcome: () => void;
 }
 
 /**
@@ -41,14 +53,27 @@ export function useAsyncIpcAction<A extends unknown[], R extends { success: bool
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [outcome, setOutcome] = useState<EffectOutcome | null>(null);
+    // The open change as the next run sees it (state lags a render behind).
+    const openRef = useRef<EffectOutcome | null>(null);
+    const open = useCallback((next: EffectOutcome | null) => {
+        openRef.current = next;
+        setOutcome(next);
+    }, []);
 
     const run = useCallback(
         async (...args: A): Promise<R | { success: false; error: string }> => {
+            // An open change keeps its identity until it has a final result: the earlier change is checked, not sent again.
+            if (openRef.current?.requestId) return { success: false, error: 'effect-unresolved' };
             setLoading(true);
             setError(null);
             try {
                 const result = await ipcInvoker(...args);
-                if (!result?.success) {
+                const left = effectOutcomeOf(result);
+                open(left);
+                if (left !== null) {
+                    void logRendererWarning(`IPC action not final: ${left.kind} ${left.requestId}`);
+                } else if (!result?.success) {
                     const failure = result?.error || failureMessage;
                     void logRendererWarning(`IPC action failed: ${failure}`);
                     setError(failure);
@@ -63,12 +88,27 @@ export function useAsyncIpcAction<A extends unknown[], R extends { success: bool
                 setLoading(false);
             }
         },
-        [ipcInvoker, failureMessage, errorFallback],
+        [ipcInvoker, failureMessage, errorFallback, open],
     );
 
     const clearError = useCallback(() => setError(null), []);
 
-    return { run, loading, error, clearError };
+    const checkStatus = useCallback(async (): Promise<boolean> => {
+        const held = openRef.current;
+        if (held === null) return true;
+        const status = await checkEffectStatus(held);
+        if (!status.settled) {
+            open(status.outcome);
+            return false;
+        }
+        open(null);
+        if (!status.applied) setError(status.error);
+        return true;
+    }, [open]);
+
+    const dismissOutcome = useCallback(() => open(null), [open]);
+
+    return { run, loading, error, clearError, outcome, checkStatus, dismissOutcome };
 }
 
 /**
@@ -90,6 +130,6 @@ export function useNamedIpcAction<
     A extends unknown[],
     R extends { success: boolean; error?: string },
 >(runName: N, ipcInvoker: (...args: A) => Promise<R>, labels?: IpcActionLabels): NamedIpcAction<N, A, R> {
-    const { run, loading, error, clearError } = useAsyncIpcAction(ipcInvoker, labels);
-    return { [runName]: run, loading, error, clearError } as NamedIpcAction<N, A, R>;
+    const { run, ...rest } = useAsyncIpcAction(ipcInvoker, labels);
+    return { [runName]: run, ...rest } as NamedIpcAction<N, A, R>;
 }

@@ -396,6 +396,10 @@ export const createViewPrefs = ({
                 );
             case 'get-settings-schema':
                 return settingsSchemaRead();
+            case 'get-effective-installation-settings':
+            case 'get-effective-presentation':
+                // What a mount, a focus or a reconnect fetches: the host's answer with the phone's own four preferences in place.
+                return sendInvoke(channel, args).then((reply) => projections.answer(channel, reply));
             case 'cleanup-stale-challenge-setting':
             case 'cleanup-stale-metadata':
                 if (pruneOverrides(store, args[0])) persist();

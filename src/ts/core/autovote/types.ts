@@ -107,6 +107,11 @@ export type AutovoteController = {
      */
     stop: () => Promise<void>;
     rearmSchedule: () => Promise<void>;
+    /**
+     * Whether a Run / Resume was sent to a host that has not answered yet (the paired phone only; the local controller never
+     * waits for an answer). Not part of the state a host relays: the state a phone holds is the host's, and this is the phone's own.
+     */
+    getStartPending?: () => boolean;
     /** The user's explicit installation arm: the chain runs for the installation scenario with the voting stages paused. */
     arm?: () => Promise<void>;
     /**

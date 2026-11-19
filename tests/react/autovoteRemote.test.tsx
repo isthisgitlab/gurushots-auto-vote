@@ -166,4 +166,29 @@ describe('AutovoteProvider on the remote kind', () => {
         expect(latest?.running).toBe(false);
         expect(latest?.cycles).toBe(0);
     });
+
+    test('a Run sent to the computer is pending until it answers, and a Stop reads as requested, never as stopped', async () => {
+        setRemoteConnectionState('connected');
+        setRemoteHostPeerId('host');
+        render(
+            <AutovoteProvider remoteTransport={phone as RemoteTransport}>
+                <Probe />
+            </AutovoteProvider>,
+        );
+        expect(latest?.startPending).toBe(false);
+        await act(() => latest!.start());
+        expect(latest?.startPending).toBe(true);
+        expect(latest?.executionMode).toBe('stopped');
+
+        await act(async () => {
+            phone.receiveFromPeer({ t: 'autovote-state', state: relayedState, hostRun: 'run-a', n: 1 }, 'host');
+            await Promise.resolve();
+        });
+        expect(latest?.startPending).toBe(false);
+        expect(latest?.executionMode).toBe('voting');
+
+        await act(() => latest!.stop());
+        expect(latest?.lastStop).toEqual({ outcome: 'requested', durable: false });
+        expect(latest?.executionMode).toBe('voting');
+    });
 });

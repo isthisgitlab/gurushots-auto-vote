@@ -9,8 +9,11 @@
 
 import type { RunCapture } from '../scheduling/cadenceChain/types';
 import type { VotingStagesResult } from './types';
+import type { ExecutionMode } from './state';
 
 type AutovoteControl = {
+    /** What the controller is doing now: the live answer, for a reader in this process (the CLI status). */
+    mode: () => ExecutionMode;
     /** The capture a request made now is created under. */
     capture: () => RunCapture;
     /** Whether a request or publication that holds `captured` is still current: no full Stop came after it. */

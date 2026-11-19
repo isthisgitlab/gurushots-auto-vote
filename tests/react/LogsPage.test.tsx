@@ -5,6 +5,7 @@
  */
 import { act, render, screen, waitFor } from '@testing-library/preact';
 import { fireSettingsChanged, mockApi } from './helpers/setup';
+import { installEffectiveBus, presentationOf } from './helpers/effective';
 
 describe('Logs page', () => {
     let originalBacklog: typeof window.api.getLogBacklog;
@@ -75,5 +76,56 @@ describe('Logs page', () => {
             require('@/pages/Logs');
         });
         await waitFor(() => expect(root.textContent).toContain('Hello log'));
+    });
+
+    describe('the effective presentation', () => {
+        let bus: ReturnType<typeof installEffectiveBus>;
+        beforeEach(() => {
+            bus = installEffectiveBus();
+        });
+        afterEach(() => {
+            document.documentElement.removeAttribute('data-theme');
+            mockApi.getSetting.mockResolvedValue(null);
+        });
+
+        test('paints the effective theme over the saved one, follows a newer projection and ignores a stale one', async () => {
+            mockApi.getSetting.mockImplementation(async (key) => (key === 'theme' ? 'light' : null));
+            bus.answer({ presentation: { success: true, ...presentationOf(5, { theme: 'dark' }) } });
+            const { default: LogsPage } = await import('@/pages/Logs');
+            render(<LogsPage />);
+            await waitFor(() => expect(document.documentElement.getAttribute('data-theme')).toBe('dark'));
+            act(() => bus.firePresentation(presentationOf(6, { theme: 'cupcake' })));
+            expect(document.documentElement.getAttribute('data-theme')).toBe('cupcake');
+            act(() => bus.firePresentation(presentationOf(6, { theme: 'stale' })));
+            expect(document.documentElement.getAttribute('data-theme')).toBe('cupcake');
+            // The window reads the presentation projection only, never the complete one.
+            expect(mockApi.getEffectiveInstallationSettings).not.toHaveBeenCalled();
+            expect(mockApi.onEffectiveSettingsChanged).not.toHaveBeenCalled();
+        });
+
+        test('restores the saved theme when the host withdraws, without a write', async () => {
+            bus.answer({ presentation: { success: true, ...presentationOf(5, { theme: 'dark' }) } });
+            const { default: LogsPage } = await import('@/pages/Logs');
+            render(<LogsPage />);
+            await waitFor(() => expect(document.documentElement.getAttribute('data-theme')).toBe('dark'));
+            act(() => bus.firePresentation(presentationOf(6, { theme: 'light' })));
+            expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+            expect(mockApi.setSetting).not.toHaveBeenCalled();
+        });
+
+        test('warns with the reason and keeps the theme when it cannot be read', async () => {
+            bus.answer({ presentation: { success: true, ...presentationOf(5, { theme: 'dark' }) } });
+            const { default: LogsPage } = await import('@/pages/Logs');
+            render(<LogsPage />);
+            await waitFor(() => expect(document.documentElement.getAttribute('data-theme')).toBe('dark'));
+            act(() =>
+                bus.firePresentation(presentationOf(6, { available: false, theme: null, reason: 'unavailable' })),
+            );
+            expect(screen.getByText('app.effectiveUnavailableTitle')).toBeTruthy();
+            expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+            // A present reason is shown; an absent one is still an unreadable value.
+            act(() => bus.firePresentation(presentationOf(7, { available: false, reason: null })));
+            expect(screen.getByText('app.effectiveUnavailableReason')).toBeTruthy();
+        });
     });
 });

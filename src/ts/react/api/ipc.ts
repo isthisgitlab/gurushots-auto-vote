@@ -13,6 +13,8 @@
  * best-effort and never throw.
  */
 
+import { isPlainObject } from '../../core/plainObject';
+
 import type { WindowApi } from '../../core/types/ipc';
 import type { FenceFailure, StopFencePort, WithdrawalOutcome } from '../../core/autovote/runGate';
 import type { AccountWakeSources } from '../../core/scheduling/thresholdWindow';
@@ -140,6 +142,11 @@ export const resetScenarioState = forward('resetScenarioState');
 export const resetAllScenarioState = forward('resetAllScenarioState');
 export const dryRunScenario = forward('dryRunScenario');
 export const simulateScenario = forward('simulateScenario');
+export const getScenarioRequestStatus = forward('getScenarioRequestStatus');
+
+// What applies to the installation now, for a client that mounted or missed an event (useEffectiveSettings.ts).
+export const getEffectiveInstallationSettings = forward('getEffectiveInstallationSettings');
+export const getEffectivePresentation = forward('getEffectivePresentation');
 
 // The window controller's routes to the host: the priority Stop fence, the withdrawal and the lifting of the installation's
 // publication, and the account's scheduling boundaries (autovote/controller.ts takes them as host seams).
@@ -279,3 +286,59 @@ export const resetRemotePairing = forward('resetRemotePairing');
 export const onSettingsChanged = forwardOptional('onSettingsChanged');
 export const onEffectiveSettingsChanged = forwardOptional('onEffectiveSettingsChanged');
 export const onEffectivePresentationChanged = forwardOptional('onEffectivePresentationChanged');
+
+/**
+ * A change whose result the client does not have yet: `unclear` (the reply was lost, so the computer may or may not have made
+ * it), `queued` (an Android request the background service has not applied yet) or `waiting` (a status check found it still
+ * pending). `requestId` is what the status is asked by (null: the answer carried none, so it cannot be asked). `checked` is what
+ * the last status check found, when one ran.
+ */
+export type EffectOutcome = {
+    kind: 'unclear' | 'queued' | 'waiting';
+    requestId: string | null;
+    checked: 'not-recorded' | 'unreadable' | null;
+};
+
+/**
+ * The outcome a result stands at when it is not final: a lost reply that carries the request's identity, or an accepted request
+ * the background service has not applied. Anything else (a final success or failure, and a lost reply with no identity, which is
+ * the spend channels' own unclear answer) is null.
+ */
+export const effectOutcomeOf = (result: unknown): EffectOutcome | null => {
+    if (!isPlainObject(result)) return null;
+    const { requestId } = result;
+    if (typeof requestId !== 'string') return null;
+    if (result.success === false && result.unclear === true) return { kind: 'unclear', requestId, checked: null };
+    if (result.success === true && result.pending === true) return { kind: 'queued', requestId, checked: null };
+    return null;
+};
+
+/** What a status check came to: the request reached a final result (applied, or failed with its reason), or it is still open. */
+export type EffectStatus =
+    | { settled: true; applied: true }
+    | { settled: true; applied: false; error: string }
+    | { settled: false; outcome: EffectOutcome };
+
+/**
+ * Asks the host where an effect stands, by its request identity. Only a recorded final result settles it: a status that cannot
+ * be read, a request the host has no record of, and one still pending all leave the outcome open with its identity kept. It
+ * never sends the change again.
+ */
+export const checkEffectStatus = async (outcome: EffectOutcome): Promise<EffectStatus> => {
+    if (outcome.requestId === null) return { settled: false, outcome };
+    const answer = await callOrNull(() => getScenarioRequestStatus({ requestId: outcome.requestId as string }));
+    if (!answer?.success || answer.state === 'unknown' || answer.state === 'target') {
+        return { settled: false, outcome: { ...outcome, checked: 'unreadable' } };
+    }
+    if (answer.state === 'not-recorded') return { settled: false, outcome: { ...outcome, checked: 'not-recorded' } };
+    const { status, error } = answer.record;
+    if (status === 'pending') {
+        return {
+            settled: false,
+            outcome: { ...outcome, kind: outcome.kind === 'queued' ? 'queued' : 'waiting', checked: null },
+        };
+    }
+    return status === 'applied'
+        ? { settled: true as const, applied: true as const }
+        : { settled: true as const, applied: false as const, error: error ?? status };
+};

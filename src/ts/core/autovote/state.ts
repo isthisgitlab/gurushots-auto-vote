@@ -13,6 +13,16 @@ import type { AdmitRefusal, StopResult } from './runGate';
  */
 export type ExecutionMode = 'stopped' | 'armed' | 'voting';
 
+/**
+ * The words for each mode, the same in every client: the CLI prints them, and the GUI's English catalog carries them under
+ * `app.mode.*` (a test keeps the two equal).
+ */
+export const EXECUTION_MODE_LABELS: Readonly<Record<ExecutionMode, string>> = {
+    stopped: 'Stopped',
+    armed: 'Scenario active; voting paused',
+    voting: 'Voting',
+};
+
 export const ACTIONS = {
     START: 'START',
     STOP: 'STOP',

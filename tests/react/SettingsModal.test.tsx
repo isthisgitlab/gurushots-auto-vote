@@ -15,6 +15,7 @@ import { act, fireEvent, pickOption, render, screen, waitFor, within } from './h
 import { SettingsModal } from '@/components/app/SettingsModal';
 import { TALL_MODAL_BOX_HEIGHT } from '@/components/ui/Modal';
 import { fireSettingsChanged } from './helpers/setup';
+import { list, settingsOf } from './helpers/effective';
 import { selectTab } from '../helpers/selectTab';
 import type { TitleRule } from '../../src/ts/core/types/settings';
 import type { UiResetHandler } from '../../src/ts/core/types/settingsEditor';
@@ -223,6 +224,24 @@ describe('SettingsModal — timezone "+" inline-add', () => {
         // The next one, with the field gone, closes the modal.
         fireEvent.keyDown(document.body, { key: 'Escape' });
         expect(onClose).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('SettingsModal — the timezone picker offers the effective zones', () => {
+    test('a zone a running scenario adds is listed beside the saved ones; the saved choice stays the form value', async () => {
+        mockFormState.uiValues.timezone = 'Asia/Tokyo';
+        mockFormState.uiValues.customTimezones = ['Asia/Tokyo'];
+        jest.mocked(window.api.getEffectiveInstallationSettings).mockResolvedValue(
+            invalid({ success: true, ...settingsOf(4, { customTimezones: list(['Mars/Olympus'], 'scenario') }) }),
+        );
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        const select = document.getElementById('ui-timezone')! as HTMLSelectElement;
+        await waitFor(() => {
+            expect(Array.from(select.options).some((option) => option.value === 'Mars/Olympus')).toBe(true);
+        });
+        expect(Array.from(select.options).some((option) => option.value === 'Asia/Tokyo')).toBe(true);
+        // The form keeps showing and saving the saved choice.
+        expect(select.value).toBe('Asia/Tokyo');
     });
 });
 

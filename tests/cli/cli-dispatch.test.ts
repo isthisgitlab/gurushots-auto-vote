@@ -534,6 +534,8 @@ const COMMANDS_BLOCK = `Commands:
   fill-exposure - Spend a fill to top exposure up to 100%: fill-exposure --challenge=<id> [--yes]
              Currency actions spend nothing without --yes; they print the cost first.
   start    - Start continuous voting on a schedule (runs until stopped with Ctrl+C)
+  stop     - Stop all automation on this computer (the running app or CLI sees the recorded Stop at its next
+             check; never a pause of the voting stages only). Exits 1 when the Stop could not be saved.
   status   - Show current status and settings, including the Auto-claim and Auto-join lines and, when signed in,
              a Standing section: each challenge's rank, its benchmark gap and its team-match standing.
   bankroll - Show your currency balances (keys / swaps / fills / coins). Alias: coins

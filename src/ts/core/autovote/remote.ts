@@ -48,8 +48,12 @@ export const createRemoteAutovoteController = (deps: RemoteAutovoteDeps): Autovo
     /** The desktop run and count of the newest state applied: an older count of the same run is a stale push, ignored. */
     let appliedRun: string | null = null;
     let appliedCount = -1;
-    /** The Stop sent and not yet answered: its identity, and the Stop epoch the phone knew when it sent it. */
-    let pendingStop: { requestId: string; epoch: number | null } | null = null;
+    /** Orders the commands as the phone sent them, so a Stop knows whether it came after a Run. */
+    let commandOrder = 0;
+    /** The Stop sent and not yet answered: its identity, the Stop epoch the phone knew when it sent it, and its order. */
+    let pendingStop: { requestId: string; epoch: number | null; order: number } | null = null;
+    /** The Run / Resume sent and not yet answered: the host has not said what it did, and the phone's Stop stays within reach. */
+    let pendingStart: { requestId: string; order: number } | null = null;
 
     const apply = (next: AutovoteState): void => {
         state = next;
@@ -73,10 +77,15 @@ export const createRemoteAutovoteController = (deps: RemoteAutovoteDeps): Autovo
         }
         const requestId = newRequestId();
         const epoch = state.stopEpoch;
+        const order = ++commandOrder;
         if (classifyRemoteCommand(command) === 'priority-stop') {
             // Pending, not stopped: the host has not said what it did.
-            pendingStop = { requestId, epoch };
+            pendingStop = { requestId, epoch, order };
             apply(autovoteReducer(state, { type: ACTIONS.SET_STOP_RESULT, payload: REQUESTED }));
+        } else if (command === 'start') {
+            pendingStart = { requestId, order };
+            // A new object, so a subscriber that compares states sees the change.
+            apply({ ...state });
         }
         const message = {
             t: 'autovote-command',
@@ -90,6 +99,7 @@ export const createRemoteAutovoteController = (deps: RemoteAutovoteDeps): Autovo
             await deps.transport.send(message, remoteHostPeerId() ?? undefined);
         } catch {
             // The host left between the connected check and the send.
+            if (pendingStart?.requestId === requestId) pendingStart = null;
             notConnected();
         }
     };
@@ -109,7 +119,19 @@ export const createRemoteAutovoteController = (deps: RemoteAutovoteDeps): Autovo
             pendingStop !== null &&
             (message.ack?.requestId === pendingStop.requestId || stoppedSince(message.state, pendingStop.epoch))
         ) {
+            // The confirmed Stop supersedes a Run sent before it: that Run will not run, so it is no longer pending and a
+            // fresh one is possible. A Run sent after the Stop keeps waiting for its own answer.
+            if (pendingStart !== null && pendingStart.order < pendingStop.order) pendingStart = null;
             pendingStop = null;
+        }
+        // A Run / Resume is answered by its acknowledgment, or by a state that shows what came of it.
+        if (
+            pendingStart !== null &&
+            (message.ack?.requestId === pendingStart.requestId ||
+                message.state.executionMode !== 'stopped' ||
+                message.state.startRefusal !== null)
+        ) {
+            pendingStart = null;
         }
         apply(
             pendingStop === null
@@ -125,6 +147,7 @@ export const createRemoteAutovoteController = (deps: RemoteAutovoteDeps): Autovo
         start: () => sendCommand('start'),
         stop: () => sendCommand('stop'),
         rearmSchedule: () => sendCommand('rearm'),
+        getStartPending: () => pendingStart !== null,
         maybeResume: () => Promise.resolve(),
         dispose: () => {
             disposed = true;

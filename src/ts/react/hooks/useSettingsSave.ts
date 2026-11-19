@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { settingsTabId } from '@/contexts/SettingsNavContext';
 import * as ipc from '@/api/ipc';
+import { currentEffectiveTheme } from '@/hooks/useDocumentTheme';
 import { errorMessage } from '../../core/errorMessage';
 
 import type { SettingsNav } from '@/contexts/SettingsNavContext';
@@ -218,10 +219,11 @@ export const useSettingsSave = (deps: UseSettingsSaveDeps) => {
     }, [isOpen, resetNav, setSaveError, setRejectedKeys]);
 
     const handleCancel = useCallback(() => {
-        // Put the persisted theme back on screen if the user previewed another one in this open session.
-        const persistedTheme = getPersistedTheme();
-        if (persistedTheme && persistedTheme !== uiValues.theme) {
-            document.documentElement.setAttribute('data-theme', persistedTheme);
+        // Put the theme that applies now back on screen if the user previewed another one in this open session: the
+        // effective one (a running scenario's, or the saved one) and not a saved one that may be stale.
+        const restored = currentEffectiveTheme() ?? getPersistedTheme();
+        if (restored && restored !== uiValues.theme) {
+            document.documentElement.setAttribute('data-theme', restored);
         }
         revert();
         onClose();

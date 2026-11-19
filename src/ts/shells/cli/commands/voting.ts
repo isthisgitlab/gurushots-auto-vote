@@ -11,6 +11,7 @@ import { ensureAuthenticated, resolveChallenge } from '../guards';
 import * as settings from '../../../core/settings';
 import { getMiddleware } from '../../../core/apiFactory';
 import { createScheduler } from '../runScheduler';
+import { EXECUTION_MODE_LABELS } from '../../../core/autovote/state';
 import { formatDateTime } from '../../../core/dateFormat';
 import { clearTokenUnlessStayingLoggedIn } from '../../../core/services/auth';
 
@@ -175,30 +176,52 @@ const startContinuousVoting = async () => {
         // An armed scheduler runs the installation stage only.
         runArmedCycle: (cycleNumber) => runVotingCycle(cycleNumber, { mode: 'armed' }),
         getActiveChallenges: () => getMiddleware().getActiveChallenges(),
+        // Armed (a scenario active, voting paused): the process stays alive for the scenario's own work, and says so.
+        onModeChange: (mode) => {
+            if (mode === 'armed') {
+                logger
+                    .withCategory('voting')
+                    .info(
+                        `Mode: ${EXECUTION_MODE_LABELS.armed}. Unattended scenario work (claiming rewards, resuming voting) is still enabled. Press Ctrl+C to stop all automation.`,
+                    );
+            }
+        },
     });
 
-    // Honour stayLoggedIn on the way out, the way the desktop app does. Settings writes are
-    // synchronous on the CLI, so the clear lands before exit; the await is there for the
-    // shared helper's flush, which no-ops here. A failure must not block the shutdown.
-    const handleShutdown = () => {
+    // The full Stop comes first, and is awaited: nothing may be left armed behind an exit, and a Stop that could not be saved is
+    // said (a restart is then not protected). Ctrl+C is never a pause of the voting stages. Then honour stayLoggedIn on the
+    // way out, the way the desktop app does. Settings writes are synchronous on the CLI, so the clear lands before exit; the
+    // await is there for the shared helper's flush, which no-ops here. A failure must not block the shutdown.
+    let shuttingDown = false;
+    const handleShutdown = async () => {
+        if (shuttingDown) return;
+        shuttingDown = true;
         logger.withCategory('voting').info('🛑 Shutting down continuous voting...');
-        scheduler.stop();
-        void clearTokenUnlessStayingLoggedIn()
-            .then((cleared) => {
-                if (cleared) {
-                    logger.withCategory('authentication').info('Cleared saved token (Stay Logged In is off)');
-                }
-            })
-            .catch((error) => {
-                logger.withCategory('authentication').error('Failed to clear token on shutdown', error);
-            })
-            .finally(() => {
-                process.exit(0);
-            });
+        try {
+            const stopped = await scheduler.stopAll();
+            if (stopped.outcome !== 'stopped') {
+                logger
+                    .withCategory('voting')
+                    .warning('The Stop could not be saved: automation stopped in this process only.');
+            }
+        } catch (error) {
+            logger.withCategory('voting').error('Failed to record the Stop on shutdown', error);
+        }
+        try {
+            if (await clearTokenUnlessStayingLoggedIn()) {
+                logger.withCategory('authentication').info('Cleared saved token (Stay Logged In is off)');
+            }
+        } catch (error) {
+            logger.withCategory('authentication').error('Failed to clear token on shutdown', error);
+        }
+        process.exit(0);
     };
 
-    process.on('SIGINT', handleShutdown);
-    process.on('SIGTERM', handleShutdown);
+    // One handler for both signals (the same full Stop either way), registered as the same function so a
+    // test can see the two routes share it.
+    const onShutdownSignal = () => void handleShutdown();
+    process.on('SIGINT', onShutdownSignal);
+    process.on('SIGTERM', onShutdownSignal);
 
     await scheduler.start();
     logger.withCategory('ui').info('Press Ctrl+C to stop');
@@ -207,4 +230,77 @@ const startContinuousVoting = async () => {
     process.stdin.resume();
 };
 
-export { runVotingCycle, voteChallengeManual, parseChallengeFlag, startContinuousVoting };
+type LifecycleHandlers = NullEventHandlers<
+    ReturnType<typeof import('../../../core/ipc/scenarioLifecycle.handlers').buildLifecycleHandlers>
+>;
+let _lifecycleHandlers: LifecycleHandlers | undefined;
+const lifecycleHandlers = (): LifecycleHandlers =>
+    (_lifecycleHandlers ??= (
+        require('../../../core/ipc/scenarioLifecycle.handlers') as typeof import('../../../core/ipc/scenarioLifecycle.handlers')
+    ).buildLifecycleHandlers());
+
+let stopCommandCount = 0;
+
+/** Why the fence refused to record a Stop, in the words the banner prints. */
+const stopRefusalText = (reason: string): string =>
+    reason === 'not-saved'
+        ? 'it could not be saved'
+        : reason === 'unreadable'
+          ? 'the saved Stop record cannot be read'
+          : reason === 'oversize'
+            ? 'the Stop record does not fit its cell'
+            : reason;
+
+/**
+ * `stop`: the explicit full Stop from outside the running controller — the CLI parity of the app's Stop all automation.
+ * It goes through the same priority route every full Stop uses: the fence record first (nothing else can refuse it, and a
+ * withdrawal that could not land never comes before it), then the withdrawal of the installation's published settings under
+ * the epoch the record answered (best effort: a withdrawal that fails is reported and never refuses the Stop). What it
+ * cannot know it says: whether the running app or service has already acted on the Stop is not observable from here, with
+ * an installation scenario assigned and without one — a plain voting run has a controller too. Never a pause of the
+ * voting stages.
+ */
+const stopAllAutomation = async (): Promise<number> => {
+    const requestId = `stop-${Date.now().toString(36)}-${(stopCommandCount++).toString(36)}`;
+    let recordedEpoch: number;
+    try {
+        const recorded = await lifecycleHandlers()['record-full-stop'](null, requestId, Date.now());
+        if (recorded.success !== true) {
+            logger
+                .withCategory('voting')
+                .error(
+                    `The Stop could not be recorded (${stopRefusalText(recorded.error)}): automation on this computer may still run. Close the running app, or try again.`,
+                );
+            return 1;
+        }
+        recordedEpoch = recorded.epoch;
+        logger
+            .withCategory('voting')
+            .info(
+                `🛑 Full Stop recorded (epoch ${recorded.epoch}). The running app or service stops at its next check.`,
+            );
+    } catch (error) {
+        logger.withCategory('voting').error('The Stop could not be recorded', error);
+        return 1;
+    }
+    try {
+        const withdrawn = await lifecycleHandlers()['withdraw-installation'](null, recordedEpoch);
+        if (withdrawn?.success === true && withdrawn.outcome === 'withdrawn') {
+            logger
+                .withCategory('voting')
+                .info("The installation's published settings were withdrawn; your own settings apply again.");
+        } else if (withdrawn?.success !== true) {
+            logger
+                .withCategory('voting')
+                .warning(
+                    "The installation's published settings could not be withdrawn: they may still apply until the next full Stop.",
+                );
+        }
+    } catch (error) {
+        logger.withCategory('voting').warning('The installation settings could not be withdrawn', error);
+    }
+    logger.withCategory('voting').info('Owner status unavailable — the running app or service reports its own state.');
+    return 0;
+};
+
+export { runVotingCycle, voteChallengeManual, parseChallengeFlag, startContinuousVoting, stopAllAutomation };

@@ -8,6 +8,7 @@ import { ThemeSelect } from '@/components/ui/ThemeSelect';
 import { ToneNote } from '@/components/ui/ToneNote';
 import { LocalOnlyHint } from '@/components/ui/LocalOnlyHint';
 import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
+import { useEffectiveSettings } from '@/api/useEffectiveSettings';
 import { BUILT_IN_TIMEZONES } from '../../../core/settings/uiDefaults';
 import { SettingLabel, numberRangeMessage, parseNumberInput } from './SettingInput';
 import { SettingsSectionPanel } from './SettingsSectionPanel';
@@ -424,9 +425,13 @@ function TimezoneSetting({
     rejectedKeys,
     showAll,
     timezoneInput,
-}: UiCellFormProps & { timezoneInput: TimezoneInputState }) {
+    effectiveTimezones,
+}: UiCellFormProps & { timezoneInput: TimezoneInputState; effectiveTimezones: string[] | null }) {
     const { t } = useTranslation();
     const { timezone, customTimezones } = uiValues;
+    // The zones offered: the saved ones the form edits, with the effective ones (a running scenario may add zones) beside
+    // them. The form keeps showing and saving the saved choice.
+    const zones = Array.from(new Set([...customTimezones, ...(effectiveTimezones ?? [])]));
     return (
         <UiSettingCell inputId="ui-timezone" {...APPLICATION_CELLS.timezone} showAll={showAll}>
             <div className="flex items-center gap-2 flex-wrap">
@@ -444,14 +449,14 @@ function TimezoneSetting({
                             {tz}
                         </option>
                     ))}
-                    {customTimezones
+                    {zones
                         .filter((tz) => !BUILT_IN_TIMEZONES.includes(tz))
                         .map((tz) => (
                             <option key={tz} value={tz}>
                                 {tz}
                             </option>
                         ))}
-                    {!BUILT_IN_TIMEZONES.includes(timezone) && !customTimezones.includes(timezone) && (
+                    {!BUILT_IN_TIMEZONES.includes(timezone) && !zones.includes(timezone) && (
                         <option value={timezone}>{timezone}</option>
                     )}
                 </select>
@@ -499,13 +504,25 @@ export function ApplicationSettingsSection({
 }: UiFormProps & { timezoneInput: TimezoneInputState; showAll?: boolean; children?: ReactNode }) {
     const { t } = useTranslation();
     const ui = { uiValues, handleUiChange, handleResetUi, rejectedKeys, showAll };
+    // The form shows and saves the saved values. When a running scenario is painting another theme or language, it says so.
+    const { settings: effective } = useEffectiveSettings();
+    const scenarioPaints = effective?.sources.theme === 'scenario' || effective?.sources.language === 'scenario';
 
     return (
         <SettingsSectionPanel id="application" title={t(SETTINGS_SECTION_TITLES.application)}>
+            {scenarioPaints && (
+                <ToneNote tone="info" role="status" className="text-sm mb-2">
+                    {t('app.effectiveScenarioNote')}
+                </ToneNote>
+            )}
             <div className={SETTINGS_GRID_CLASS}>
                 <ThemeSetting {...ui} />
                 <LanguageSetting {...ui} />
-                <TimezoneSetting {...ui} timezoneInput={timezoneInput} />
+                <TimezoneSetting
+                    {...ui}
+                    timezoneInput={timezoneInput}
+                    effectiveTimezones={effective?.customTimezones ?? null}
+                />
 
                 <UiNumberGroupCell
                     {...ui}

@@ -34,6 +34,7 @@ export const errors = {
     logoutNotSavedDetail:
         'The logout could not be saved, because the stored settings are not in use right now. Your sign-in was not changed. Try again in a moment; if it keeps failing, follow the notice about the settings.',
     dismiss: 'Dismiss',
+    effectUnresolved: 'The earlier change is not confirmed yet. Check its status first.',
     reload: 'Reload',
     fetchFailed: "Couldn't reach GuruShots — retrying automatically.",
     actionInvalidArgs:
@@ -1438,7 +1439,34 @@ export const app = {
     stayLoggedIn: 'Stay Logged In',
     stayLoggedInDesc:
         'Keep your session so you stay signed in after closing the app — on Android, background auto-vote keeps it while it runs.',
-    stopAutoVote: 'Stop Auto Vote',
+    modeLabel: 'Mode',
+    modeStopped: 'Stopped',
+    modeArmed: 'Scenario active; voting paused',
+    modeVoting: 'Voting',
+    modeArmedNote: 'A scenario is active. It may still claim rewards or resume voting.',
+    stopAllAutomation: 'Stop all automation',
+    resumeVoting: 'Resume voting',
+    stopRequested: 'Stop requested. Waiting for the computer to confirm.',
+    startRequested: 'Start requested. Waiting for the computer.',
+    stopLocalTitle: 'Stopped on this device only',
+    stopLocalDetail:
+        'The stop could not be saved. Press Stop all automation again. If the app restarts, automation may start again.',
+    effectiveUnavailableTitle: "Some settings from the running scenario can't be read",
+    effectiveUnavailableDetail:
+        'The app keeps the theme, language and layout it showed last. It updates when they can be read again.',
+    effectiveUnavailableReason: 'Reason: {reason}',
+    effectiveScenarioNote:
+        'A running scenario is changing the theme or language right now. This form shows and saves your own choice.',
+    effectUnclear: 'We could not confirm the change',
+    effectUnclearDetail:
+        'The connection was lost before the computer answered, so the change may or may not have been made. Check its status before you try again.',
+    effectCheckStatus: 'Check status',
+    effectQueued: 'Waiting for the background service',
+    effectQueuedDetail: 'The change is not applied yet.',
+    effectWaiting: 'Waiting for the computer',
+    effectWaitingDetail: 'The change is still being made. Check again in a moment.',
+    effectNotRecorded: 'The computer has no record of this change. It may not have arrived.',
+    effectUnreadable: 'The status could not be read. Check again when you are connected.',
     theme: 'Theme',
     themeDesc: 'Choose the color theme of the app.',
     time: 'Time',

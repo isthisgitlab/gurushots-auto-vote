@@ -2039,6 +2039,43 @@ describe('pins', () => {
         await waitFor(() => expect(setPins()).toHaveBeenCalledWith('boost', 7, null));
     });
 
+    test('a pin write the background service has queued is never shown as a landed pin', async () => {
+        activeChallenges = [buildChallenge({ id: 7 })];
+        setPins().mockResolvedValue(
+            invalid({ success: true, pending: true, requestId: 'app-1', target: 'pins', revision: 1 }),
+        );
+        const { onClose } = setup({ value: [idOf(1)] });
+        await screen.findByRole('button', { name: 'Pin for Boost' });
+        fireEvent.click(boostToggle());
+        fireEvent.click(save());
+        // The queued notice says where the change stands; the chooser stays open (the write was not a landed pin).
+        await screen.findByText('Waiting for the background service');
+        expect(screen.getByText('The change is not applied yet.')).toBeTruthy();
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    test('a pin write whose reply was lost says so with a Check status action, and a final record closes it', async () => {
+        activeChallenges = [buildChallenge({ id: 7 })];
+        setPins().mockResolvedValueOnce(invalid({ success: false, error: 'lost', unclear: true, requestId: 'req-1' }));
+        const { onClose } = setup({ value: [idOf(1)] });
+        await screen.findByRole('button', { name: 'Pin for Boost' });
+        fireEvent.click(boostToggle());
+        fireEvent.click(save());
+        await screen.findByText('We could not confirm the change');
+        expect(screen.getByRole('button', { name: 'Check status' })).toBeTruthy();
+        await screen.findByText(/Boost pin wasn't saved/);
+        expect(onClose).not.toHaveBeenCalled();
+        // The recorded final result settles it: the notice goes, nothing is sent again.
+        jest.mocked(window.api.getScenarioRequestStatus).mockResolvedValueOnce(
+            invalid({ success: true, state: 'request', record: { status: 'applied' } }),
+        );
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Check status' }));
+        });
+        await waitFor(() => expect(screen.queryByText('We could not confirm the change')).toBeNull());
+        expect(setPins()).toHaveBeenCalledTimes(1);
+    });
+
     test('an active challenge update while open removes a pin that became spent', async () => {
         activeChallenges = [buildChallenge({ id: 7 })];
         const { onClose, onSave, rerender } = setup({ value: [idOf(1)] });
@@ -2188,6 +2225,25 @@ describe('pins', () => {
         expect((await screen.findByRole('alert')).textContent).toBe(
             `Your chosen photos are kept, but the Boost pin wasn't saved: Unavailable Press Use these photos to try again. Your chosen photos are kept, but the Turbo pin wasn't saved: ${english('errors.pinFailed')} Press Use these photos to try again.`,
         );
+        expect(onClose).not.toHaveBeenCalled();
+        expect(setPins()).toHaveBeenCalledWith('turbo', 7, null);
+    });
+
+    test('a direct clear the background service has queued reads as not applied, with the notice', async () => {
+        activeChallenges = [buildChallenge({ id: 7 })];
+        getPins().mockResolvedValue({ boost: null, turbo: idOf(1) });
+        setPins().mockResolvedValue(
+            invalid({ success: true, pending: true, requestId: 'app-9', target: 'pins', revision: 1 }),
+        );
+        const { onClose, onSave, rerender } = setup({ value: [idOf(1)] });
+        await screen.findByRole('button', { name: 'Pinned for Turbo' });
+        fireEvent.click(screen.getByRole('button', { name: 'Pinned for Turbo' }));
+        fireEvent.click(boostToggle());
+        activeChallenges = [buildChallenge({ id: 7, member: { boost: { state: 'USED' } } })];
+        rerender(<PhotoChooserModal isOpen onClose={onClose} value={[idOf(1)]} challengeId={7} onSave={onSave} />);
+        fireEvent.click(save());
+        await screen.findByText('Waiting for the background service');
+        await screen.findByText(/Turbo pin wasn't saved/);
         expect(onClose).not.toHaveBeenCalled();
         expect(setPins()).toHaveBeenCalledWith('turbo', 7, null);
     });

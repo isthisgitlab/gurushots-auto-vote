@@ -191,17 +191,21 @@ describe('AutovoteContext', () => {
         expect(ctx.running).toBe(true);
     });
 
-    it('toggle flips between start and stop', async () => {
+    it('start and stop move the mode between stopped and voting, and the computer itself never waits for an answer', async () => {
         makeStartable();
         renderProvider();
+        expect(ctx.executionMode).toBe('stopped');
         await act(async () => {
-            await ctx.toggle();
+            await ctx.start();
         });
-        expect(ctx.running).toBe(true);
+        expect(ctx.executionMode).toBe('voting');
+        expect(ctx.startPending).toBe(false);
         await act(async () => {
-            await ctx.toggle();
+            await ctx.stop();
         });
+        expect(ctx.executionMode).toBe('stopped');
         expect(ctx.running).toBe(false);
+        expect(ctx.startPending).toBe(false);
     });
 
     describe("the controller's routes to the host", () => {
@@ -300,6 +304,35 @@ describe('AutovoteContext', () => {
             });
             expect(ctx.running).toBe(false);
             expect(window.api.runVotingCycle).not.toHaveBeenCalled();
+        });
+
+        it('a Run awaiting the fence admission keeps Stop all automation offered (startPending covers the window)', async () => {
+            makeStartable();
+            statefulFence();
+            // The fence read the admission awaits, held back until the test releases it.
+            const realRead = jest.mocked(window.api.scenarioStopFence).getMockImplementation()!;
+            let release!: (value: void) => void;
+            const held = new Promise<void>((resolve) => {
+                release = resolve;
+            });
+            jest.mocked(window.api.scenarioStopFence).mockImplementation(async (...args) => {
+                await held;
+                return realRead(...args);
+            });
+            renderProvider();
+            let starting: Promise<void> = Promise.resolve();
+            await act(async () => {
+                starting = ctx.start();
+            });
+            // The admission has not answered: the mode is still stopped, and the Run is on its way — Stop stays offered.
+            expect(ctx.startPending).toBe(true);
+            expect(ctx.executionMode).toBe('stopped');
+            await act(async () => {
+                release();
+                await starting;
+            });
+            expect(ctx.startPending).toBe(false);
+            expect(ctx.executionMode).toBe('voting');
         });
 
         it('the web shell is wired the same way', async () => {

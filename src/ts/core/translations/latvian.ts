@@ -36,6 +36,7 @@ export const errors: typeof english.errors = {
     logoutNotSavedDetail:
         'Izrakstīšanos neizdevās saglabāt: saglabātie uzstādījumi šobrīd netiek izmantoti. Pieteikšanās netika mainīta. Mēģini vēlreiz pēc brīža; ja atkārtojas, izpildi paziņojumā norādīto.',
     dismiss: 'Aizvērt',
+    effectUnresolved: 'Iepriekšējā izmaiņa vēl nav apstiprināta. Vispirms pārbaudi tās statusu.',
     reload: 'Pārlādēt',
     fetchFailed: 'Neizdevās sazināties ar GuruShots — mēģinām vēlreiz automātiski.',
     actionInvalidArgs:
@@ -1453,7 +1454,33 @@ export const app: LatvianApp = {
     stayLoggedIn: 'Saglabāt pieteikšanos',
     stayLoggedInDesc:
         'Saglabāt sesiju, lai pēc lietotnes aizvēršanas tu paliktu pieteicies — Androidā fona automātiskā balsošana to patur, kamēr tā darbojas.',
-    stopAutoVote: 'Apturēt automātisko balsošanu',
+    modeLabel: 'Režīms',
+    modeStopped: 'Apturēts',
+    modeArmed: 'Scenārijs aktīvs; balsošana apturēta',
+    modeVoting: 'Notiek balsošana',
+    modeArmedNote: 'Scenārijs ir aktīvs. Tas joprojām var saņemt balvas vai atsākt balsošanu.',
+    stopAllAutomation: 'Apturēt visu automatizāciju',
+    resumeVoting: 'Atsākt balsošanu',
+    stopRequested: 'Apturēšana pieprasīta. Gaidām datora apstiprinājumu.',
+    startRequested: 'Sākšana pieprasīta. Gaidām datoru.',
+    stopLocalTitle: 'Apturēts tikai šajā ierīcē',
+    stopLocalDetail:
+        'Apturēšanu neizdevās saglabāt. Nospied „Apturēt visu automatizāciju” vēlreiz. Ja lietotne tiks pārstartēta, automatizācija var atsākties.',
+    effectiveUnavailableTitle: 'Dažus palaistā scenārija uzstādījumus nevar nolasīt',
+    effectiveUnavailableDetail:
+        'Lietotne patur pēdējo rādīto tēmu, valodu un izkārtojumu. Tā atjaunosies, kad uzstādījumus varēs nolasīt.',
+    effectiveUnavailableReason: 'Iemesls: {reason}',
+    effectiveScenarioNote: 'Palaists scenārijs šobrīd maina tēmu vai valodu. Šī veidlapa rāda un saglabā tavu izvēli.',
+    effectUnclear: 'Izmaiņu neizdevās apstiprināt',
+    effectUnclearDetail:
+        'Savienojums pārtrūka, pirms dators atbildēja, tāpēc izmaiņa var būt veikta vai nav. Pirms mēģini vēlreiz, pārbaudi tās statusu.',
+    effectCheckStatus: 'Pārbaudīt statusu',
+    effectQueued: 'Gaidām fona pakalpojumu',
+    effectQueuedDetail: 'Izmaiņa vēl nav veikta.',
+    effectWaiting: 'Gaidām datoru',
+    effectWaitingDetail: 'Izmaiņa vēl tiek veikta. Pārbaudi vēlreiz pēc brīža.',
+    effectNotRecorded: 'Datoram nav ieraksta par šo izmaiņu. Iespējams, tā nav sasniegusi datoru.',
+    effectUnreadable: 'Statusu nevarēja nolasīt. Pārbaudi vēlreiz, kad būsi savienots.',
     theme: 'Tēma',
     themeDesc: 'Izvēlies lietotnes krāsu tēmu.',
     time: 'Laiks',

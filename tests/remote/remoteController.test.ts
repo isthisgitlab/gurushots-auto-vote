@@ -374,4 +374,147 @@ describe('createRemoteAutovoteController', () => {
         expect(controller.getState()).toEqual(initialState);
         expect(phone.sent).toHaveLength(0);
     });
+
+    describe('a Run or Resume the desktop has not answered', () => {
+        const stampedAt = (state: AutovoteState, n: number, ack?: object) => ({
+            t: 'autovote-state',
+            state,
+            hostRun: 'run-a',
+            n,
+            ...(ack === undefined ? {} : { ack }),
+        });
+        const sentStartId = (): string =>
+            (
+                phone.sent
+                    .map(({ message }) => message as { command?: string; requestId?: string })
+                    .find((message) => message.command === 'start') as { requestId: string }
+            ).requestId;
+
+        test("is pending from the send, tells the listeners, and the state itself is still the desktop's", async () => {
+            expect(controller.getStartPending?.()).toBe(false);
+            const seen: boolean[] = [];
+            controller.subscribe(() => seen.push(controller.getStartPending?.() ?? false));
+            await controller.start();
+            expect(controller.getStartPending?.()).toBe(true);
+            expect(seen).toEqual([true]);
+            // Nothing the desktop has not said: the mode is what it was.
+            expect(controller.getState()).toMatchObject({ executionMode: 'stopped', running: false });
+        });
+
+        test('a state that still shows stopped, with no refusal and no acknowledgment, leaves it pending', async () => {
+            await controller.start();
+            phone.receiveFromPeer(stampedAt(stateOf(), 1), 'host');
+            expect(controller.getStartPending?.()).toBe(true);
+        });
+
+        test.each([
+            ['voting', { executionMode: 'voting' as const, running: true }],
+            ['armed', { executionMode: 'armed' as const }],
+        ])('a state that shows %s ends it', async (_mode, over) => {
+            await controller.start();
+            phone.receiveFromPeer(stampedAt(stateOf(over), 1), 'host');
+            expect(controller.getStartPending?.()).toBe(false);
+        });
+
+        test('a refusal ends it', async () => {
+            await controller.start();
+            phone.receiveFromPeer(stampedAt(stateOf({ startRefusal: 'stop-epoch-moved' }), 1), 'host');
+            expect(controller.getStartPending?.()).toBe(false);
+        });
+
+        test('the acknowledgment of that identity ends it, and one of another identity does not', async () => {
+            await controller.start();
+            const other = { requestId: 'f'.repeat(32), command: 'start', outcome: 'ran' };
+            phone.receiveFromPeer(stampedAt(stateOf(), 1, other), 'host');
+            expect(controller.getStartPending?.()).toBe(true);
+            phone.receiveFromPeer(
+                stampedAt(stateOf(), 2, { requestId: sentStartId(), command: 'start', outcome: 'failed' }),
+                'host',
+            );
+            expect(controller.getStartPending?.()).toBe(false);
+        });
+
+        test('a Run that could not be sent is not pending', async () => {
+            phone.failNextSendOnce();
+            await controller.start();
+            expect(controller.getStartPending?.()).toBe(false);
+            expect(controller.getState().status).toBe('Error');
+        });
+
+        test('a Run while not connected is never pending', async () => {
+            setRemoteConnectionState('offline');
+            await controller.start();
+            expect(controller.getStartPending?.()).toBe(false);
+        });
+
+        test('a Stop is not a Run: it leaves this flag alone', async () => {
+            await controller.stop();
+            expect(controller.getStartPending?.()).toBe(false);
+        });
+
+        test('the confirmed Stop clears the Run it superseded, so a fresh Run is possible', async () => {
+            await controller.start();
+            await controller.stop();
+            const stopId = (
+                phone.sent
+                    .map(({ message }) => message as { command?: string; requestId?: string })
+                    .find((message) => message.command === 'stop') as { requestId: string }
+            ).requestId;
+            expect(controller.getStartPending?.()).toBe(true);
+            // The host acknowledges the Stop: the Run sent before it will not run.
+            phone.receiveFromPeer(
+                stampedAt(stateOf({ executionMode: 'stopped', stopEpoch: 4 }), 1, {
+                    requestId: stopId,
+                    command: 'stop',
+                    outcome: 'ran',
+                }),
+                'host',
+            );
+            expect(controller.getStartPending?.()).toBe(false);
+            // A fresh Run goes out as a new command.
+            await controller.start();
+            expect(
+                phone.sent.filter(({ message }) => (message as { command?: string }).command === 'start'),
+            ).toHaveLength(2);
+        });
+
+        test('a fresh stopped state with a higher epoch clears the superseded Run as well', async () => {
+            await controller.start();
+            await controller.stop();
+            expect(controller.getStartPending?.()).toBe(true);
+            phone.receiveFromPeer(stampedAt(stateOf({ executionMode: 'stopped', stopEpoch: 4 }), 1), 'host');
+            expect(controller.getStartPending?.()).toBe(false);
+        });
+
+        test('a Run sent after the Stop is kept when the Stop is confirmed', async () => {
+            await controller.stop();
+            await controller.start();
+            const stopId = (
+                phone.sent
+                    .map(({ message }) => message as { command?: string; requestId?: string })
+                    .find((message) => message.command === 'stop') as { requestId: string }
+            ).requestId;
+            phone.receiveFromPeer(
+                stampedAt(stateOf({ executionMode: 'stopped', stopEpoch: 4 }), 1, {
+                    requestId: stopId,
+                    command: 'stop',
+                    outcome: 'ran',
+                }),
+                'host',
+            );
+            // The newer Run still waits for its own answer.
+            expect(controller.getStartPending?.()).toBe(true);
+        });
+
+        test('a Stop that is not confirmed leaves the pending Run intact', async () => {
+            // The phone first knows an epoch (4): a stopped state at that same epoch is not a fresh Stop.
+            phone.receiveFromPeer(stampedAt(stateOf({ executionMode: 'stopped', stopEpoch: 4 }), 1), 'host');
+            await controller.start();
+            await controller.stop();
+            phone.receiveFromPeer(stampedAt(stateOf({ executionMode: 'stopped', stopEpoch: 4 }), 2), 'host');
+            // Neither the Stop's acknowledgment nor a fresh stopped epoch: the Run keeps waiting, the Stop stays requested.
+            expect(controller.getStartPending?.()).toBe(true);
+            expect(controller.getState().lastStop).toEqual({ outcome: 'requested', durable: false });
+        });
+    });
 });

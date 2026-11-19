@@ -545,6 +545,8 @@ describe('createScheduler — execution modes and the Stop fence', () => {
         await scheduler.start();
         expect(scheduler.getMode()).toBe('voting');
         expect(scheduler.isRunning()).toBe(true);
+        // The registered control answers the live mode (what a reader in this process, like the CLI status, prints).
+        expect(currentAutovoteControl()?.mode()).toBe('voting');
         expect(currentAutovoteControl()).not.toBeNull();
         expect(jest.getTimerCount()).toBe(1);
 
