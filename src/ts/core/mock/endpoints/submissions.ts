@@ -6,6 +6,7 @@
 import * as logger from '../../logger';
 import { LIBRARY_BATCH_PHOTOS } from '../../settings/limits';
 import { simulateApiResponse, mockMethod } from '../simulate';
+import { getSessionCache } from '../sessionCache';
 import { buildLibraryPhotos, buildImageStats, SUGGESTED_PHOTO_IDS } from '../photoLibrary';
 import { SUGGESTED_IDS_BY_CHALLENGE } from './join';
 import { LIBRARY_ID_RE } from '../../strategies/real/suggestedPhotos';
@@ -32,6 +33,18 @@ const orderedBy = (items: MockLibraryPhoto[], order?: LibraryOrder | 'default') 
 };
 
 /**
+ * The mock library as one challenge's read shows it: the live endpoint leaves out the photos already entered in the
+ * challenge, and the mock does the same from the session's challenge (a submit adds its entry there), so a second
+ * pass cannot pick the photo the first one entered.
+ */
+const libraryFor = (challengeId: string | number, now: number): MockLibraryPhoto[] => {
+    const challenge = getSessionCache().challenges?.challenges.find((item) => String(item.id) === String(challengeId));
+    const entries = challenge?.member?.ranking?.entries;
+    const entered = new Set((Array.isArray(entries) ? entries : []).map((entry) => String(entry?.id)));
+    return buildLibraryPhotos(now).filter((photo) => !entered.has(String(photo.id)));
+};
+
+/**
  * Simulate fetching the user's challenge-eligible photo library.
  * Mirrors /rest/get_photos_private; returns the mock library
  * (mock/photoLibrary.ts).
@@ -52,7 +65,7 @@ const getEligiblePhotos: typeof submissionsModule.getEligiblePhotos = mockMethod
         onNoToken: () => [],
     },
     async (challengeId, token, options = {}) => {
-        const items = buildLibraryPhotos(Math.floor(Date.now() / 1000));
+        const items = libraryFor(challengeId, Math.floor(Date.now() / 1000));
         await simulateApiResponse({}, 400);
         const search = typeof options.search === 'string' ? options.search.trim().toLowerCase() : '';
         if (search === '') {
@@ -110,7 +123,7 @@ const getEligiblePhotosWalk: typeof submissionsModule.getEligiblePhotosWalk = mo
         }),
     },
     async (challengeId, token, options = {}) => {
-        const items = buildLibraryPhotos(Math.floor(Date.now() / 1000));
+        const items = libraryFor(challengeId, Math.floor(Date.now() / 1000));
         await simulateApiResponse({}, 400);
         const search = typeof options.search === 'string' ? options.search.trim().toLowerCase() : '';
         // The same exact-tag filter as the mock getEligiblePhotos search, and

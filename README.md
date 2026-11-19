@@ -123,6 +123,17 @@ Prefer a specific version? Browse **[all releases](https://github.com/isthisgitl
 
 #### 🍎 macOS
 
+**Homebrew (Apple Silicon)**
+
+```bash
+brew tap isthisgitlab/gurushots-auto-vote https://github.com/isthisgitlab/gurushots-auto-vote
+brew install --cask isthisgitlab/gurushots-auto-vote/gurushots-auto-vote
+```
+
+The app is ad-hoc signed. If macOS blocks it on first launch, see [Apple's instructions for opening an unnotarized app](https://support.apple.com/en-us/102445).
+
+**Manual installation**
+
 1. **DMG:** open the `.dmg`, drag the app to **Applications**, launch from there.
    **APP:** unzip the `.app.zip`, move the app to **Applications**, launch from there.
 2. If you get a security warning (Gatekeeper), clear the quarantine flag in Terminal — for the GUI app:

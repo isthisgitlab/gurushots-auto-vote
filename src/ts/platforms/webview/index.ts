@@ -51,11 +51,12 @@ type WebviewHttpModule = typeof import('./http');
 const webviewHttp = (): WebviewHttpModule => require('./http') as WebviewHttpModule;
 
 const createWebviewCapabilities = (parts: WebviewNativeParts): Platform['capabilities'] => ({
-    // The mission-needs refresh resolver is the headless cycle's; Snap plays
+    // This family is the Android app's WebView. The mission-needs refresh resolver is the headless cycle's; Snap plays
     // from the app; recovery names the store to clear; and the log context
     // and the hourly cleanup are the logger's WebView answers (the default
     // rule answers CLI on a WebView; logger/files arms the interval only for
     // Electron or a CLI start).
+    executor: 'android-app',
     refreshMissionNeeds: false,
     snapAllowed: true,
     // The rule the branch answers today (services/scenarioRunner/step:205):

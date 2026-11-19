@@ -147,7 +147,7 @@ describe('runVotingCycle', () => {
         const mw = make({ fetchChallengesAndVote });
         await expect(mw.runVotingCycle(7)).resolves.toEqual({ success: true, message: 'done', challenges });
         expect(cancellation.reset).toHaveBeenCalled();
-        expect(fetchChallengesAndVote).toHaveBeenCalledWith('tok', 7);
+        expect(fetchChallengesAndVote).toHaveBeenCalledWith('tok', 7, 'full');
     });
 
     test('defaults to the whole active set and a stock success message', async () => {
@@ -158,7 +158,19 @@ describe('runVotingCycle', () => {
             message: 'Voting cycle completed successfully',
             challenges: undefined,
         });
-        expect(fetchChallengesAndVote).toHaveBeenCalledWith('tok', null);
+        expect(fetchChallengesAndVote).toHaveBeenCalledWith('tok', null, 'full');
+    });
+
+    test('the armed mode is handed to the strategy, by the IPC entry and by the CLI entry', async () => {
+        const fetchChallengesAndVote = jest.fn(async () => ({
+            success: true,
+            message: 'Installation cycle completed',
+        }));
+        const mw = make({ fetchChallengesAndVote });
+        await mw.runVotingCycle(null, 'armed');
+        expect(fetchChallengesAndVote).toHaveBeenLastCalledWith('tok', null, 'armed');
+        await mw.cliVote(null, 'armed');
+        expect(fetchChallengesAndVote).toHaveBeenLastCalledWith('tok', null, 'armed');
     });
 
     test('no token → login-first error without calling the strategy', async () => {
@@ -208,7 +220,7 @@ describe('cliVote', () => {
         const result = { success: true, challenges: [] };
         const fetchChallengesAndVote = jest.fn(async () => result);
         await expect(make({ fetchChallengesAndVote }).cliVote()).resolves.toBe(result);
-        expect(fetchChallengesAndVote).toHaveBeenCalledWith('tok', null);
+        expect(fetchChallengesAndVote).toHaveBeenCalledWith('tok', null, 'full');
         expect(cat.info).toHaveBeenCalledWith('=== GuruShots Auto Voter - CLI Voting ===', null);
         expect(cat.startOperation).toHaveBeenCalledWith('cli-vote', 'CLI Voting Process');
         expect(cat.endOperation).toHaveBeenCalledWith('cli-vote', 'Voting process completed successfully');
@@ -217,7 +229,7 @@ describe('cliVote', () => {
     test('a single-challenge run labels its logs with the challenge id', async () => {
         const fetchChallengesAndVote = jest.fn(async () => null);
         await expect(make({ fetchChallengesAndVote }).cliVote(42)).resolves.toBeNull();
-        expect(fetchChallengesAndVote).toHaveBeenCalledWith('tok', 42);
+        expect(fetchChallengesAndVote).toHaveBeenCalledWith('tok', 42, 'full');
         expect(cat.startOperation).toHaveBeenCalledWith('cli-vote', 'CLI Voting Process (challenge 42)');
         expect(cat.endOperation).toHaveBeenCalledWith('cli-vote', 'Voting process completed successfully');
     });
@@ -283,7 +295,7 @@ describe('guiVote', () => {
             success: true,
             data: 'Voting process completed successfully!',
         });
-        expect(fetchChallengesAndVote).toHaveBeenCalledWith('tok', null);
+        expect(fetchChallengesAndVote).toHaveBeenCalledWith('tok', null, 'full');
     });
 
     test('no token → login-first error', async () => {

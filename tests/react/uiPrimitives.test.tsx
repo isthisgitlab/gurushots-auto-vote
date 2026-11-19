@@ -158,17 +158,20 @@ describe('PulseDot', () => {
             const addedToWindow = jest.spyOn(window, 'addEventListener');
             const removedFromWindow = jest.spyOn(window, 'removeEventListener');
             const { unmount } = render(<PulseDot />);
-            const lastListener = (
-                spy: jest.SpyInstance<void, Parameters<Document['addEventListener']>>,
-                type: string,
-            ) => spy.mock.calls.filter(([calledType]) => calledType === type).at(-1)![1];
-            const visibilityListener = lastListener(addedToDocument, 'visibilitychange');
-            const focusListener = lastListener(addedToWindow, 'focus');
+            // The render's providers add their own listeners beside the dot's (and a previous test's cleanup can land
+            // inside this act), so the check is containment, not the last call: every listener added for these types
+            // during the render is gone after unmount — none outlives the tree.
+            const listenersOf = (spy: jest.SpyInstance<void, Parameters<Document['addEventListener']>>, type: string) =>
+                spy.mock.calls.filter(([calledType]) => calledType === type).map(([, fn]) => fn);
             act(() => {
                 unmount();
             });
-            expect(lastListener(removedFromDocument, 'visibilitychange')).toBe(visibilityListener);
-            expect(lastListener(removedFromWindow, 'focus')).toBe(focusListener);
+            expect(listenersOf(removedFromDocument, 'visibilitychange')).toEqual(
+                expect.arrayContaining(listenersOf(addedToDocument, 'visibilitychange')),
+            );
+            expect(listenersOf(removedFromWindow, 'focus')).toEqual(
+                expect.arrayContaining(listenersOf(addedToWindow, 'focus')),
+            );
         });
     });
 });

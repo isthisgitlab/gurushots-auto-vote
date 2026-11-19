@@ -1114,3 +1114,85 @@ describe('entry-age ledger over a store that writes at once', () => {
         expect(raw).toContain('"pending":null');
     });
 });
+
+describe('entry-age read health and entry times', () => {
+    test('a fresh ledger, an empty store and a store that was read are readable', () => {
+        expect(createMemoryEntryAgeLedger().health()).toEqual({ read: true, refresh: true });
+        const ledger = createEntryAgeLedger(rawStore(null));
+        ledger.entryTimes(challenge(1, ['a']));
+        expect(ledger.health()).toEqual({ read: true, refresh: true });
+    });
+
+    test.each([
+        ['text that is not JSON', 'not json {'],
+        ['a JSON value that is not an object', '[1, 2]'],
+    ])('stored text that is %s is an unreadable ledger, not an empty record', (_label, text) => {
+        const warnings = captureWarnings();
+        const ledger = createEntryAgeLedger(rawStore(text));
+        expect(ledger.entryTimes(challenge(1, ['a']))).toEqual({});
+        warnings.restore();
+        expect(ledger.health()).toEqual({ read: false, refresh: true });
+    });
+
+    test('a store whose read throws is unreadable, and the next good read makes it readable again', () => {
+        let broken = true;
+        const store = {
+            readRaw: () => {
+                if (broken) throw new Error('disk');
+                return null;
+            },
+            writeRaw: jest.fn(),
+        };
+        const warnings = captureWarnings();
+        const ledger = createEntryAgeLedger(store);
+        ledger.entryTimes(challenge(1, ['a']));
+        warnings.restore();
+        expect(ledger.health().read).toBe(false);
+        broken = false;
+        ledger.entryTimes(challenge(1, ['a']));
+        expect(ledger.health().read).toBe(true);
+    });
+
+    test('a refresh that fails or throws makes the ledger unreadable until one succeeds', async () => {
+        const warnings = captureWarnings();
+        const results: Array<boolean | Error> = [false, new Error('x'), true];
+        const ledger = createEntryAgeLedger(rawStore(null), async () => {
+            const next = results.shift();
+            if (next instanceof Error) throw next;
+            return next === true;
+        });
+        await ledger.refresh();
+        expect(ledger.health().refresh).toBe(false);
+        await ledger.refresh();
+        expect(ledger.health().refresh).toBe(false);
+        await ledger.refresh();
+        warnings.restore();
+        expect(ledger.health()).toEqual({ read: true, refresh: true });
+    });
+
+    test('an entry the app submitted has an exact time; one a fetch first showed has an observed lower bound', () => {
+        const ledger = createMemoryEntryAgeLedger();
+        ledger.observe(challenge(1, ['seen']), NOW);
+        ledger.markSubmitted(1, ['mine'], NOW + 30);
+        ledger.observe(challenge(1, ['seen', 'mine', 'later']), NOW + 60);
+        expect(ledger.entryTimes(challenge(1, ['seen', 'mine', 'later']))).toEqual({
+            // first sighting: unknown age, answered with the record's firstSeen — only "at or before"
+            seen: { at: NOW, exact: false },
+            mine: { at: NOW + 30, exact: true },
+            later: { at: NOW + 60, exact: false },
+        });
+    });
+
+    test('a challenge with no id has no times', () => {
+        const ledger = createMemoryEntryAgeLedger();
+        ledger.observe(challenge(1, ['a']), NOW);
+        expect(ledger.entryTimes(invalid<Challenge>({ member: { ranking: { entries: [{ id: 'a' }] } } }))).toEqual({});
+    });
+
+    test('an entry the ledger has no record of is left out; so is a challenge it never saw', () => {
+        const ledger = createMemoryEntryAgeLedger();
+        ledger.observe(challenge(1, ['a']), NOW);
+        expect(ledger.entryTimes(challenge(1, ['a', 'ghost']))).toEqual({ a: { at: NOW, exact: false } });
+        expect(ledger.entryTimes(challenge(2, ['a']))).toEqual({});
+    });
+});

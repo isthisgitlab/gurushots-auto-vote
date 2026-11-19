@@ -12,6 +12,8 @@ import { RemoteControlEntry } from '@/components/app/RemoteControlEntry';
 import { PageLoader } from '@/components/ui/LoadingSpinner';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import { useDocumentTheme } from '@/hooks/useDocumentTheme';
+import { useEffectivePresentation } from '@/api/useEffectiveSettings';
+import { EffectiveUnavailableNotice } from '@/components/ui/EffectiveUnavailableNotice';
 import { useNoticeGate } from '@/hooks/useNoticeGate';
 import { UnofficialNoticeModal } from '@/components/app/UnofficialNoticeModal';
 import { SettingsRecoveryNotice } from '@/components/app/SettingsRecoveryNotice';
@@ -74,7 +76,10 @@ function LoginPageContent({ startupError }: { startupError?: string }) {
         }
     }, [envInfo]);
 
-    useDocumentTheme(theme);
+    // The theme painted is the installation's effective one (the saved theme, or a running scenario's over it); the toggle below
+    // keeps showing and saving the saved one, and its value is only the fallback until the host has published one.
+    const { presentation, applied: presentationApplied } = useEffectivePresentation();
+    useDocumentTheme(presentation?.theme ?? theme, presentationApplied);
 
     const handleThemeChange = useCallback(
         async (newTheme: string) => {
@@ -172,6 +177,9 @@ function LoginPageContent({ startupError }: { startupError?: string }) {
                     <LanguageSwitcher />
 
                     <SettingsRecoveryNotice returnFocusTo={headingRef} />
+                    <EffectiveUnavailableNotice
+                        reasons={presentation?.available === false ? [presentation.reason ?? 'unavailable'] : []}
+                    />
 
                     {/* Title */}
                     <h1

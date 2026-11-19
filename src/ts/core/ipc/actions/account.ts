@@ -233,10 +233,18 @@ const handleGetMemberChallenges = (async () => {
             fetchUpcomingOrNull(guard.token, strategy),
         ]);
         if (open === null) return { success: false as const, error: 'Could not list challenges', items: [] };
+        // The horizon as this listing starts: the installation's effective value (the saved one, or the published phase over
+        // it). One that cannot be read lists no upcoming challenge (a horizon of 0), said so: not the saved horizon.
+        const horizon = settings.captureInstallationSettings(['discoverUpcomingHours']);
+        if (!horizon.ok) {
+            logger
+                .withCategory('api')
+                .warning(`upcoming challenges are not listed: ${horizon.key} is unavailable (${horizon.reason})`, null);
+        }
         const merged = mergeDiscoverLists({
             open,
             upcoming: upcoming ?? [],
-            hours: settings.getEffectiveSetting('discoverUpcomingHours', null),
+            hours: horizon.ok ? horizon.values.discoverUpcomingHours : 0,
             nowSec: Date.now() / 1000,
         });
         // The lists belong to the token they were read under: a login that replaced it while they

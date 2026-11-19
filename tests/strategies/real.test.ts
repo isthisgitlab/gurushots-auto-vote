@@ -69,6 +69,10 @@ jest.mock('../../src/ts/core/services/autoClaim', () => ({
     ),
     runClaimPass: jest.fn(),
 }));
+jest.mock('../../src/ts/core/services/scenarioRunner/installation', () => ({
+    publishInstallationOverlay: jest.fn(async () => 'none'),
+    runInstallationStage: jest.fn(async () => 'none'),
+}));
 jest.mock('../../src/ts/core/services/missions', () => ({
     loadMissionNeeds: jest.fn(async () => null),
     registerMissionNeeds: jest.fn((_token: string, needs: missionsModule.MissionNeeds | null) =>
@@ -117,9 +121,13 @@ const { runClaimPass } = jest.mocked(require('../../src/ts/core/services/autoCla
 const { loadMissionNeeds, registerMissionNeeds } = jest.mocked(
     require('../../src/ts/core/services/missions') as typeof missionsModule,
 );
+const { publishInstallationOverlay, runInstallationStage } = jest.mocked(
+    require('../../src/ts/core/services/scenarioRunner/installation') as typeof installationModule,
+);
 import rewardsModule = require('../../src/ts/core/api/rewards');
 const rewards = jest.mocked(rewardsModule);
 import main = require('../../src/ts/core/strategies/real');
+import { scenarioStateLedger, scenarioStepLock } from '../../src/ts/core/scenarioStateStore';
 import entryAgeStoreModule = require('../../src/ts/core/entryAgeStore');
 import type * as joinStateStoreModule from '../../src/ts/core/joinStateStore';
 import type * as votingOrchestratorModule from '../../src/ts/core/services/votingOrchestrator';
@@ -127,6 +135,7 @@ import type * as boostModule from '../../src/ts/core/services/votingOrchestrator
 import type * as joinChallengesModule from '../../src/ts/core/services/joinChallenges';
 import type * as autoClaimModule from '../../src/ts/core/services/autoClaim';
 import type * as missionsModule from '../../src/ts/core/services/missions';
+import type * as installationModule from '../../src/ts/core/services/scenarioRunner/installation';
 import type * as snapGameModule from '../../src/ts/core/strategies/real/snapGame';
 import type { Challenge } from '../../src/ts/core/types/gurushots';
 import type { CategoryLogger } from '../../src/ts/core/logger';
@@ -503,6 +512,8 @@ describe('fetchChallengesAndVote', () => {
             claimChallengeResources: rewards.claimChallengeResources,
             getMyMissions: rewards.getMyMissions,
             claimMissionPrize: rewards.claimMissionPrize,
+            // the cycle's record of what a scenario action already claimed
+            operations: expect.any(Object),
         });
     });
 
@@ -543,6 +554,42 @@ describe('fetchChallengesAndVote', () => {
             expect.objectContaining({ joinStateStore }),
             null,
         );
+    });
+
+    test('the installation stage runs first: before the mission read, the pre-steps and the pass', async () => {
+        runVotingPass.mockResolvedValue({ success: true });
+
+        await fetchChallengesAndVote('tok');
+
+        // the persisted ledger and the cross-process step lock: this is the real run, not the mock one; a full pass also
+        // runs the installation's account rules
+        expect(runInstallationStage).toHaveBeenCalledTimes(1);
+        expect(runInstallationStage).toHaveBeenCalledWith(
+            expect.objectContaining({
+                token: 'tok',
+                ledger: scenarioStateLedger,
+                lock: scenarioStepLock,
+                reads: {
+                    getBankroll: join.getBankroll,
+                    getMyMissions: rewards.getMyMissions,
+                    getMyCompletedChallenges: rewards.getMyCompletedChallenges,
+                },
+                operations: expect.any(Object),
+            }),
+            { rules: true },
+        );
+        expect(publishInstallationOverlay).not.toHaveBeenCalled();
+        const published = runInstallationStage.mock.invocationCallOrder[0]!;
+        expect(published).toBeLessThan(loadMissionNeeds.mock.invocationCallOrder[0]!);
+        expect(published).toBeLessThan(runJoinPass.mock.invocationCallOrder[0]!);
+        expect(published).toBeLessThan(runVotingPass.mock.invocationCallOrder[0]!);
+    });
+
+    test("a single-challenge run only publishes: its reads need the owner's current settings, and it runs no account work", async () => {
+        runVotingPass.mockResolvedValue({ success: true });
+        await fetchChallengesAndVote('tok', 9);
+        expect(publishInstallationOverlay).toHaveBeenCalledTimes(1);
+        expect(runInstallationStage).not.toHaveBeenCalled();
     });
 
     test('reads the missions once and hands the same needs to the join pre-step and the pass', async () => {
@@ -623,6 +670,8 @@ describe('fetchChallengesAndVote', () => {
                 'getEligiblePhotos',
                 'getEligiblePhotosWalk',
                 'getImageData',
+                'getMyCompletedChallenges',
+                'getMyMissions',
                 'getVoteImages',
                 'runTurboGame',
                 'searchTagAutocomplete',

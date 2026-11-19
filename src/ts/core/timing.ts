@@ -7,6 +7,8 @@
  * importing from the swappable API surface.
  */
 
+import { simulationScope } from './simulationScope';
+
 /**
  * Creates a promise that resolves after the specified time
  *
@@ -14,9 +16,12 @@
  * @returns Promise that resolves after the specified time
  */
 const sleep = (ms: number): Promise<void> =>
-    new Promise((resolve) => {
-        setTimeout(resolve, ms);
-    });
+    // A simulation yields to no timer (simulationScope.ts): its sleeps are over at once.
+    simulationScope()
+        ? Promise.resolve()
+        : new Promise((resolve) => {
+              setTimeout(resolve, ms);
+          });
 
 /**
  * Generates a random delay between min and max milliseconds

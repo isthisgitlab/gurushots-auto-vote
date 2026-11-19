@@ -4,7 +4,7 @@ import { soonestScheduledStart } from '../scheduledFill';
 import { soonestAutoSubmitClockBoundary } from '../autoSubmitClock';
 import { soonestAutoSubmitScheduleBoundary } from '../autoSubmitSchedule';
 import { soonestFinalWindowTopUpStart, soonestBoostPrefillStart } from './leadWindows';
-import { soonestCurrencyRuleStart, soonestScenarioWake, soonestBoostHoldEnd } from './ruleWakes';
+import { soonestCurrencyRuleStart, soonestScenarioWake, soonestBoostHoldEnd, soonestAccountWake } from './ruleWakes';
 import { resolveEligibleThresholds, anyInWindow, soonestThresholdEntry } from './thresholds';
 
 import type { Challenge } from '../../types/gurushots';
@@ -18,9 +18,10 @@ import type {
     CurrencyRuleStart,
     ScenarioWakeStart,
     BoostHoldEnd,
+    AccountWakeStart,
 } from './shared';
 import type { ResolveFinalWindowTopUp, ResolveBoostPrefill } from './leadWindows';
-import type { ResolveCurrencyAuto, ResolveScenarioWake } from './ruleWakes';
+import type { ResolveCurrencyAuto, ResolveScenarioWake, ResolveAccountWake } from './ruleWakes';
 import type { ResolveThreshold } from './thresholds';
 
 /**
@@ -38,6 +39,7 @@ export interface CadenceDecision {
     nextCurrencyRule: CurrencyRuleStart | null;
     nextScenarioWake: ScenarioWakeStart | null;
     nextBoostHold: BoostHoldEnd | null;
+    nextAccountWake: AccountWakeStart | null;
 }
 
 /**
@@ -74,6 +76,7 @@ const fastCadenceDecision = ({
     nextCurrencyRule,
     nextScenarioWake,
     nextBoostHold,
+    nextAccountWake,
     now,
     minGapMs,
     lastMinuteCheckMinutes,
@@ -88,6 +91,7 @@ const fastCadenceDecision = ({
     nextCurrencyRule: CurrencyRuleStart | null;
     nextScenarioWake: ScenarioWakeStart | null;
     nextBoostHold: BoostHoldEnd | null;
+    nextAccountWake: AccountWakeStart | null;
     now: number;
     minGapMs: number;
     lastMinuteCheckMinutes: number;
@@ -108,6 +112,7 @@ const fastCadenceDecision = ({
     if (nextBoostHold) capCadenceToBoundary(fast, nextBoostHold.startTime, now, minGapMs, 'boost-hold');
     if (nextCurrencyRule) capCadenceToBoundary(fast, nextCurrencyRule.startTime, now, minGapMs, 'currency-rule');
     if (nextScenarioWake) capCadenceToBoundary(fast, nextScenarioWake.startTime, now, minGapMs, 'scenario');
+    if (nextAccountWake) capCadenceToBoundary(fast, nextAccountWake.startTime, now, minGapMs, 'account');
     return {
         delayMs: fast.delayMs,
         mode: fast.mode,
@@ -120,6 +125,7 @@ const fastCadenceDecision = ({
         nextCurrencyRule,
         nextScenarioWake,
         nextBoostHold,
+        nextAccountWake,
     };
 };
 
@@ -169,6 +175,7 @@ const resolveCadenceBoundaries = async ({
     resolveBoostPrefill,
     resolveCurrencyAuto,
     resolveScenarioWake,
+    resolveAccountWake,
 }: {
     challenges: Challenge[];
     eligible: Challenge[];
@@ -182,6 +189,7 @@ const resolveCadenceBoundaries = async ({
     resolveBoostPrefill: ResolveBoostPrefill | null;
     resolveCurrencyAuto: ResolveCurrencyAuto | null;
     resolveScenarioWake: ResolveScenarioWake | null;
+    resolveAccountWake: ResolveAccountWake | null;
 }) => {
     const [nextAutoSubmitClock, nextAutoSubmitSchedule, secondary] = await Promise.all([
         resolveAutoSubmitClock && timezone
@@ -207,6 +215,7 @@ const resolveCadenceBoundaries = async ({
         nextAutoSubmitSchedule,
         nextEntry: soonestThresholdEntry(eligible, thresholds, now),
         nextBoostHold: soonestBoostHoldEnd(challenges, now),
+        nextAccountWake: resolveAccountWake ? await soonestAccountWake(now, resolveAccountWake) : null,
         ...secondary,
     };
 };
@@ -252,6 +261,7 @@ const resolveCadenceBoundaries = async ({
  * @param opts.resolveBoostPrefill - per-challenge pre-boost fill config resolver (sync or async); when passed, the delay is also capped to the soonest upcoming pre-boost window start
  * @param opts.resolveCurrencyAuto - per-challenge currency-automation timing resolver (sync or async); when passed, the delay is also capped to the soonest upcoming key / swap / fill rule opening
  * @param opts.resolveScenarioWake - per-challenge scenario resolver (sync or async); when passed, the delay is also capped to the soonest instant a scenario time condition can flip
+ * @param opts.resolveAccountWake - the account's own boundaries (installation scenario, pre-join candidates, claim throttle, mission expiry), none bounded by a challenge close time; when passed, the delay is also capped to the soonest of them
  */
 export async function computeNextCycleDelayMs(
     challenges: Challenge[],
@@ -269,6 +279,7 @@ export async function computeNextCycleDelayMs(
         resolveBoostPrefill = null,
         resolveCurrencyAuto = null,
         resolveScenarioWake = null,
+        resolveAccountWake = null,
     }: {
         resolveThreshold: ResolveThreshold;
         normalDelayMs: number;
@@ -282,6 +293,7 @@ export async function computeNextCycleDelayMs(
         resolveBoostPrefill?: ResolveBoostPrefill | null;
         resolveCurrencyAuto?: ResolveCurrencyAuto | null;
         resolveScenarioWake?: ResolveScenarioWake | null;
+        resolveAccountWake?: ResolveAccountWake | null;
     },
 ): Promise<CadenceDecision> {
     const { eligible, thresholds } = await resolveEligibleThresholds(challenges, now, resolveThreshold);
@@ -298,6 +310,7 @@ export async function computeNextCycleDelayMs(
         resolveBoostPrefill,
         resolveCurrencyAuto,
         resolveScenarioWake,
+        resolveAccountWake,
     });
     const fastBoundaries = {
         ...boundaries,
@@ -344,6 +357,7 @@ export async function computeNextCycleDelayMs(
     if (boundaries.nextBoostHold) capTo(boundaries.nextBoostHold.startTime, 'boost-hold');
     if (boundaries.nextCurrencyRule) capTo(boundaries.nextCurrencyRule.startTime, 'currency-rule');
     if (boundaries.nextScenarioWake) capTo(boundaries.nextScenarioWake.startTime, 'scenario');
+    if (boundaries.nextAccountWake) capTo(boundaries.nextAccountWake.startTime, 'account');
 
     return {
         delayMs: cadence.delayMs,

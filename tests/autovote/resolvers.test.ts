@@ -177,6 +177,57 @@ describe('autovote resolvers', () => {
         await expect(resolveScenarioWake('c1')).resolves.toBeNull();
     });
 
+    it('resolveScenarioWake: a zone that could not be read (the empty one) leaves the challenge out: no boundary from the saved zone', async () => {
+        const { resolveScenarioWake } = createResolvers(host);
+        const scenario = { name: 'Plan', start: 'main', phases: { main: {} } };
+        jest.mocked(host.getScenarioStatus).mockResolvedValueOnce(
+            invalid({ success: true, scenario, state: null, corrupt: false, timezone: '' }),
+        );
+        await expect(resolveScenarioWake('c1')).resolves.toBeNull();
+    });
+
+    it('resolveAccountWake: the main process answers in one piece; a host without that route collects none', async () => {
+        const sources = { installation: null, candidates: [], claimAt: 5, missionExpiry: null };
+        const getAccountWake = jest.fn(async () => sources);
+        await expect(createResolvers({ ...host, getAccountWake }).resolveAccountWake()).resolves.toBe(sources);
+        await expect(createResolvers(host).resolveAccountWake()).resolves.toBeNull();
+    });
+
+    describe('resolveAutoSubmitSchedule: the schedule a phase published', () => {
+        const now = Math.floor(Date.now() / 1000);
+        const submit = { alignment: 'end', rows: [{ state: 'known', count: 2, at: now + 500 }] };
+        const status = (published: object | undefined, phase = 'main') =>
+            invalid({ success: true, state: { phase, published } });
+        const read = async (answer: unknown) => {
+            withSettings({ autoSubmit: true, manualPhotosOnly: false, autoSubmitSchedule: [] });
+            jest.mocked(host.getScenarioStatus).mockResolvedValueOnce(invalid(answer));
+            return createResolvers(host).resolveAutoSubmitSchedule('c1');
+        };
+
+        it('carries a valid publication of the phase the challenge is in', async () => {
+            await expect(
+                read(status({ phase: 'main', validUntil: null, schedules: { submit } })),
+            ).resolves.toMatchObject({ resolved: submit });
+            await expect(
+                read(status({ phase: 'main', validUntil: now + 60, schedules: { submit } })),
+            ).resolves.toMatchObject({ resolved: submit });
+        });
+
+        it('leaves it out when it is expired, from another phase, has no submit schedule, or there is none', async () => {
+            for (const answer of [
+                status({ phase: 'main', validUntil: now - 1, schedules: { submit } }),
+                status({ phase: 'earlier', validUntil: null, schedules: { submit } }),
+                status({ phase: 'main', validUntil: null }),
+                status({ phase: 'main', validUntil: null, schedules: {} }),
+                status(undefined),
+                { success: false },
+                undefined,
+            ]) {
+                expect(await read(answer)).not.toHaveProperty('resolved');
+            }
+        });
+    });
+
     it('resolveCurrencyAuto: an enabled rule passes its timing through; a disabled one is null', async () => {
         const { resolveCurrencyAuto } = createResolvers(host);
         withSettings({

@@ -2,7 +2,7 @@ import * as logger from '../../logger';
 import * as settings from '../../settings';
 import * as votingLogic from '../VotingLogic';
 import { boostDeadline } from '../../voting/boostWindow';
-import { effectiveTimezone } from '../../settings/uiDefaults';
+import { captureInstallationTimezone } from '../installationTimezone';
 import { getAutoSubmitClockWindowState } from '../../scheduling/autoSubmitWindow';
 
 import type { Challenge } from '../../types/gurushots';
@@ -44,13 +44,15 @@ export const armPinWaitWake = ({ challenge, now }: ActionContext) => {
     const relativeThresholdSec = votingLogic.getAutoFillThresholdSec(challenge, cid);
     const relativeBoundary = relativeThresholdSec > 0 ? closeTime - relativeThresholdSec : null;
     const clockTimes = settings.getEffectiveSetting('autoSubmitTime', cid);
+    // The zone is read once for this wake; one that cannot be read supplies no clock boundary.
+    const timezone = captureInstallationTimezone();
     const clockBoundary =
-        Array.isArray(clockTimes) && clockTimes.length > 0
+        timezone !== null && Array.isArray(clockTimes) && clockTimes.length > 0
             ? (() => {
                   const clock = getAutoSubmitClockWindowState(
                       clockTimes,
                       settings.getEffectiveSetting('autoSubmitWindowMinutes', cid),
-                      effectiveTimezone(settings.getSetting('timezone')),
+                      timezone,
                       now,
                   );
                   return clock.active ? Math.min(clock.activeUntil!, closeTime) : clock.nextStart;

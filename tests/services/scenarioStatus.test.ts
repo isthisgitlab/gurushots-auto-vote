@@ -3,11 +3,19 @@
  * scheduler resolver built on them.
  */
 
-jest.mock('../../src/ts/core/settings', () => ({
-    getSetting: jest.fn(),
-    getEffectiveSetting: jest.fn(),
-    getScenario: jest.fn(),
-}));
+jest.mock('../../src/ts/core/settings', () => {
+    const getSetting = jest.fn();
+    return {
+        getSetting,
+        // The installation's own read of the time zone: the saved one while no installation scenario overlays it.
+        captureInstallationSettings: jest.fn((keys: string[]) => ({
+            ok: true,
+            values: Object.fromEntries(keys.map((key) => [key, getSetting(key)])),
+        })),
+        getEffectiveSetting: jest.fn(),
+        getScenario: jest.fn(),
+    };
+});
 jest.mock('../../src/ts/core/joinStateStore', () => ({
     acquireUnlockLock: jest.fn((id: string | number, _category?: string) => ({
         ok: id !== 'scenario-9',
@@ -23,8 +31,14 @@ import type * as nodeResolversModule from '../../src/ts/core/scheduling/nodeReso
 import type * as scenarioStateStoreModule from '../../src/ts/core/scenarioStateStore';
 import type { ScenarioDocument } from '../../src/ts/core/settings/scenarioSchema';
 import { invalid } from '../helpers/invalid';
-const { getScenarioStatus, scenarioWakeInput, ledgerForMode, stepLockForMode } =
-    require('../../src/ts/core/services/scenarioStatus') as typeof scenarioStatusModule;
+const {
+    getScenarioStatus,
+    scenarioWakeInput,
+    ledgerForMode,
+    stepLockForMode,
+    listSimulationSubjects,
+    readSubjectRows,
+} = require('../../src/ts/core/services/scenarioStatus') as typeof scenarioStatusModule;
 const { resolveScenarioWake } = require('../../src/ts/core/scheduling/nodeResolvers') as typeof nodeResolversModule;
 const { createMemoryStateLedger, initialState, scenarioStateLedger, mockScenarioStateLedger } =
     require('../../src/ts/core/scenarioStateStore') as typeof scenarioStateStoreModule;
@@ -67,6 +81,13 @@ describe('getScenarioStatus', () => {
         expect(getScenarioStatus(7, ledger).state).toBeNull();
         const broken = { get: () => ({ corrupt: true, state: null }) };
         expect(getScenarioStatus(7, invalid(broken)).corrupt).toBe(true);
+    });
+
+    test('a zone the installation cannot read is the empty one, and gives the scheduler no input', () => {
+        settings.captureInstallationSettings.mockReturnValueOnce({ ok: false, key: 'timezone', reason: 'expired' });
+        const status = getScenarioStatus(7, createMemoryStateLedger());
+        expect(status.timezone).toBe('');
+        expect(scenarioWakeInput(status)).toBeNull();
     });
 
     test('reads an empty timezone as UTC', () => {
@@ -122,5 +143,106 @@ describe('stepLockForMode', () => {
         const lock = stepLockForMode('9');
         expect(lock.ok).toBe(true);
         expect(() => lock.release()).not.toThrow();
+    });
+});
+
+describe('the subjects a simulation can run on', () => {
+    const producers = () => ({
+        getActiveChallenges: jest.fn(),
+        getMemberChallenges: jest.fn(),
+        getMyCompletedChallenges: jest.fn(),
+    });
+    const asProducers = (fakes: ReturnType<typeof producers>) =>
+        invalid<Parameters<typeof listSimulationSubjects>[2]>(fakes);
+
+    test('active: the active list as {id, label}, a marked row left out, a long label cut', async () => {
+        const fakes = producers();
+        fakes.getActiveChallenges.mockResolvedValue({
+            challenges: [
+                { id: 7, title: 'Seven' },
+                { id: 8, title: 'Marked', dataIssues: ['close_time'] },
+                { id: 9 },
+                { id: 'x', title: 'y'.repeat(300) },
+                { title: 'no id' },
+                null,
+            ],
+        });
+        const listing = await listSimulationSubjects('active', 'tok', asProducers(fakes));
+        expect(listing.readable).toBe(true);
+        expect(listing.subjects.map((subject) => [subject.id, subject.label.length])).toEqual([
+            ['7', 5],
+            ['9', 1],
+            ['x', 120],
+        ]);
+        expect(fakes.getActiveChallenges).toHaveBeenCalledWith('tok');
+    });
+
+    test('candidate: the open list, read as such', async () => {
+        const fakes = producers();
+        fakes.getMemberChallenges.mockResolvedValue([{ id: 3, title: 'Open call' }]);
+        await expect(listSimulationSubjects('candidate', 'tok', asProducers(fakes))).resolves.toEqual({
+            readable: true,
+            subjects: [{ id: '3', label: 'Open call' }],
+        });
+        expect(fakes.getMemberChallenges).toHaveBeenCalledWith('tok', 'open');
+    });
+
+    test('completed: the completed list, read page by page to its end', async () => {
+        const fakes = producers();
+        fakes.getMyCompletedChallenges.mockResolvedValue([{ id: 5, title: 'Done' }]);
+        await expect(listSimulationSubjects('completed', 'tok', asProducers(fakes))).resolves.toEqual({
+            readable: true,
+            subjects: [{ id: '5', label: 'Done' }],
+        });
+        expect(fakes.getMyCompletedChallenges).toHaveBeenCalledWith('tok', 0, 20);
+    });
+
+    test('a confirmed empty list is readable and empty', async () => {
+        const fakes = producers();
+        fakes.getActiveChallenges.mockResolvedValue({ challenges: [] });
+        fakes.getMemberChallenges.mockResolvedValue([]);
+        fakes.getMyCompletedChallenges.mockResolvedValue([]);
+        for (const kind of ['active', 'candidate', 'completed'] as const) {
+            await expect(listSimulationSubjects(kind, 'tok', asProducers(fakes))).resolves.toEqual({
+                readable: true,
+                subjects: [],
+            });
+        }
+    });
+
+    test('a failed read is not an empty list: it is unreadable', async () => {
+        const fakes = producers();
+        fakes.getActiveChallenges.mockResolvedValueOnce(null);
+        fakes.getActiveChallenges.mockResolvedValueOnce({ challenges: [], fetchFailed: true });
+        fakes.getActiveChallenges.mockResolvedValueOnce({ challenges: 'none' });
+        fakes.getMemberChallenges.mockResolvedValue(null);
+        fakes.getMyCompletedChallenges.mockResolvedValue(null);
+        const unreadable = { readable: false, subjects: [] };
+        await expect(listSimulationSubjects('active', 'tok', asProducers(fakes))).resolves.toEqual(unreadable);
+        await expect(listSimulationSubjects('active', 'tok', asProducers(fakes))).resolves.toEqual(unreadable);
+        await expect(listSimulationSubjects('active', 'tok', asProducers(fakes))).resolves.toEqual(unreadable);
+        await expect(listSimulationSubjects('candidate', 'tok', asProducers(fakes))).resolves.toEqual(unreadable);
+        await expect(listSimulationSubjects('completed', 'tok', asProducers(fakes))).resolves.toEqual(unreadable);
+    });
+
+    test('a completed listing that failed on a later page is unreadable too, not a short list', async () => {
+        const fakes = producers();
+        const page = Array.from({ length: 20 }, (_unused, index) => ({ id: index + 1 }));
+        fakes.getMyCompletedChallenges.mockResolvedValueOnce(page).mockResolvedValueOnce(null);
+        await expect(listSimulationSubjects('completed', 'tok', asProducers(fakes))).resolves.toEqual({
+            readable: false,
+            subjects: [],
+        });
+    });
+
+    test('the rows keep what the producer listed: a read that dropped rows says so', async () => {
+        const fakes = producers();
+        fakes.getActiveChallenges.mockResolvedValue({ challenges: [{ id: 1 }], pruneUnsafe: true });
+        await expect(readSubjectRows('active', 'tok', asProducers(fakes))).resolves.toEqual({
+            readable: true,
+            kind: 'active',
+            rows: [{ id: 1 }],
+            pruneUnsafe: true,
+        });
     });
 });

@@ -8,11 +8,13 @@ import { PIN_KINDS, pinDraftWithout, pinOf, planPinCommits, toggledPinDraft } fr
 import { useEntryPins } from '@/api/useEntryPins';
 import { useAsyncIpcAction } from '@/api/useAsyncIpcAction';
 import * as ipc from '@/api/ipc';
+import { effectOutcomeOf } from '@/api/ipc';
 import { ipcErrorText } from '@/api/ipcErrorText';
 import { ChooserFooter } from './ChooserFooter';
 import { PhotoPickerToolbar } from './PhotoPicker';
 import { PhotoGrid } from './PhotoGrid';
 import { PinToggle } from './PinToggle';
+import { EffectOutcomeNotice } from '@/components/ui/EffectOutcomeNotice';
 import { useCurrentMember } from '@/hooks/currentMember';
 import { useChooserSave } from '@/hooks/usePhotoChooser';
 import { usePhotoPicker } from '@/hooks/usePhotoPicker';
@@ -154,8 +156,10 @@ const writePlannedPinCommits = async ({
             continue;
         }
         const outcome = await runSetEntryPin(kind, challengeId, imageId);
-        if (!outcome.success) {
-            state.failures.push({ kind, code: outcome.error });
+        // A reply with no final result (lost with its identity, or queued for the background service) is not a
+        // landed pin: it reads as not-applied, and the notice beside the footer says where the change stands.
+        if (!outcome.success || effectOutcomeOf(outcome) !== null) {
+            state.failures.push({ kind, code: outcome.success ? 'effect-unresolved' : outcome.error });
             continue;
         }
         onCommitted(kind, imageId);
@@ -176,8 +180,9 @@ const writeBlockedDirectClears = async (
             !state.commits.some((commit) => commit.kind === kind)
         ) {
             const outcome = await runSetEntryPin(kind, challengeId, null);
-            if (!outcome.success) state.failures.push({ kind, code: outcome.error });
-            else onCommitted(kind, null);
+            if (!outcome.success || effectOutcomeOf(outcome) !== null) {
+                state.failures.push({ kind, code: outcome.success ? 'effect-unresolved' : outcome.error });
+            } else onCommitted(kind, null);
         }
     }
 };
@@ -204,7 +209,11 @@ const kindName = (kind: EntryPinKind, t: Translate): string => t(kind === 'boost
 const pinSaveErrorText = (failures: PinWriteFailure[] | null, t: Translate): string | undefined => {
     if (failures === null) return undefined;
     const reason = (failure: PinWriteFailure) =>
-        failure.code === 'unavailable' ? t('app.unavailable') : ipcErrorText(failure.code, t);
+        failure.code === 'unavailable'
+            ? t('app.unavailable')
+            : failure.code === 'effect-unresolved'
+              ? t('errors.effectUnresolved')
+              : ipcErrorText(failure.code, t);
     if (failures.length === 2 && failures[0].code === failures[1].code) {
         return t('app.photoChooserPinSaveErrorBoth', { reason: reason(failures[0]) });
     }
@@ -314,7 +323,12 @@ function PhotoChooserBody({
         selected.some((id, i) => id !== value[i]) ||
         pinDraft.boost !== undefined ||
         pinDraft.turbo !== undefined;
-    const { run: runSetEntryPin } = useAsyncIpcAction(ipc.setEntryPin);
+    const {
+        run: runSetEntryPin,
+        outcome: pinOutcome,
+        checkStatus: checkPinOutcome,
+        dismissOutcome: dismissPinOutcome,
+    } = useAsyncIpcAction(ipc.setEntryPin);
     // Auto shows whenever the chooser names a challenge — the suggest handler resolves un-joined
     // Discover rows from the open/upcoming lists, so a row's chooser ranks too; without a challenge
     // there is nothing to rank for.
@@ -470,6 +484,7 @@ function PhotoChooserBody({
                         : undefined
                 }
             />
+            <EffectOutcomeNotice outcome={pinOutcome} onCheck={checkPinOutcome} onDismiss={dismissPinOutcome} />
             <StickyModalFooter>
                 <ChooserFooter
                     saveFailed={saveFailed}

@@ -67,6 +67,7 @@ const {
 // The service's windows: the explicit no-ops its shell module passes.
 const windows: PlatformWindows = {
     broadcastSettingsChanged: () => undefined,
+    broadcastEvent: () => undefined,
     afterWipe: () => undefined,
 };
 
@@ -77,7 +78,7 @@ const windows: PlatformWindows = {
  */
 const installNodePlatformWithExtractor = (): void => {
     const installed = installTestPlatform();
-    const family = createNodePlatform(windows, { extractVisionCliAssets: () => mockExtract() });
+    const family = createNodePlatform(windows, 'cli', { extractVisionCliAssets: () => mockExtract() });
     const nodeModelLocation = family.assets.visionModel.location;
     installed.assets = {
         ...family.assets,

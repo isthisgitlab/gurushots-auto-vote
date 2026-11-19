@@ -58,6 +58,23 @@ Object.assign(mockApi, {
     // Challenges
     getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [] }),
 
+    // The controller's routes to the host (the priority Stop fence and the installation's publication): an open fence at
+    // epoch 0 that allows an arm, the answer of a host with no installation scenario. A test of the epoch rules brings its own.
+    scenarioStopFence: jest.fn().mockImplementation((options?: { initialize?: boolean; armEpoch?: number }) =>
+        Promise.resolve({
+            success: true,
+            fence: { state: 'ok', fence: { stopEpoch: 0, blocked: false, lastStop: null, lastArm: null } },
+            ...(options?.initialize ? { created: false } : {}),
+            ...(options?.armEpoch === undefined ? {} : { armAllowed: true }),
+        }),
+    ),
+    recordFullStop: jest.fn().mockResolvedValue({ success: true, epoch: 0 }),
+    armAutovote: jest.fn().mockResolvedValue({ success: true }),
+    armIfAllowed: jest.fn().mockResolvedValue({ success: true }),
+    withdrawInstallation: jest.fn().mockResolvedValue({ success: true, outcome: 'none' }),
+    rearmInstallation: jest.fn().mockResolvedValue({ success: true, outcome: 'none' }),
+    getAccountWake: jest.fn().mockResolvedValue({ success: true, wake: null }),
+
     // Voting
     runVotingCycle: jest.fn().mockResolvedValue({ success: true }),
     runVotingCycleForChallenge: jest.fn().mockResolvedValue({ success: true }),

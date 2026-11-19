@@ -16,6 +16,8 @@ import { logCategories } from '../helpers/logCategories';
 
 import apiFactoryModule = require('../../src/ts/core/apiFactory');
 const apiFactory = jest.mocked(apiFactoryModule);
+import settingsModule = require('../../src/ts/core/settings');
+const settings = jest.mocked(settingsModule);
 import authModule = require('../../src/ts/core/services/auth');
 const auth = jest.mocked(authModule);
 import currencyActionsModule = require('../../src/ts/core/services/currencyActions');
@@ -92,6 +94,19 @@ describe.each([
     test('service outcome is passed through on failure', async () => {
         currencyActions[serviceFn].mockResolvedValue({ ok: false, outcome: 'no-balance' });
         expect(await call(handlers, true)).toEqual({ success: false, outcome: 'no-balance', error: 'no-balance' });
+    });
+});
+
+describe('a challenge whose scenario settings are unavailable', () => {
+    test.each([
+        ['key-unlock-boost', (h: Handlers) => h['key-unlock-boost'](null, 10, true), 'unlockBoostWithKey'],
+        ['fill-exposure', (h: Handlers) => h['fill-exposure'](null, 10, true), 'fillExposure'],
+        ['swap-entry-photo', (h: Handlers) => h['swap-entry-photo'](null, 10, 'old', 'new', true), 'swapEntry'],
+        ['preview-swap-photo', (h: Handlers) => h['preview-swap-photo'](null, 10, 'old'), 'previewSwap'],
+    ] as const)('%s is not available, and nothing is read or spent', async (_label, call, serviceFn) => {
+        settings.scenarioSubjectAvailable.mockReturnValueOnce(false);
+        expect(await call(handlers)).toEqual({ success: false, outcome: 'not-available', error: 'not-available' });
+        expect(currencyActions[serviceFn]).not.toHaveBeenCalled();
     });
 });
 

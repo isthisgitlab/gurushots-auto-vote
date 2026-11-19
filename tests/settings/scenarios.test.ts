@@ -72,6 +72,12 @@ describe('settings facade — scenarios', () => {
         expect(settings.getScenario('EVENING boost before the last day')!.start).toBe('main');
     });
 
+    test('every template passes checkScenario, the check the builder and check-scenario run', () => {
+        for (const { id, scenario } of SCENARIO_TEMPLATES) {
+            expect({ id, result: settings.checkScenario(structuredClone(scenario)).ok }).toEqual({ id, result: true });
+        }
+    });
+
     test('checkScenario validates without storing', () => {
         expect(settings.checkScenario(simple())).toEqual(expect.objectContaining({ ok: true }));
         expect(settings.checkScenario({ ...simple(), start: 'x' }).ok).toBe(false);
@@ -83,9 +89,11 @@ describe('settings facade — scenarios', () => {
         expect(result).toEqual({ ok: false, issues: [expect.objectContaining({ path: 'start' })] });
     });
 
+    const revision = () => settings.getScenarioLibrary().revision as number;
+
     test('overwriting replaces the old casing; overwrite:false refuses', () => {
         settings.saveScenario(simple('Plan'));
-        expect(settings.saveScenario(simple('PLAN')).ok).toBe(true);
+        expect(settings.saveScenario(simple('PLAN'), { expectedDefinitionRevision: revision() }).ok).toBe(true);
         expect(Object.keys(storedMap())).toEqual(['PLAN']);
         expect(
             (settings.saveScenario(simple('plan'), { overwrite: false }) as SaveRefused).issues[0].message,
@@ -97,7 +105,7 @@ describe('settings facade — scenarios', () => {
         expect((settings.saveScenario(simple('One more')) as SaveRefused).issues[0].message).toContain(
             'delete one first',
         );
-        expect(settings.saveScenario(simple('Plan 0')).ok).toBe(true);
+        expect(settings.saveScenario(simple('Plan 0'), { expectedDefinitionRevision: revision() }).ok).toBe(true);
     });
 
     test('a stored document that no longer validates is skipped and logged', () => {
@@ -113,7 +121,12 @@ describe('settings facade — scenarios', () => {
 
     test('the read-side validation cache stays bounded', () => {
         for (let i = 0; i < 210; i++) {
-            settings.saveScenario({ ...simple(`Plan ${i % 10}`), description: `revision ${i}` });
+            // An overwrite names the revision it was read at, so each save lands and the next read validates a new document.
+            const saved = settings.saveScenario(
+                { ...simple(`Plan ${i % 10}`), description: `revision ${i}` },
+                { expectedDefinitionRevision: revision() },
+            );
+            expect(saved.ok).toBe(true);
             expect(Object.keys(settings.getScenarios())).toHaveLength(Math.min(i + 1, 10));
         }
     });
@@ -154,11 +167,11 @@ describe('settings facade — scenarios', () => {
         });
     });
 
-    test('deleteScenario removes by name; false when absent', () => {
+    test('deleteScenario removes by name; not-found when absent', () => {
         settings.saveScenario(simple('Plan'));
-        expect(settings.deleteScenario('PLAN')).toBe(true);
+        expect(settings.deleteScenario('PLAN')).toEqual({ ok: true });
         expect(settings.getScenarios()).toEqual({});
-        expect(settings.deleteScenario('Plan')).toBe(false);
+        expect(settings.deleteScenario('Plan')).toEqual({ ok: false, reason: 'not-found' });
     });
 
     describe('import / export', () => {
@@ -206,6 +219,54 @@ describe('settings facade — scenarios', () => {
             );
         });
 
+        test('preview points out the phase settings worth a second look', () => {
+            const doc = {
+                ...simple(),
+                phases: { main: { settings: { chosenPhotos: ['a'.repeat(32)], chosenPhotosOnly: true } } },
+            };
+            const result = settings.previewScenarioImport(json(doc)) as PreviewAccepted;
+            expect(result.preview.flagged).toEqual([
+                { phase: 'main', key: 'chosenPhotos' },
+                { phase: 'main', key: 'chosenPhotosOnly' },
+            ]);
+        });
+
+        describe('photo pools', () => {
+            const pooled = (...names: string[]) => ({
+                ...simple(),
+                phases: {
+                    main: {},
+                    ...Object.fromEntries(names.map((name, at) => [`feed${at}`, { photoPool: { name, only: true } }])),
+                },
+            });
+
+            test('a document names its pools once each; nothing of the account’s photos is in an export', () => {
+                settings.setPhotoPool('Wall', ['secretPhotoId1', 'secretPhotoId2']);
+                settings.saveScenario(pooled('Wall', 'Wall', 'Fence'));
+                const exported = settings.exportScenarioWithNotes('Plan');
+                expect(exported?.json).toContain('"name": "Wall"');
+                expect(exported?.json).not.toContain('secretPhotoId');
+                expect(settings.describeScenario(settings.getScenario('Plan')!).pools).toEqual(['Wall', 'Fence']);
+            });
+
+            test('the preview and the result tell which pools this account lacks, and it is not an error', () => {
+                settings.setPhotoPool('Wall', ['a']);
+                const preview = settings.previewScenarioImport(json(pooled('Wall', 'Fence'))) as PreviewAccepted;
+                expect(preview.unboundPools).toEqual(['Fence']);
+                expect(settings.importScenario(json(pooled('Wall', 'Fence')))).toEqual({
+                    ok: true,
+                    name: 'Plan',
+                    unboundPools: ['Fence'],
+                });
+                expect(Object.keys(settings.getScenarios())).toEqual(['Plan']);
+            });
+
+            test('a scenario with no pool has nothing to bind', () => {
+                expect((settings.previewScenarioImport(json(simple())) as PreviewAccepted).unboundPools).toEqual([]);
+                expect(settings.describeScenario(simple() as never).pools).toEqual([]);
+            });
+        });
+
         test('preview of a document without a description', () => {
             expect((settings.previewScenarioImport(json(simple())) as PreviewAccepted).preview.description).toBe('');
         });
@@ -220,12 +281,14 @@ describe('settings facade — scenarios', () => {
         });
 
         test('import stores; a name clash needs overwrite', () => {
-            expect(settings.importScenario(json(simple()))).toEqual({ ok: true, name: 'Plan' });
+            expect(settings.importScenario(json(simple()))).toEqual({ ok: true, name: 'Plan', unboundPools: [] });
             expect(settings.importScenario(json(simple()))).toEqual({
                 ok: false,
                 issues: [expect.objectContaining({ path: 'name' })],
             });
-            expect(settings.importScenario(json(simple()), { overwrite: true }).ok).toBe(true);
+            expect(
+                settings.importScenario(json(simple()), { overwrite: true, expectedDefinitionRevision: revision() }).ok,
+            ).toBe(true);
             expect(settings.importScenario('').ok).toBe(false);
         });
 
@@ -280,8 +343,13 @@ describe('settings facade — scenario assignment', () => {
     let store: MemoryStore;
     const blob = (): ConfigV2 => parseJsonAs(store.value!, isConfig);
 
-    beforeEach(() => {
+    beforeEach(async () => {
         store = installHeadlessStore();
+        // The stores keep what they last read: the progress a test left is not this one's.
+        const storage =
+            require('../../src/ts/core/settings/storage') as typeof import('../../src/ts/core/settings/storage');
+        await storage.discardPendingWrites();
+        storage.resumeWrites();
         settings.rememberChallengeTitles([
             { id: 7, title: 'Big show', type: 'exhibition' },
             { id: 8, title: 'Other' },
@@ -334,7 +402,7 @@ describe('settings facade — scenario assignment', () => {
 
     test('a delete clears every assignment and drops rules left with nothing to do', () => {
         assignEverywhere();
-        expect(settings.deleteScenario('Plan')).toBe(true);
+        expect(settings.deleteScenario('Plan')).toEqual({ ok: true });
         const stored = blob();
         expect(stored.challenges['8']?.values?.scenario).toBeUndefined();
         expect(stored.profiles['Show tactic']).toEqual({ autoSubmit: true });
@@ -343,6 +411,7 @@ describe('settings facade — scenario assignment', () => {
             expect.objectContaining({ title: 'Unrelated', scenario: 'Something else' }),
         ]);
         expect(stored.rules[0].scenario).toBeUndefined();
+        expect(settings.getScenario('Plan')).toBeNull();
     });
 
     test('a delete keeps a rule that still has a profile or tags', () => {
@@ -355,12 +424,43 @@ describe('settings facade — scenario assignment', () => {
         expect(blob().rules).toHaveLength(2);
     });
 
+    test('a delete leaves the progress record as it was', () => {
+        settings.setChallengeOverride('scenario', '8', 'Plan');
+        const { scenarioStateLedger, initialState } =
+            require('../../src/ts/core/scenarioStateStore') as typeof import('../../src/ts/core/scenarioStateStore');
+        scenarioStateLedger.change('8', () => ({ ...initialState('Plan', 'main', 1), memory: { held: 'z' } }));
+        const before = scenarioStateLedger.get('8').state;
+        expect(settings.deleteScenario('Plan')).toEqual({ ok: true });
+        expect(scenarioStateLedger.get('8').state).toEqual(before);
+    });
+
+    test('a delete that the preflight refuses clears nothing', () => {
+        assignEverywhere();
+        const { scenarioStateLedger, initialState } =
+            require('../../src/ts/core/scenarioStateStore') as typeof import('../../src/ts/core/scenarioStateStore');
+        scenarioStateLedger.change('8', () => ({
+            ...initialState('Plan', 'main', 1),
+            inFlight: { ruleId: 'fill', actionIndex: 0, pending: 'fillExposure' },
+        }));
+        const before = store.value;
+        expect(settings.deleteScenario('Plan')).toEqual({ ok: false, reason: 'unresolved-work' });
+        expect(store.value).toBe(before);
+    });
+
+    test('a rename copes with corrupted assignment containers', () => {
+        const raw = parseJsonAs(store.value!, isConfig);
+        raw.profiles = invalid({ Broken: null, Fine: { scenario: 'Plan' } });
+        store.value = JSON.stringify(raw);
+        expect(settings.renameScenario('Plan', 'Renamed').ok).toBe(true);
+        expect(blob().profiles).toEqual({ Broken: null, Fine: { scenario: 'Renamed' } });
+    });
+
     test('a delete copes with missing or corrupted assignment containers', () => {
         const raw = parseJsonAs(store.value!, isConfig);
         raw.profiles = invalid({ Broken: null });
         raw.rules = invalid('not a list');
         store.value = JSON.stringify(raw);
-        expect(settings.deleteScenario('Plan')).toBe(true);
+        expect(settings.deleteScenario('Plan')).toEqual({ ok: true });
     });
 });
 
@@ -385,7 +485,7 @@ describe('settings facade — scenarios when the save fails', () => {
         expect((scenarios.saveScenario(simple()) as SaveRefused).issues[0].message).toContain('could not be saved');
     });
 
-    test('delete reports false when the save fails', () => {
+    test('delete reports not-saved when the save fails', () => {
         jest.isolateModules(() => {
             jest.doMock('../../src/ts/core/settings/persistence', () => {
                 const actual = jest.requireActual<typeof import('../../src/ts/core/settings/persistence')>(
@@ -396,7 +496,7 @@ describe('settings facade — scenarios when the save fails', () => {
                 return { ...actual, loadSettings: () => structuredClone(blob), saveSettings: () => false };
             });
             const isolated = require('../../src/ts/core/settings/scenarios') as typeof scenariosModule;
-            expect(isolated.deleteScenario('Plan')).toBe(false);
+            expect(isolated.deleteScenario('Plan')).toEqual({ ok: false, reason: 'not-saved' });
         });
     });
 });

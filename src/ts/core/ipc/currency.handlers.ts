@@ -98,6 +98,8 @@ const runCurrencySpend = (async (
     spend: (token: string, strategy: ApiStrategy) => Promise<SpendOutcome>,
 ) => {
     if (!idArgs.every(isIdArg)) return currencyFailure(CURRENCY_OUTCOME.invalidArgs);
+    // The first id of every spend is its challenge: not while that challenge's scenario settings are unavailable.
+    if (settings.scenarioSubjectAvailable(idArgs[0]) === false) return currencyFailure(CURRENCY_OUTCOME.notAvailable);
     const guard = auth.requireAuthToken(label);
     if (!guard.ok) return guard.response;
     if (confirmed !== true) return currencyFailure(CURRENCY_OUTCOME.needsConfirm);
@@ -146,6 +148,8 @@ const buildHandlers = () =>
             if (hasChosen && !(isIdArg(chosenId) && CHOSEN_PHOTO_ID_RE.test(String(chosenId)))) {
                 return currencyFailure(CURRENCY_OUTCOME.invalidArgs);
             }
+            if (settings.scenarioSubjectAvailable(challengeId) === false)
+                return currencyFailure(CURRENCY_OUTCOME.notAvailable);
             // isIdArg admits numbers; the service and the preview key work on strings.
             const image = String(imageId);
             try {

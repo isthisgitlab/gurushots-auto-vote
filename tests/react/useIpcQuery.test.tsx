@@ -331,3 +331,70 @@ describe('useIpcQuery', () => {
         });
     });
 });
+
+describe('useIpcQuery: a rejected read and a superseded one', () => {
+    beforeEach(() => {
+        window.api = invalid({ onSettingsChanged: undefined });
+    });
+
+    test('onRejected runs for a rejected read, after the error is stored, and can change what the query holds', async () => {
+        const queryFn = jest.fn().mockResolvedValueOnce(['kept']).mockRejectedValueOnce(new Error('lost'));
+        const onRejected = jest.fn((_error: unknown, tools: { setData: (next: string[]) => void }) =>
+            tools.setData([]),
+        );
+        const { result } = renderHook(() => useIpcQuery(queryFn, { initialData: [] as string[], onRejected }));
+        await waitFor(() => expect(result.current.data).toEqual(['kept']));
+        expect(onRejected).not.toHaveBeenCalled();
+        await act(async () => {
+            await result.current.refetch();
+        });
+        expect(onRejected).toHaveBeenCalledWith(expect.objectContaining({ message: 'lost' }), expect.any(Object));
+        expect(result.current.error).toEqual(expect.objectContaining({ message: 'lost' }));
+        expect(result.current.data).toEqual([]);
+    });
+
+    test('a rejected read that was superseded does not run onRejected', async () => {
+        let rejectOld!: (error: Error) => void;
+        const queryFn = jest
+            .fn()
+            .mockImplementationOnce(
+                () =>
+                    new Promise((_resolve, reject) => {
+                        rejectOld = reject;
+                    }),
+            )
+            .mockResolvedValueOnce('newer');
+        const onRejected = jest.fn();
+        const { result } = renderHook(() =>
+            useIpcQuery(queryFn, { initialData: 'seed', latestOnly: true, onRejected }),
+        );
+        await act(async () => {
+            await result.current.refetch();
+        });
+        expect(result.current.data).toBe('newer');
+        await act(async () => {
+            rejectOld(new Error('late'));
+        });
+        expect(onRejected).not.toHaveBeenCalled();
+        expect(result.current.error).toBeNull();
+    });
+
+    test('supersede drops a read that is on its way: data written meanwhile is not replaced by it', async () => {
+        let answerOld!: (value: string) => void;
+        const queryFn = jest.fn().mockImplementationOnce(
+            () =>
+                new Promise((resolve) => {
+                    answerOld = resolve;
+                }),
+        );
+        const { result } = renderHook(() => useIpcQuery(queryFn, { initialData: 'seed', latestOnly: true }));
+        await act(async () => {
+            result.current.supersede();
+            result.current.setData('written');
+        });
+        await act(async () => {
+            answerOld('old');
+        });
+        expect(result.current.data).toBe('written');
+    });
+});

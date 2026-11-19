@@ -7,6 +7,8 @@
 
 import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
+import { answerInstallationReadFromSaved } from '../helpers/savedInstallationRead';
+answerInstallationReadFromSaved(settings);
 import VotingLogic = require('../../src/ts/core/services/VotingLogic');
 import type { Challenge } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';

@@ -36,7 +36,7 @@ export type ConnectionWatchApi = {
 };
 
 /**
- * Settle every pending invoke once — the connection is lost. A spend may have run: unclear, never a
+ * Settle every pending invoke once — the connection is lost. An effect or a spend may have run: unclear, never a
  * failure. `next` is what the page reads afterwards: offline, or connecting while a rejoin is awaited.
  */
 const settlePendingForLostConnection = (watch: ConnectionWatch, next: RemoteConnectionState = 'offline'): void => {
@@ -45,7 +45,7 @@ const settlePendingForLostConnection = (watch: ConnectionWatch, next: RemoteConn
     ctx.hostPeerId = null;
     setRemoteHostPeerId(null);
     for (const [, invoke] of ctx.pending) {
-        if (invoke.spend) invoke.resolve(pipeline.lostSpendAnswer());
+        if (invoke.effect) invoke.resolve(pipeline.lostEffectAnswer(invoke.requestId));
         else invoke.reject(pipeline.lostFailure());
     }
     ctx.pending.clear();

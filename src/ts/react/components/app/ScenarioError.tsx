@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import * as ipc from '@/api/ipc';
-import { scenarioIssueText, scenarioPathText } from '@/utils/scenarioIssueText';
+import { isRefusalCode, scenarioIssueText, scenarioPathText } from '@/utils/scenarioIssueText';
 
 import type { ScenarioIssue } from '../../../core/settings/scenarioSchema';
 
@@ -20,6 +20,18 @@ export type ScenarioErrorInfo = { what: string; next?: string; issues?: Scenario
  */
 export const issuesOf = (result: object | null | undefined): ScenarioIssue[] | undefined =>
     result && 'issues' in result ? (result as { issues?: ScenarioIssue[] }).issues : undefined;
+
+/**
+ * What a refused write says about itself: its validator issues when it has them, else its reason code as one issue (a
+ * refusal of the lifecycle gate, a revision conflict, a stop time already past — each words its own next step), else
+ * nothing (the call itself failed, or the reason is no code the app words: an exception's text never reaches the user).
+ */
+export const failureIssuesOf = (result: object | null | undefined): ScenarioIssue[] | undefined => {
+    const issues = issuesOf(result);
+    if (issues !== undefined) return issues;
+    const reason = result && 'error' in result ? (result as { error?: unknown }).error : undefined;
+    return typeof reason === 'string' && isRefusalCode(reason) ? [{ path: '', message: reason }] : undefined;
+};
 
 /**
  * A failed scenario request as the user sees it: what happened, why (the

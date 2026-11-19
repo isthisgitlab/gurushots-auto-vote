@@ -387,6 +387,81 @@ describe('ChallengesProvider + ChallengesSection', () => {
             expect(refetch).toHaveBeenCalledWith(true);
         });
 
+        describe('the effective card density', () => {
+            const density = (compactCards: boolean | null, compactCardActions: boolean | null, revision: number) => ({
+                compactCards,
+                compactCardActions,
+                revision,
+            });
+
+            it('shows what the host publishes over the saved default, and the saved one again on withdrawal, writing nothing', async () => {
+                const view = renderSection({ effectiveDensity: density(true, true, 5) });
+                await settle();
+                const card = () => screen.getAllByTestId('card')[0];
+                expect(card().dataset.compact).toBe('true');
+                expect(card().dataset.compactActions).toBe('true');
+                expect(screen.getByText('app.details')).toBeTruthy();
+
+                // The withdrawal: the host publishes the saved values again.
+                view.rerender(
+                    <ChallengesProvider autovoteRunning={false}>
+                        <ChallengesSection
+                            isLoggedIn
+                            timezone="UTC"
+                            autovoteRunning={false}
+                            onChallengeSettingsClick={jest.fn()}
+                            effectiveDensity={density(false, false, 6)}
+                        />
+                    </ChallengesProvider>,
+                );
+                expect(card().dataset.compact).toBe('false');
+                expect(card().dataset.compactActions).toBe('false');
+                expect(mockApi.setGlobalDefault).not.toHaveBeenCalled();
+                expect(mockApi.setSetting).not.toHaveBeenCalled();
+            });
+
+            it('falls back to the saved default for a value the host has not published, or has not published yet', async () => {
+                mockApi.getGlobalDefault.mockResolvedValue(true);
+                renderSection({ effectiveDensity: density(null, null, 5) });
+                await settle();
+                expect(screen.getAllByTestId('card')[0].dataset.compact).toBe('true');
+                expect(screen.getAllByTestId('card')[0].dataset.compactActions).toBe('true');
+            });
+
+            it('re-reads every card when a new projection arrives, and not before one has', async () => {
+                const view = renderSection();
+                await settle();
+                const first = screen.getAllByTestId('card')[0].dataset.settingsVersion;
+                const rerender = (revision: number) =>
+                    view.rerender(
+                        <ChallengesProvider autovoteRunning={false}>
+                            <ChallengesSection
+                                isLoggedIn
+                                timezone="UTC"
+                                autovoteRunning={false}
+                                onChallengeSettingsClick={jest.fn()}
+                                effectiveDensity={density(false, false, revision)}
+                            />
+                        </ChallengesProvider>,
+                    );
+                rerender(1);
+                const second = screen.getAllByTestId('card')[0].dataset.settingsVersion;
+                expect(second).not.toBe(first);
+                rerender(2);
+                expect(screen.getAllByTestId('card')[0].dataset.settingsVersion).not.toBe(second);
+            });
+
+            it('the toggle writes the saved default, never the effective value', async () => {
+                renderSection({ effectiveDensity: density(true, false, 5) });
+                await settle();
+                await act(async () => {
+                    fireEvent.click(screen.getByText('app.details'));
+                });
+                expect(mockApi.setGlobalDefault).toHaveBeenCalledTimes(1);
+                expect(mockApi.setGlobalDefault).toHaveBeenCalledWith('compactCards', false);
+            });
+        });
+
         it('toggles the global compact default and re-keys the cards', async () => {
             renderSection();
             await settle();

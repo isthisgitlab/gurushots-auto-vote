@@ -8,7 +8,7 @@
 //
 // The site's content and the pure helpers (hasScheme/toRepoPath/rewriteLink/
 // rewriteImage/badgeSvg/render/srcDirOf, exported for unit tests) live in
-// build-site/pages.ts; the current remote-access site tree (the /remote/ launcher and v2 page) lives in
+// build-site/pages.ts; the current remote-access site tree (the /remote/ launcher and current-version page) lives in
 // build-site/remote.ts — re-exported here. main() runs only when the file is executed directly (via runIfMain),
 // so requiring it has no effect.
 // main() takes the repo root / output dir / layout as overridable paths so the

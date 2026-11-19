@@ -12,6 +12,7 @@ jest.mock('../../src/ts/core/logger', () => {
     const rec = (level: string) => (msg: unknown, data?: unknown) => calls.push({ level, msg, data });
     const cat = {
         info: rec('info'),
+        warning: rec('warning'),
         error: rec('error'),
         success: rec('success'),
         debug: rec('debug'),
@@ -24,6 +25,10 @@ jest.mock('../../src/ts/core/logger', () => {
 jest.mock('../../src/ts/core/settings', () => ({
     loadSettings: jest.fn(() => ({ app: { mock: true }, auth: { token: '' }, challenges: {} })),
     getEffectiveSetting: jest.fn(),
+    // The execution-mode lines: no running flag, no fence, no installation scenario.
+    getSetting: jest.fn(() => false),
+    readStopFence: jest.fn(() => ({ state: 'missing' })),
+    getInstallationScenario: jest.fn(() => null),
     getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
     SETTINGS_SCHEMA: { chosenPhotos: { type: 'photos', perChallenge: true, default: [] } },
 }));
@@ -36,6 +41,17 @@ jest.mock('../../src/ts/core/apiFactory', () => {
         cliVoteManual: jest.fn(),
     };
     return { __mw: mw, getMiddleware: jest.fn(() => mw) };
+});
+
+// The mode lines read the installation's pause through the lifecycle handlers; the stop command records through the
+// same module's priority routes.
+jest.mock('../../src/ts/core/ipc/scenarioLifecycle.handlers', () => {
+    const handlers = {
+        'get-scenario-snapshot': jest.fn(async () => ({ success: true as const, paused: null })),
+        'withdraw-installation': jest.fn(async () => ({ success: true as const, outcome: 'none' })),
+        'record-full-stop': jest.fn(async () => ({ success: true as const, epoch: 3 })),
+    };
+    return { __handlers: handlers, buildLifecycleHandlers: () => handlers };
 });
 
 jest.mock('../../src/ts/shells/cli/runScheduler', () => ({ createScheduler: jest.fn() }));
@@ -80,6 +96,7 @@ import type * as authModule from '../../src/ts/core/services/auth';
 import type * as votingModule from '../../src/ts/shells/cli/commands/voting';
 import type * as statusModule from '../../src/ts/shells/cli/commands/status';
 import type * as votingHandlersModule from '../../src/ts/core/ipc/voting.handlers';
+import type * as lifecycleHandlersModule from '../../src/ts/core/ipc/scenarioLifecycle.handlers';
 const { __mw: mw } = jest.mocked(
     require('../../src/ts/core/apiFactory') as typeof apiFactoryModule & {
         __mw: jest.Mocked<
@@ -100,9 +117,19 @@ type HandlersMock = {
     __handlers: jest.Mocked<Pick<ReturnType<typeof votingHandlersModule.buildHandlers>, 'vote-on-challenge-manual'>>;
 };
 const votingHandlers = invalid<HandlersMock>(require('../../src/ts/core/ipc/voting.handlers')).__handlers;
-const { runVotingCycle, voteChallengeManual, parseChallengeFlag, startContinuousVoting } =
+const { runVotingCycle, voteChallengeManual, parseChallengeFlag, startContinuousVoting, stopAllAutomation } =
     require('../../src/ts/shells/cli/commands/voting') as typeof votingModule;
 const { showStatus } = require('../../src/ts/shells/cli/commands/status') as typeof statusModule;
+
+// The lifecycle-handler mock's table (the stop command's priority routes).
+const lifecycle = invalid<{
+    __handlers: jest.Mocked<
+        Pick<
+            ReturnType<typeof lifecycleHandlersModule.buildLifecycleHandlers>,
+            'withdraw-installation' | 'record-full-stop'
+        >
+    >;
+}>(require('../../src/ts/core/ipc/scenarioLifecycle.handlers')).__handlers;
 
 const msgs = (level: string) => logger.__calls.filter((c) => c.level === level).map((c) => String(c.msg));
 
@@ -124,7 +151,7 @@ describe('runVotingCycle', () => {
         settings.loadSettings.mockReturnValue(config({ app: { mock: false } }));
         mw.cliVote.mockResolvedValue({ success: true, challenges: [] });
         await expect(runVotingCycle()).resolves.toEqual({ success: true, challenges: [] });
-        expect(mw.cliVote).toHaveBeenCalledWith(null);
+        expect(mw.cliVote).toHaveBeenCalledWith(null, 'full');
         expect(msgs('info')[0]).toBe('--- Voting Cycle 1 (REAL MODE) ---');
         expect(logger.__calls.find((c) => c.level === 'startOperation')!.msg).toBe('vote-cycle-1');
     });
@@ -132,8 +159,15 @@ describe('runVotingCycle', () => {
     test('scoped strategy cycle names the challenge', async () => {
         mw.cliVote.mockResolvedValue(invalid(undefined));
         await expect(runVotingCycle(4, { challengeId: '9' })).resolves.toEqual({ success: true, challenges: null });
-        expect(mw.cliVote).toHaveBeenCalledWith('9');
+        expect(mw.cliVote).toHaveBeenCalledWith('9', 'full');
         expect(msgs('info')[0]).toBe('--- Voting Cycle 4 (challenge 9) (MOCK MODE) ---');
+    });
+
+    test('the armed cycle asks the middleware for the installation cycle only, and names it so', async () => {
+        mw.cliVote.mockResolvedValue({ success: true, challenges: [] });
+        await expect(runVotingCycle(3, { mode: 'armed' })).resolves.toEqual({ success: true, challenges: [] });
+        expect(mw.cliVote).toHaveBeenCalledWith(null, 'armed');
+        expect(msgs('info')[0]).toBe('--- Installation Cycle 3 (MOCK MODE) ---');
     });
 
     test('manual cycle votes to 100%, ignores the scope and surfaces no list', async () => {
@@ -248,14 +282,18 @@ describe('parseChallengeFlag', () => {
 });
 
 describe('startContinuousVoting', () => {
-    let scheduler: jest.Mocked<Pick<ReturnType<typeof createScheduler>, 'start' | 'stop'>>;
+    let scheduler: jest.Mocked<Pick<ReturnType<typeof createScheduler>, 'start' | 'stopAll'>>;
     let signalHandlers: Record<string | symbol, (...args: unknown[]) => void>;
     let onSpy: jest.SpiedFunction<typeof process.on>;
     let resumeSpy: jest.SpiedFunction<typeof process.stdin.resume>;
     let exitSpy: jest.SpiedFunction<typeof process.exit>;
 
     beforeEach(() => {
-        scheduler = { start: jest.fn().mockResolvedValue(undefined), stop: jest.fn() };
+        // The full Stop the shutdown awaits: a durable one by default (a test of the unsaved one overrides it).
+        scheduler = {
+            start: jest.fn().mockResolvedValue(undefined),
+            stopAll: jest.fn().mockResolvedValue({ outcome: 'stopped', durable: true, epoch: 1, withdrawal: 'none' }),
+        };
         createScheduler.mockReturnValue(invalid(scheduler));
         signalHandlers = {};
         onSpy = jest.spyOn(process, 'on').mockImplementation((sig, fn) => {
@@ -277,6 +315,36 @@ describe('startContinuousVoting', () => {
         await startContinuousVoting();
         expect(msgs('info')[0]).toBe('=== Starting Continuous Voting Mode (REAL MODE) ===');
         expect(createScheduler).not.toHaveBeenCalled();
+    });
+
+    test('hands the scheduler the full cycle and the installation-only cycle of an armed one', async () => {
+        mw.cliVote.mockResolvedValue({ success: true, challenges: [] });
+        await startContinuousVoting();
+        const deps = createScheduler.mock.calls[0][0];
+        await deps.runVotingCycle(1);
+        expect(mw.cliVote).toHaveBeenLastCalledWith(null, 'full');
+        await deps.runArmedCycle!(2);
+        expect(mw.cliVote).toHaveBeenLastCalledWith(null, 'armed');
+    });
+
+    test('a cycle while not authenticated runs nothing and answers failure', async () => {
+        mw.isAuthenticated.mockReturnValue(false);
+        await expect(runVotingCycle(1)).resolves.toEqual({ success: false, challenges: null });
+        expect(mw.cliVote).not.toHaveBeenCalled();
+    });
+
+    test('an armed mode change says the scenario work is still enabled; other modes say nothing', async () => {
+        mw.cliVote.mockResolvedValue({ success: true, challenges: [] });
+        await startContinuousVoting();
+        const { onModeChange } = createScheduler.mock.calls[0][0];
+        onModeChange?.('voting');
+        expect(msgs('info')).not.toContain(
+            'Mode: Scenario active; voting paused. Unattended scenario work (claiming rewards, resuming voting) is still enabled. Press Ctrl+C to stop all automation.',
+        );
+        onModeChange?.('armed');
+        expect(msgs('info')).toContain(
+            'Mode: Scenario active; voting paused. Unattended scenario work (claiming rewards, resuming voting) is still enabled. Press Ctrl+C to stop all automation.',
+        );
     });
 
     test('wires the scheduler, registers signal handlers and keeps the process alive', async () => {
@@ -302,11 +370,47 @@ describe('startContinuousVoting', () => {
         await new Promise((r) => setImmediate(r));
     };
 
-    test('shutdown stops the scheduler, reports a cleared token and exits 0', async () => {
+    test('a second signal while shutting down changes nothing: one full Stop, one exit', async () => {
+        clearTokenUnlessStayingLoggedIn.mockResolvedValue(false);
+        const slowStop = new Promise<{ outcome: 'stopped'; durable: true; epoch: number; withdrawal: 'none' }>(
+            (resolve) =>
+                setTimeout(() => resolve({ outcome: 'stopped', durable: true, epoch: 1, withdrawal: 'none' }), 20),
+        );
+        scheduler.stopAll.mockReturnValue(slowStop);
+        await startContinuousVoting();
+        signalHandlers.SIGINT();
+        signalHandlers.SIGTERM();
+        await new Promise((r) => setImmediate(r));
+        await new Promise((r) => setTimeout(r, 40));
+        expect(scheduler.stopAll).toHaveBeenCalledTimes(1);
+        expect(exitSpy).toHaveBeenCalledTimes(1);
+        expect(exitSpy).toHaveBeenCalledWith(0);
+    });
+
+    test('shutdown awaits the full Stop, reports a cleared token and exits 0', async () => {
         clearTokenUnlessStayingLoggedIn.mockResolvedValue(true);
         await shutdown();
-        expect(scheduler.stop).toHaveBeenCalled();
+        expect(scheduler.stopAll).toHaveBeenCalled();
         expect(msgs('info')).toContain('Cleared saved token (Stay Logged In is off)');
+        expect(exitSpy).toHaveBeenCalledWith(0);
+    });
+
+    test('a Stop that could not be saved is said before the exit', async () => {
+        scheduler.stopAll.mockResolvedValue({
+            outcome: 'stopped-locally',
+            durable: false,
+            reason: 'not-saved',
+            withdrawal: 'none',
+        });
+        await shutdown();
+        expect(msgs('warning')).toContain('The Stop could not be saved: automation stopped in this process only.');
+        expect(exitSpy).toHaveBeenCalledWith(0);
+    });
+
+    test('a Stop route that throws is reported and still exits 0', async () => {
+        scheduler.stopAll.mockRejectedValue(new Error('fence gone'));
+        await shutdown();
+        expect(msgs('error')).toContain('Failed to record the Stop on shutdown');
         expect(exitSpy).toHaveBeenCalledWith(0);
     });
 
@@ -322,6 +426,85 @@ describe('startContinuousVoting', () => {
         await shutdown();
         expect(msgs('error')).toEqual(['Failed to clear token on shutdown']);
         expect(exitSpy).toHaveBeenCalledWith(0);
+    });
+});
+
+describe('stopAllAutomation', () => {
+    beforeEach(() => {
+        lifecycle['withdraw-installation'].mockImplementation(async () => ({
+            success: true as const,
+            outcome: 'none',
+        }));
+        lifecycle['record-full-stop'].mockImplementation(async () => ({ success: true as const, epoch: 3 }));
+    });
+
+    test('records the full stop first, withdraws under the epoch it answered, and says what it cannot know', async () => {
+        await expect(stopAllAutomation()).resolves.toBe(0);
+        expect(lifecycle['record-full-stop']).toHaveBeenCalledWith(
+            null,
+            expect.stringMatching(/^stop-/),
+            expect.any(Number),
+        );
+        // The withdrawal follows the durable Stop, under the epoch the record answered (3).
+        expect(lifecycle['withdraw-installation']).toHaveBeenCalledWith(null, 3);
+        expect(msgs('info')).toContain(
+            '🛑 Full Stop recorded (epoch 3). The running app or service stops at its next check.',
+        );
+        // Never a claim that the running app already stopped — with an installation scenario and without one.
+        expect(msgs('info')).toContain('Owner status unavailable — the running app or service reports its own state.');
+    });
+
+    test('a Stop that cannot be recorded withdraws nothing', async () => {
+        lifecycle['record-full-stop'].mockImplementation(async () => ({ success: false, error: 'not-saved' }));
+        await expect(stopAllAutomation()).resolves.toBe(1);
+        expect(lifecycle['withdraw-installation']).not.toHaveBeenCalled();
+    });
+
+    test("a withdrawal that changed nothing is silent; one that withdrew says the user's settings apply again", async () => {
+        await stopAllAutomation();
+        expect(msgs('info')).not.toContain("The installation's published settings were withdrawn");
+        lifecycle['withdraw-installation'].mockImplementation(async () => ({
+            success: true as const,
+            outcome: 'withdrawn',
+        }));
+        await stopAllAutomation();
+        expect(msgs('info')).toContain(
+            "The installation's published settings were withdrawn; your own settings apply again.",
+        );
+    });
+
+    test('a withdrawal that was refused is a warning and never refuses the Stop', async () => {
+        lifecycle['withdraw-installation'].mockImplementation(async () => ({
+            success: false,
+            error: 'withdrawal-not-saved',
+        }));
+        await expect(stopAllAutomation()).resolves.toBe(0);
+        expect(msgs('warning')).toContain(
+            "The installation's published settings could not be withdrawn: they may still apply until the next full Stop.",
+        );
+        lifecycle['withdraw-installation'].mockRejectedValue(new Error('locked'));
+        await expect(stopAllAutomation()).resolves.toBe(0);
+        expect(msgs('warning')).toContain('The installation settings could not be withdrawn');
+    });
+
+    test.each([
+        ['not-saved', 'it could not be saved'],
+        ['unreadable', 'the saved Stop record cannot be read'],
+        ['oversize', 'the Stop record does not fit its cell'],
+        ['strange-reason', 'strange-reason'],
+    ])('a refused record (%s) is said with its reason and exits 1', async (reason, said) => {
+        lifecycle['record-full-stop'].mockImplementation(async () => ({ success: false, error: reason }));
+        await expect(stopAllAutomation()).resolves.toBe(1);
+        expect(msgs('error')).toContain(
+            `The Stop could not be recorded (${said}): automation on this computer may still run. Close the running app, or try again.`,
+        );
+    });
+
+    test('a record route that throws is an error, withdraws nothing, and exits 1', async () => {
+        lifecycle['record-full-stop'].mockRejectedValue(new Error('gone'));
+        await expect(stopAllAutomation()).resolves.toBe(1);
+        expect(msgs('error')).toContain('The Stop could not be recorded');
+        expect(lifecycle['withdraw-installation']).not.toHaveBeenCalled();
     });
 });
 
@@ -486,6 +669,9 @@ describe('showStatus', () => {
             '=== GuruShots Auto Voter - Status ===',
             'Mode: REAL (live API calls)',
             'Authentication: ❌ Not authenticated',
+            'Last reported mode: Stopped (time unknown)',
+            'Installation scenario: none',
+            'Owner status unavailable (a running app reports its own state)',
             'Auto-claim: off',
             'Auto-join: off',
             '\nSettings:',
@@ -529,6 +715,9 @@ describe('showStatus', () => {
             'Mode: MOCK (simulated API calls)',
             'Authentication: ✅ Authenticated',
             'Token: ✅ Present',
+            'Last reported mode: Stopped (time unknown)',
+            'Installation scenario: none',
+            'Owner status unavailable (a running app reports its own state)',
             'Auto-claim: off',
             'Auto-join: off',
             '\nSettings:',

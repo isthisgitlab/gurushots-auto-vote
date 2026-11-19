@@ -56,6 +56,40 @@ class AutoVotePlugin : Plugin() {
     }
 
     /**
+     * A full Stop, straight to the native side: it cancels the service's new work and its alarms first, then records the
+     * Stop in the priority fence (`stopEpoch` one higher, `blocked`), by compare-and-set on the fence alone, and only then
+     * ends the service. It never
+     * reads or writes the control inbox or any other store, so nothing else can make it wait or refuse it. Repeating the
+     * same `requestId` advances the epoch once.
+     *
+     * Resolves `stopped` (always true: the work was cancelled here) and `durable`: whether the fence holds the Stop. With
+     * `durable` true it also resolves the `epoch` the fence is at; with false, the `reason` (`unreadable`, `oversize` or
+     * `not-saved`), and the cancellation stands. Rejects a call without a valid `requestId` and a numeric `at`.
+     */
+    @PluginMethod
+    fun stopAll(call: PluginCall) {
+        val requestId = call.getString("requestId")
+        // A JSON number reaches the plugin as an Int, a Long (a millisecond time) or a Double: read it as the number it is,
+        // not through getDouble/getLong, which each take only some of them. JSON holds no NaN or infinity.
+        val at = call.data.opt("at") as? Number
+        if (requestId == null || !StopFence.isRequestId(requestId) || at == null) {
+            call.reject("invalid stop")
+            return
+        }
+        val ctx = context
+        // New work is cancelled first (and the running cycle told to stop at its next boundary); the fence then holds the
+        // Stop before the service is torn down, so nothing the service checks in between finds the fence still open.
+        AutoVoteService.cancelWork(ctx)
+        val recorded = StopFence.recordStop(ctx, requestId, at.toLong())
+        AutoVoteService.endService(ctx)
+        val ret = JSObject()
+        ret.put("stopped", true)
+        ret.put("durable", recorded.durable)
+        if (recorded.durable) ret.put("epoch", recorded.epoch) else ret.put("reason", recorded.reason)
+        call.resolve(ret)
+    }
+
+    /**
      * Saves one side store, or the settings blob, only if it still holds what the window read (`expected`; absent or
      * null: nothing was stored), under the lock the background service's bridge takes too. Resolves `saved` and, when
      * it did not save because the store had changed, `current`: what is stored. Rejects a key that is neither, a value

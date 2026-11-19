@@ -109,8 +109,11 @@ const runForAction = async (
     if (attemptResult.status === 'fetch-error') {
         return { kind: 'mapped', ok: false, imageId: null, reason: 'fetch-error' };
     }
-    // Submit Only Chosen Photos: nothing chosen can be entered, so no photo was picked on purpose.
-    if (attemptResult.status === 'no-chosen') return { kind: 'mapped', ok: false, imageId: null, reason: 'no-chosen' };
+    // Submit Only Chosen Photos: nothing chosen can be entered, so no photo was picked on purpose. A photo pool that has
+    // nothing to give says why (`pool-unbound`, `pool-exhausted`).
+    if (attemptResult.status === 'no-chosen') {
+        return { kind: 'mapped', ok: false, imageId: null, reason: attemptResult.reason ?? 'no-chosen' };
+    }
     if (attemptResult.status === 'gone') return { kind: 'mapped', ok: false, imageId: null, reason: 'challenge-gone' };
     // The live re-read cannot be trusted (a prune-unsafe read dropped elements): distinct from "gone",
     // the challenge may still be active — callers read it as "no photo was entered, the data is unreadable".
@@ -157,7 +160,7 @@ const runForAction = async (
  * @param challenge - challenge with member.ranking.entries
  * @param deps - getActiveChallenges enables the pre-submit live re-check; when
  *   absent the fill proceeds on pass-start data.
- *   reason ∈ 'submitted'|'no-slots'|'challenge-gone'|'data-incomplete'|'no-eligible'|'no-chosen'|'fetch-error'|'submit-failed'|'invalid-challenge'
+ *   reason ∈ 'submitted'|'no-slots'|'challenge-gone'|'data-incomplete'|'no-eligible'|'no-chosen'|'pool-unbound'|'pool-exhausted'|'fetch-error'|'submit-failed'|'invalid-challenge'
  */
 const submitNewEntryForAction = async (
     challenge: Challenge,

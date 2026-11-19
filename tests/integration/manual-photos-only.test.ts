@@ -125,6 +125,13 @@ const mockSettings = (overrides: Record<string, unknown>) => {
     const values = { ...ALL_ON, ...overrides };
     settings.getEntryPins.mockReturnValue({ boost: null, turbo: null });
     settings.getEffectiveSetting = invalid(jest.fn((key: string) => values[key]));
+    // The currency reserve is the installation's effective value, read again at each spend (the saved one here).
+    settings.captureInstallationSettings = invalid(
+        jest.fn((keys: string[]) => ({
+            ok: true,
+            values: Object.fromEntries(keys.map((key) => [key, values[key]])),
+        })),
+    );
     settings.getEffectiveTagSetting = invalid(jest.fn((key: string) => values[key]));
 };
 

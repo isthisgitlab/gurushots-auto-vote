@@ -7,9 +7,9 @@
  *
  *   get-scenarios            stored scenarios + the example templates
  *   check-scenario           validate a document without storing it
- *   save-scenario            validate and store a document
- *   rename-scenario          rename (assignments follow)
- *   delete-scenario          delete (assignments are cleared)
+ *   save-scenario            validate and store a document (an overwrite names the revision it was edited on)
+ *   rename-scenario          rename (assignments and progress follow)
+ *   delete-scenario          delete (refused while an assignment names it)
  *   preview-scenario-import  validate shared JSON and describe what it does, storing nothing
  *   import-scenario          validate and store shared JSON
  *   export-scenario          a stored scenario as JSON text
@@ -18,20 +18,26 @@
  *   reset-scenario-state     forget a challenge's progress — its plan restarts
  *   reset-all-scenario-state forget every challenge's progress (the only way past an unreadable state file)
  *   dry-run-scenario         what would fire right now and why; spends nothing
- *   simulate-scenario        a what-if timeline until the challenge closes, of
- *                            the assigned scenario or an unsaved draft
+ *   simulate-scenario        a what-if run of a stored scenario or an unsaved draft over the same lifecycle and automation as live
+ *                            (see services/scenarioRunner/simulation.ts): one request naming the scenario, the subject, the
+ *                            horizon and the assumptions.
+ *
+ * The installation scenario, pause / resume / handoff, the photo pools, the snapshot and capability reads, the effective
+ * projections and the controller's Stop-fence routes are in scenarioLifecycle.handlers.ts, spread into this map.
  */
 
 import * as logger from '../logger';
 import * as settings from '../settings';
 import * as apiFactory from '../apiFactory';
 import * as auth from '../services/auth';
-import { errorResult } from './errorResult';
 import { isIdArg } from './isIdArg';
-import { getScenarioStatus, ledgerForMode, stepLockForMode } from '../services/scenarioStatus';
+import { invalidArgs, isName, log, safely } from './scenarioSupport';
+import { buildLifecycleHandlers } from './scenarioLifecycle.handlers';
+import { getScenarioStatus, ledgerForMode, readSubjectRows, stepLockForMode } from '../services/scenarioStatus';
 import { findActionableChallenge } from '../services/findActiveChallenge';
+import { runSimulation } from '../services/scenarioRunner/simulation';
 import { evaluateScenario, startState } from '../scenarios/evaluate';
-import { simulateScenario } from '../scenarios/simulate';
+import { parseSimulationRequest } from '../scenarios/simulate';
 import { entriesOf } from '../scenarios/selectors';
 import { recordVoteSample } from '../scenarios/speed';
 import { isManualPhotosOnly } from '../services/manualPhotosOnly';
@@ -43,23 +49,27 @@ import type { IpcHandlerMap } from './invokeHandler';
 import type { ScenarioDocument, ScenarioIssue } from '../settings/scenarioSchema';
 import type { VoteHistory } from '../scenarios/speed';
 import type { ActiveChallengesResponse, Bankroll, Challenge } from '../types/gurushots';
+import type { SimulationEvidence, SimulationInput } from '../services/scenarioRunner/simulation';
+import type { SimulationSubject } from '../types/scenario';
+import { isMarkedChallenge } from '../challengeMarks';
 
 /**
  * A facade `{ok, ...}` result mapped onto the IPC `{success, ...}` shape.
  */
 type FromResult<R> = R extends { ok: false }
-    ? { success: false; error: string; issues: ScenarioIssue[] }
+    ? { success: false; error: string; issues: ScenarioIssue[]; reason?: settings.ScenarioRefusal }
     : Omit<R, 'ok'> & { success: true };
 
 type ScenarioStatus = ReturnType<typeof getScenarioStatus>;
 
-const log = () => logger.withCategory('scenario');
-
-const isName = (value: unknown): value is string => typeof value === 'string' && value.trim() !== '';
-
-// `issues?: undefined` keeps this arm distinct from the validation failures that
-// do carry issues, so a renderer narrowing on `'issues' in result` keeps them.
-const invalidArgs: { success: false; error: string; issues?: undefined } = { success: false, error: 'invalid-args' };
+/** The revision of the scenario collection an options argument names: absent, or a count (anything else is invalid). */
+const revisionOf = (
+    options: { expectedDefinitionRevision?: unknown } | null | undefined,
+): number | undefined | null => {
+    const revision = options?.expectedDefinitionRevision;
+    if (revision === undefined) return undefined;
+    return typeof revision === 'number' && Number.isSafeInteger(revision) && revision >= 0 ? revision : null;
+};
 
 /**
  * A facade `{ok, issues}` result as an IPC result.
@@ -73,22 +83,9 @@ const fromResult = <R extends { ok: boolean; issues?: ScenarioIssue[] }>({ ok, .
               success: false as const,
               error: (result as { issues: ScenarioIssue[] }).issues[0]?.message ?? 'Invalid scenario',
               issues: (result as { issues: ScenarioIssue[] }).issues,
+              // A refusal of the lifecycle gate says why (`busy`, `conflict`, `unresolved-work`, ...).
+              ...('reason' in result ? { reason: result.reason } : {}),
           }) as FromResult<R>;
-
-/**
- * Runs a handler body, turning a throw into an error result.
- */
-const safely = async <T>(
-    label: string,
-    body: () => T | Promise<T>,
-): Promise<T | { success: false; error: string; issues?: undefined }> => {
-    try {
-        return await body();
-    } catch (error) {
-        log().error(`Error handling ${label} request:`, error);
-        return errorResult(error, `The ${label} request failed`);
-    }
-};
 
 /**
  * The state with this pass's vote sample recorded, the transform the live pass applies first
@@ -101,15 +98,11 @@ const withVoteSample = <S extends { history?: VoteHistory }>(state: S, challenge
 });
 
 /**
- * What the dry run and the simulation both need: the challenge's scenario
- * status, the live challenge, its state (or a start state) and the bankroll.
- * `draft` replaces the assigned scenario with an unsaved document, which then
- * starts from its start phase.
+ * What the dry run needs: the challenge's scenario status, the live challenge, its state (or a start state) and the bankroll.
  */
 const loadLiveScenario = async (
     label: string,
     challengeId: string | number,
-    draft: unknown = null,
 ): Promise<
     | { ok: false; response: { success: false; error: string; issues?: ScenarioIssue[] } }
     | {
@@ -131,12 +124,7 @@ const loadLiveScenario = async (
     const guard = auth.requireAuthToken(label);
     if (!guard.ok) return { ok: false, response: guard.response };
     await refreshScenarioStateAsync();
-    let status = getScenarioStatus(challengeId);
-    if (draft !== null) {
-        const checked = settings.checkScenario(draft);
-        if (!checked.ok) return refuse(checked.issues[0]?.message ?? 'Invalid scenario', { issues: checked.issues });
-        status = { ...status, scenario: checked.scenario, state: null, corrupt: false };
-    }
+    const status = getScenarioStatus(challengeId);
     if (!status.scenario) return refuse(status.assigned ? 'unknown-scenario' : 'no-scenario');
     if (status.corrupt) return refuse(status.corrupt === 'unloaded' ? 'state-unloaded' : 'state-unreadable');
     const strategy = apiFactory.getApiStrategy();
@@ -165,7 +153,7 @@ const loadLiveScenario = async (
 type LiveScenario = Extract<Awaited<ReturnType<typeof loadLiveScenario>>, { ok: true }>;
 
 /**
- * The input `evaluateScenario` and `simulateScenario` both take.
+ * The input `evaluateScenario` takes.
  */
 const runInput = ({ status, challenge, state, now, bankroll }: LiveScenario) => ({
     scenario: status.scenario,
@@ -218,12 +206,75 @@ const resetEveryScenario = async (onlyIfUnreadable: boolean) => {
     return { success: true as const };
 };
 
+type Refusal = { success: false; error: string; issues?: ScenarioIssue[] };
+
+/**
+ * The scenario a simulation request names: a stored one by name, or an unsaved draft checked against the schema. It must be of
+ * the scope the subject needs (a challenge scenario for a challenge, an installation scenario for the installation).
+ */
+const resolveSimulatedScenario = (
+    reference: { name: string } | { draft: unknown },
+    subject: SimulationSubject,
+): { ok: true; scenario: ScenarioDocument; source: 'draft' | 'stored' } | { ok: false; response: Refusal } => {
+    const refuse = (error: string, issues?: ScenarioIssue[]) => ({
+        ok: false as const,
+        response: { success: false as const, error, ...(issues ? { issues } : {}) },
+    });
+    let scenario: ScenarioDocument | null;
+    if ('draft' in reference) {
+        const checked = settings.checkScenario(reference.draft);
+        if (!checked.ok) return refuse(checked.issues[0]?.message ?? 'Invalid scenario', checked.issues);
+        scenario = checked.scenario;
+    } else {
+        scenario = settings.getScenario(reference.name);
+        if (!scenario) return refuse('unknown-scenario');
+    }
+    const wanted = subject.kind === 'installation' ? 'installation' : 'challenge';
+    if ((scenario.scope ?? 'challenge') !== wanted) return refuse('scenario-scope-mismatch');
+    return { ok: true, scenario, source: 'draft' in reference ? 'draft' : 'stored' };
+};
+
+/**
+ * The starting evidence of a simulation: the subject as its producer lists it, and the bankroll (null when it cannot be read).
+ * A subject that is not listed, or whose data cannot be read, refuses.
+ */
+const readStartingEvidence = async (
+    subject: SimulationSubject,
+    token: string,
+): Promise<{ ok: true; evidence: SimulationEvidence } | { ok: false; response: Refusal }> => {
+    const strategy = apiFactory.getApiStrategy();
+    const bankroll = await strategy.getBankroll(token);
+    const refuse = (error: string) => ({ ok: false as const, response: { success: false as const, error } });
+    if (subject.kind === 'installation') return { ok: true, evidence: { provenance: 'installation', bankroll } };
+    const read = await readSubjectRows(subject.kind, token, strategy);
+    if (!read.readable) return refuse('subjects-unreadable');
+    const found = <T extends { id: string | number }>(rows: T[]): T | undefined =>
+        rows.find((row) => String(row?.id) === subject.challengeId);
+    if (read.kind === 'completed') {
+        const row = found(read.rows);
+        return row
+            ? { ok: true, evidence: { provenance: 'completed-list', challenge: row, bankroll } }
+            : refuse('challenge-not-found');
+    }
+    const row = found(read.rows);
+    // A marked challenge, or one a read that dropped rows does not list, cannot be judged on data that cannot be read.
+    if (row ? isMarkedChallenge(row) : read.pruneUnsafe) return refuse('challenge-data-incomplete');
+    if (!row) return refuse('challenge-not-found');
+    return {
+        ok: true,
+        evidence: { provenance: read.kind === 'active' ? 'active-list' : 'open-list', challenge: row, bankroll },
+    };
+};
+
 const buildHandlers = () =>
     ({
+        ...buildLifecycleHandlers(),
+
         'get-scenarios': async () =>
             safely('get-scenarios', () => ({
                 success: true as const,
-                scenarios: settings.getScenarios(),
+                // `revision`: what an overwrite states it was edited on (null: the stored one is malformed).
+                ...settings.getScenarioLibrary(),
                 templates: SCENARIO_TEMPLATES,
             })),
 
@@ -233,32 +284,67 @@ const buildHandlers = () =>
                 return result.ok ? { success: true as const } : fromResult(result);
             }),
 
-        'save-scenario': async (event: unknown, doc: unknown, options?: { overwrite?: boolean } | null) =>
-            safely('save-scenario', () =>
-                fromResult(settings.saveScenario(doc, { overwrite: options?.overwrite !== false })),
-            ),
-
-        'rename-scenario': async (event: unknown, oldName: string, newName: string) => {
-            if (!isName(oldName) || typeof newName !== 'string') return invalidArgs;
-            return safely('rename-scenario', () => fromResult(settings.renameScenario(oldName, newName)));
+        'save-scenario': async (
+            event: unknown,
+            doc: unknown,
+            options?: { overwrite?: boolean; expectedDefinitionRevision?: number } | null,
+        ) => {
+            const expectedDefinitionRevision = revisionOf(options);
+            if (expectedDefinitionRevision === null) return invalidArgs;
+            return safely('save-scenario', () =>
+                fromResult(
+                    settings.saveScenario(doc, { overwrite: options?.overwrite !== false, expectedDefinitionRevision }),
+                ),
+            );
         },
 
-        'delete-scenario': async (event: unknown, name: string) => {
-            if (!isName(name)) return invalidArgs;
-            return safely('delete-scenario', () =>
-                settings.deleteScenario(name)
-                    ? { success: true as const }
-                    : { success: false as const, error: 'not-found' },
+        'rename-scenario': async (
+            event: unknown,
+            oldName: string,
+            newName: string,
+            options?: { expectedDefinitionRevision?: number } | null,
+        ) => {
+            const expectedDefinitionRevision = revisionOf(options);
+            if (!isName(oldName) || typeof newName !== 'string' || expectedDefinitionRevision === null) {
+                return invalidArgs;
+            }
+            return safely('rename-scenario', () =>
+                fromResult(settings.renameScenario(oldName, newName, { expectedDefinitionRevision })),
             );
+        },
+
+        'delete-scenario': async (
+            event: unknown,
+            name: string,
+            options?: { expectedDefinitionRevision?: number } | null,
+        ) => {
+            const expectedDefinitionRevision = revisionOf(options);
+            if (!isName(name) || expectedDefinitionRevision === null) return invalidArgs;
+            return safely('delete-scenario', () => {
+                const result = settings.deleteScenario(name, { expectedDefinitionRevision });
+                return result.ok ? { success: true as const } : { success: false as const, error: result.reason };
+            });
         },
 
         'preview-scenario-import': async (event: unknown, text: string) =>
             safely('preview-scenario-import', () => fromResult(settings.previewScenarioImport(text))),
 
-        'import-scenario': async (event: unknown, text: string, options?: { overwrite?: boolean } | null) =>
-            safely('import-scenario', () =>
-                fromResult(settings.importScenario(text, { overwrite: options?.overwrite === true })),
-            ),
+        'import-scenario': async (
+            event: unknown,
+            text: string,
+            options?: { overwrite?: boolean; expectedDefinitionRevision?: number } | null,
+        ) => {
+            const expectedDefinitionRevision = revisionOf(options);
+            if (expectedDefinitionRevision === null) return invalidArgs;
+            return safely('import-scenario', () =>
+                fromResult(
+                    settings.importScenario(text, {
+                        overwrite: options?.overwrite === true,
+                        expectedDefinitionRevision,
+                    }),
+                ),
+            );
+        },
 
         'export-scenario': async (event: unknown, name: string) => {
             if (!isName(name)) return invalidArgs;
@@ -282,6 +368,8 @@ const buildHandlers = () =>
                     ...getScenarioStatus(challengeId),
                     serviceRuns: backgroundServiceOwnsScenarios(),
                     manualOnly: isManualPhotosOnly(settings, challengeId),
+                    // `overlay`: where the phase's settings come from, and whether they can be read (a phase with bindings or a profile needs its runner's publication).
+                    overlay: settings.scenarioOverlayStatus(challengeId),
                 };
             });
         },
@@ -301,7 +389,13 @@ const buildHandlers = () =>
                 if (!loaded.ok) return loaded.response;
                 const { status } = loaded;
                 // A plan that has not started has no phase clock yet: its in-phase bounds are left out.
-                const decision = evaluateScenario({ ...runInput(loaded), phaseClock: status.state !== null });
+                // Its own private read: the base settings, and the effective ones as the runner last published them. It
+                // never writes or clears a publication.
+                const decision = evaluateScenario({
+                    ...runInput(loaded),
+                    phaseClock: status.state !== null,
+                    readSetting: (key, view) => settings.readScenarioSetting(key, view, challengeId),
+                });
                 // Manual Only pauses the scenario: nothing fires and no wake is due.
                 const manualOnly = isManualPhotosOnly(settings, challengeId);
                 return {
@@ -328,24 +422,48 @@ const buildHandlers = () =>
             });
         },
 
-        'simulate-scenario': async (event: unknown, challengeId: string | number, draft?: unknown) => {
-            if (!isIdArg(challengeId)) return invalidArgs;
-            return safely('simulate-scenario', async () => {
-                const loaded = await loadLiveScenario('scenario simulation', challengeId, draft ?? null);
-                if (!loaded.ok) return loaded.response;
-                const { status, state, now } = loaded;
-                const timeline = simulateScenario(runInput(loaded));
+        'simulate-scenario': async (event: unknown, request: unknown) =>
+            safely('simulate-scenario', async () => {
+                const parsed = parseSimulationRequest(request);
+                if (!parsed.ok) return { success: false as const, error: parsed.error };
+                const { subject, until, assumptions } = parsed.request;
+                const guard = auth.requireAuthToken('scenario simulation');
+                if (!guard.ok) return guard.response;
+                const resolved = resolveSimulatedScenario(parsed.request.scenario, subject);
+                if (!resolved.ok) return resolved.response;
+                const now = Math.floor(Date.now() / 1000);
+                if (until < now) return { success: false as const, error: 'until-in-past' };
+                // A snapshot of a challenge means nothing to an installation, which has none.
+                if (subject.kind === 'installation' && assumptions.snapshots?.some((item) => item.facts.challenge)) {
+                    return { success: false as const, error: 'invalid-assumptions' };
+                }
+                // The one read of the subject's starting evidence, through the read-only producers, before the simulation
+                // opens: nothing is read or requested after it does.
+                const evidence = await readStartingEvidence(subject, guard.token);
+                if (!evidence.ok) return evidence.response;
+                const input: SimulationInput = {
+                    scenario: resolved.scenario,
+                    source: resolved.source,
+                    subject,
+                    evidence: evidence.evidence,
+                    start: now,
+                    until,
+                    assumptions,
+                };
+                const run = await runSimulation(input);
+                if (!run.ok) return { success: false as const, error: run.error };
                 return {
                     success: true as const,
-                    scenario: status.scenario.name,
-                    startPhase: state.phase,
+                    scenario: resolved.scenario.name,
+                    subject,
                     now,
-                    // The timeline is what would run if the switch were off now.
-                    manualOnly: isManualPhotosOnly(settings, challengeId),
-                    ...timeline,
+                    until,
+                    // What the simulation does is what would run if the switch were off now.
+                    manualOnly:
+                        subject.kind === 'installation' ? false : isManualPhotosOnly(settings, subject.challengeId),
+                    ...run.result,
                 };
-            });
-        },
+            }),
     }) satisfies IpcHandlerMap;
 
 export { buildHandlers };

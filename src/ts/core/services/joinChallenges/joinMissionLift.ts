@@ -8,7 +8,7 @@
 
 import { shouldJoinChallenge } from '../VotingLogic';
 import type { Bankroll, Challenge } from '../../types/gurushots';
-import { resolveCandidateConfig, resolveJoinSetting } from './settingsResolution';
+import { isScenarioUnavailable, resolveCandidateConfig, resolveJoinSetting } from './settingsResolution';
 
 /**
  * Mutable per-pass join state: the balance and budget kept locally accurate as
@@ -18,6 +18,8 @@ import { resolveCandidateConfig, resolveJoinSetting } from './settingsResolution
 type JoinPassState = {
     bankroll: Bankroll | null;
     remainingBudget: number;
+    /** Auto Join Short Challenges Immediately, as the pass captured it when it started. */
+    shortChallengesImmediately: boolean;
     nowSec: number;
     missingCloseTimeLogged: boolean;
     /** Whether the one-per-pass after-start clamp note has fired. */
@@ -63,14 +65,18 @@ const decideCandidateJoin = (
  * The two entry gates `joinCandidate` decides before anything else, shared
  * with the join-mission dry run below so the probe counts the same
  * candidates the pass would act on. A non-null value is the status
- * `joinCandidate` returns for the refusal.
+ * `joinCandidate` returns for the refusal. A join its scenario decided (`scenarioJoin`) skips the Auto Join switch only.
  */
 const joinCandidateGateRefusal = (
     challenge: Challenge,
-): 'skipped:autojoin-off' | 'skipped:manual-photos-only' | null => {
+    scenarioJoin = false,
+): 'skipped:autojoin-off' | 'skipped:manual-photos-only' | 'skipped:scenario-unavailable' | null => {
     // Per-candidate enable (master → profile): skip titles auto-join is off
     // for, BEFORE resolving the rest of the config (avoid redundant work).
-    if (resolveJoinSetting('autoJoin', challenge) !== true) return 'skipped:autojoin-off';
+    // A candidate whose scenario settings cannot be read is left alone: nothing is joined on inherited values.
+    if (isScenarioUnavailable(challenge)) return 'skipped:scenario-unavailable';
+    // A join the candidate's own scenario decided on does not ask the Auto Join switch: the scenario decides before it.
+    if (!scenarioJoin && resolveJoinSetting('autoJoin', challenge) !== true) return 'skipped:autojoin-off';
     // Manual Only: the join would enter a photo by itself, so it is left to the user.
     if (resolveJoinSetting('manualPhotosOnly', challenge) === true) return 'skipped:manual-photos-only';
     return null;
@@ -91,6 +97,7 @@ const joinMissionLift = (
     bankroll: Bankroll | null,
     remainingBudget: number,
     nowSec: number,
+    shortChallengesImmediately: boolean,
 ): { lift: number; wouldJoin: number } => {
     // The probe's earlyJoins stays at 1, deliberately not decremented per
     // counted join — it asks "would this join with the window lifted?",
@@ -102,6 +109,7 @@ const joinMissionLift = (
         // any join runs. remainingBudget is a number and copies by value.
         bankroll: bankroll ? { ...bankroll } : null,
         remainingBudget,
+        shortChallengesImmediately,
         nowSec,
         missingCloseTimeLogged: false,
         afterStartClampLogged: false,
@@ -117,7 +125,12 @@ const joinMissionLift = (
         // alreadyPaid: false deliberately undercounts candidates with an
         // unlock claim on file (the real pass joins those submit-only,
         // spending nothing) — conservative, accepted.
-        const decision = decideCandidateJoin(challenge, resolveCandidateConfig(challenge), probePass, false);
+        const decision = decideCandidateJoin(
+            challenge,
+            resolveCandidateConfig(challenge, shortChallengesImmediately),
+            probePass,
+            false,
+        );
         if (!decision.join) continue;
         wouldJoin += 1;
         // Count cumulative affordability across the cycle, not each

@@ -16,13 +16,20 @@ export type ScenarioDraftRule = {
     id?: string;
     label?: string;
     repeat?: string;
+    /** The stages of the subject's life the rule runs in (vocabulary SCENARIO_STAGES). */
+    stages?: string[];
     if?: unknown[];
     do: unknown[];
 };
 
-/** One draft phase: its settings overlay and rules. */
+/** One draft phase: its settings overlay, live-value bindings, schedules, profile, pins, photo pool and rules. */
 export type ScenarioDraftPhase = {
     settings?: Record<string, unknown>;
+    bindings?: Record<string, unknown>;
+    schedules?: Record<string, unknown>;
+    profile?: string;
+    pins?: Record<string, unknown>;
+    photoPool?: Record<string, unknown>;
     rules?: ScenarioDraftRule[];
 };
 
@@ -31,6 +38,8 @@ export type ScenarioDraft = {
     name: string;
     version?: number;
     description?: string;
+    /** Where the scenario runs: one challenge each (omitted), or the whole installation. */
+    scope?: 'challenge' | 'installation';
     start: string;
     limits?: Record<string, number | undefined>;
     phases: Record<string, ScenarioDraftPhase>;

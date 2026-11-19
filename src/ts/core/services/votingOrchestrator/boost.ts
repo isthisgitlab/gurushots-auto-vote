@@ -70,7 +70,10 @@ export const pinnedBoostTarget = (challenge: Challenge): BoostTarget | null => {
 };
 
 /** The photo an earlier fill-new submitted that its boost is still waiting on. */
-export const pendingBoostTarget = ({ challenge, entryAges }: ActionContext): BoostTarget | null => {
+export const pendingBoostTarget = ({
+    challenge,
+    entryAges,
+}: Pick<ActionContext, 'challenge' | 'entryAges'>): BoostTarget | null => {
     const pending = entryAges?.pending(challenge.id.toString());
     return pending ? { imageId: pending, explicit: true } : null;
 };
@@ -315,13 +318,16 @@ export const skipForUncertainPhoto = (
     return true;
 };
 
-export const runBoost = async (ctx: ActionContext) => {
+/**
+ * @returns whether the boost landed (what the pass's operation record keeps)
+ */
+export const runBoost = async (ctx: ActionContext): Promise<boolean> => {
     const { challenge, now } = ctx;
     // Every pass, so an entry's first-seen time is as close to its real entry
     // time as the cadence allows — including entries this pass just reflected.
     ctx.entryAges?.observe(challenge, now);
     const { isTimerBasedAvailable, isKeyUnlockedAvailable } = readBoostAvailability(challenge);
-    if (!isTimerBasedAvailable && !isKeyUnlockedAvailable) return;
+    if (!isTimerBasedAvailable && !isKeyUnlockedAvailable) return false;
 
     logger.withCategory('voting').infoT('mf275019cebb9', [logger.challengeTag(challenge)], null);
 
@@ -337,7 +343,7 @@ export const runBoost = async (ctx: ActionContext) => {
         const boostNeed = ctx.missions?.boost ?? 0;
         if (!votingLogic.isBoostDueForMission(challenge, now, boostNeed)) {
             logBoostNotReady(challenge, isTimerBasedAvailable, timeUntilDisplayBase, effectiveBoostTime);
-            return;
+            return false;
         }
         logger.withCategory('boost').infoT('m5ad141b74f8c', [logger.challengeTag(challenge), boostNeed], null);
     }
@@ -347,8 +353,8 @@ export const runBoost = async (ctx: ActionContext) => {
         skipForUncertainPhoto(ctx, target, isTimerBasedAvailable) ||
         holdBoostForFreshEntry(ctx, target.imageId)
     )
-        return;
-    if (await applyAvailableBoost(ctx, target, isTimerBasedAvailable, timeUntilDisplayBase)) {
-        consumeMission(ctx.missions, 'boost');
-    }
+        return false;
+    if (!(await applyAvailableBoost(ctx, target, isTimerBasedAvailable, timeUntilDisplayBase))) return false;
+    consumeMission(ctx.missions, 'boost');
+    return true;
 };

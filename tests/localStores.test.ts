@@ -16,6 +16,8 @@ import * as swapBackStore from '../src/ts/core/swapBackStore';
 import * as currencyAutoStore from '../src/ts/core/currencyAutoStore';
 import * as entryAgeStore from '../src/ts/core/entryAgeStore';
 import * as scenarioStateStore from '../src/ts/core/scenarioStateStore';
+import * as scenarioLifecycle from '../src/ts/core/settings/scenarioLifecycle';
+import * as scenarioControls from '../src/ts/core/settings/scenarioControls';
 import * as diagnostics from '../src/ts/core/services/semantic/diagnostics';
 import * as photoStats from '../src/ts/core/services/photoStats';
 
@@ -54,6 +56,16 @@ jest.mock('../src/ts/core/scenarioStateStore', () => ({
     initializeScenarioStateAsync: jest.fn<Promise<void>, []>(),
     flushScenarioStateWrites: jest.fn<Promise<void>, []>(),
 }));
+jest.mock('../src/ts/core/settings/scenarioLifecycle', () => ({
+    __esModule: true,
+    initializeStopFenceAsync: jest.fn<Promise<void>, []>(),
+    flushStopFenceWrites: jest.fn<Promise<void>, []>(),
+}));
+jest.mock('../src/ts/core/settings/scenarioControls', () => ({
+    __esModule: true,
+    initializeScenarioControlsAsync: jest.fn<Promise<void>, []>(),
+    flushScenarioControlsWrites: jest.fn<Promise<void>, []>(),
+}));
 jest.mock('../src/ts/core/services/semantic/diagnostics', () => ({
     __esModule: true,
     initializeDiagnosticsAsync: jest.fn<Promise<void>, []>(),
@@ -86,6 +98,8 @@ describe('initializeLocalStores', () => {
         jest.mocked(currencyAutoStore.initializeAutoSpendAsync).mockImplementation(recording('autoSpend'));
         jest.mocked(entryAgeStore.initializeEntryAgesAsync).mockImplementation(recording('entryAges'));
         jest.mocked(scenarioStateStore.initializeScenarioStateAsync).mockImplementation(recording('scenarioState'));
+        jest.mocked(scenarioLifecycle.initializeStopFenceAsync).mockImplementation(recording('stopFence'));
+        jest.mocked(scenarioControls.initializeScenarioControlsAsync).mockImplementation(recording('controls'));
         jest.mocked(diagnostics.initializeDiagnosticsAsync).mockImplementation(recording('diagnostics'));
         jest.mocked(photoStats.initializePhotoStatsAsync).mockImplementation(recording('photoStats'));
 
@@ -100,6 +114,8 @@ describe('initializeLocalStores', () => {
             'autoSpend',
             'entryAges',
             'scenarioState',
+            'stopFence',
+            'controls',
             'diagnostics',
             'photoStats',
         ]);
@@ -118,6 +134,8 @@ describe('initializeLocalStores', () => {
         jest.mocked(currencyAutoStore.initializeAutoSpendAsync).mockImplementation(pending('autoSpend'));
         jest.mocked(entryAgeStore.initializeEntryAgesAsync).mockImplementation(pending('entryAges'));
         jest.mocked(scenarioStateStore.initializeScenarioStateAsync).mockImplementation(pending('scenarioState'));
+        jest.mocked(scenarioLifecycle.initializeStopFenceAsync).mockImplementation(pending('stopFence'));
+        jest.mocked(scenarioControls.initializeScenarioControlsAsync).mockImplementation(pending('controls'));
         jest.mocked(diagnostics.initializeDiagnosticsAsync).mockImplementation(pending('diagnostics'));
         jest.mocked(photoStats.initializePhotoStatsAsync).mockImplementation(pending('photoStats'));
 
@@ -131,6 +149,8 @@ describe('initializeLocalStores', () => {
             'autoSpend',
             'entryAges',
             'scenarioState',
+            'stopFence',
+            'controls',
             'diagnostics',
             'photoStats',
         ]);
@@ -163,6 +183,8 @@ describe('flushLocalStores', () => {
         jest.mocked(currencyAutoStore.flushAutoSpendWrites).mockImplementation(recording('autoSpend'));
         jest.mocked(entryAgeStore.flushEntryAgeWrites).mockImplementation(recording('entryAges'));
         jest.mocked(scenarioStateStore.flushScenarioStateWrites).mockImplementation(recording('scenarioState'));
+        jest.mocked(scenarioLifecycle.flushStopFenceWrites).mockImplementation(recording('stopFence'));
+        jest.mocked(scenarioControls.flushScenarioControlsWrites).mockImplementation(recording('controls'));
         jest.mocked(diagnostics.flushDiagnosticsWrites).mockImplementation(recording('diagnostics'));
         jest.mocked(photoStats.flushPhotoStatsWrites).mockImplementation(recording('photoStats'));
 
@@ -176,6 +198,8 @@ describe('flushLocalStores', () => {
             'autoSpend',
             'entryAges',
             'scenarioState',
+            'stopFence',
+            'controls',
             'diagnostics',
             'photoStats',
         ]);
@@ -192,6 +216,30 @@ describe('flushLocalStores', () => {
 
         expect(logger.withCategory).toHaveBeenCalledWith('general');
         expect(error).toHaveBeenCalledWith('Scenario state not persisted', failure);
+    });
+
+    test('a Stop fence flush that did not persist is logged, not left as a rejection', async () => {
+        const error = jest.fn<void, [string, unknown]>();
+        jest.mocked(logger.withCategory).mockReturnValueOnce(invalid({ error }));
+        const failure = new Error('not persisted');
+        jest.mocked(scenarioLifecycle.flushStopFenceWrites).mockRejectedValueOnce(failure);
+
+        await expect(flushLocalStores()).resolves.toBeUndefined();
+        await flushMicrotasks();
+
+        expect(error).toHaveBeenCalledWith('Stop fence not persisted', failure);
+    });
+
+    test('a control inbox flush that did not persist is logged, not left as a rejection', async () => {
+        const error = jest.fn<void, [string, unknown]>();
+        jest.mocked(logger.withCategory).mockReturnValueOnce(invalid({ error }));
+        const failure = new Error('not persisted');
+        jest.mocked(scenarioControls.flushScenarioControlsWrites).mockRejectedValueOnce(failure);
+
+        await expect(flushLocalStores()).resolves.toBeUndefined();
+        await flushMicrotasks();
+
+        expect(error).toHaveBeenCalledWith('Scenario controls not persisted', failure);
     });
 
     test('a flush that throws synchronously is contained, and the stores after it are not flushed', async () => {

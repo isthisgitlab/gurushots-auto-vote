@@ -1,5 +1,5 @@
 import type { Bankroll, Challenge } from '../../../core/types/gurushots';
-import { useState, useCallback, useLayoutEffect } from 'react';
+import { useState, useCallback, useEffect, useLayoutEffect } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useChallenges } from '@/contexts/ChallengesContext';
 import { useTimers } from '@/hooks/useTimers';
@@ -17,18 +17,30 @@ import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import * as ipc from '@/api/ipc';
 import { ChallengesRefusedError } from '@/api/useActiveChallenges';
 
+/** The host's effective card density (useEffectiveSettings): a running scenario's, or the saved one; null where unknown. */
+export type EffectiveDensity = { compactCards: boolean | null; compactCardActions: boolean | null; revision: number };
+
 /**
  * Global card density: the compactCards default and the compactCardActions
  * switch, kept in sync with settings-changed events, plus `refreshKey` — bumped
  * whenever a setting changes and handed to each ChallengeCard as
  * `settingsVersion`, so the card re-reads its effective settings and its
  * deadline-action preview in place (no remount).
+ *
+ * What the cards show is the effective density once the host has published one (its revision also bumps `refreshKey`, so
+ * every card reads its own effective value again); the toggle below still writes the saved default and nothing else.
  */
-function useGlobalCardDensity(onError: (message: string | null) => void) {
+function useGlobalCardDensity(onError: (message: string | null) => void, effective: EffectiveDensity | null) {
     const { t } = useTranslation();
-    const [globalCompact, setGlobalCompact] = useState(false);
-    const [compactActions, setCompactActions] = useState(false);
+    const [savedCompact, setGlobalCompact] = useState(false);
+    const [savedActions, setCompactActions] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
+    const globalCompact = effective?.compactCards ?? savedCompact;
+    const compactActions = effective?.compactCardActions ?? savedActions;
+    const effectiveRevision = effective?.revision ?? null;
+    useEffect(() => {
+        if (effectiveRevision !== null) setRefreshKey((k) => k + 1);
+    }, [effectiveRevision]);
 
     // Read the global compactCards default and the compactCardActions switch
     // + listen for settings-changed events so the toggle below stays in sync
@@ -97,6 +109,7 @@ export function ChallengesSection({
     onChallengeSettingsClick,
     bankroll = null,
     onBankrollChanged,
+    effectiveDensity = null,
 }: {
     timezone: string;
     autovoteRunning: boolean;
@@ -105,6 +118,8 @@ export function ChallengesSection({
     onChallengeSettingsClick: (challengeId: Challenge['id'], challengeTitle: string) => void;
     bankroll?: Bankroll | null;
     onBankrollChanged?: () => void | Promise<void>;
+    /** what the host publishes for the card density now; null: show the saved default */
+    effectiveDensity?: EffectiveDensity | null;
 }) {
     const { t } = useTranslation();
     const { viewPrefsLocal } = usePlatformCapabilities();
@@ -112,7 +127,10 @@ export function ChallengesSection({
     const times = useTimers(challenges);
     // The message of the last failed Vote all / Run / layout toggle, shown below their row.
     const [actionError, setActionError] = useState<string | null>(null);
-    const { globalCompact, compactActions, refreshKey, toggleGlobalCompact } = useGlobalCardDensity(setActionError);
+    const { globalCompact, compactActions, refreshKey, toggleGlobalCompact } = useGlobalCardDensity(
+        setActionError,
+        effectiveDensity,
+    );
 
     // Shared success path for the Vote All / Run buttons below (awaited, so
     // their spinner holds until the refreshed list lands).

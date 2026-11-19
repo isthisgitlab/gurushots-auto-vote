@@ -9,7 +9,11 @@ import type { RemoteTransport } from '../../../core/remote/relays';
 type PendingInvoke = {
     resolve: (result: unknown) => void;
     reject: (error: Error) => void;
-    spend: boolean;
+    /** Not a read (an effect or a spend): a loss after the send is unclear, and it is never sent again. */
+    effect: boolean;
+    /** The identity of a scenario change, and its target: what a lost answer is asked about afterwards. */
+    requestId?: string;
+    target?: string;
     /** The channel the invoke asked, so a refusal can say whether this page offered a channel the desktop lacks. */
     channel: string;
     /** The arguments as sent (each top-level undefined already null), so a refusal can tell a per-argument rule from a channel the desktop lacks. */
@@ -21,7 +25,7 @@ export type Listener = (payload: unknown) => void;
 /**
  * The bridge's shared state. `hostPeerId` is the desktop's peer id once its hello named it —
  * null before, and after a loss. `everConnected` says whether the desktop has ever completed a
- * hello in this page's life: only before that first connect may a non-spend invoke be held;
+ * hello in this page's life: only before that first connect may a read be held;
  * after a loss nothing queues.
  */
 export type PeerBridgeContext = {
@@ -39,6 +43,8 @@ export type PeerBridgeContext = {
     stopped: boolean;
     /** The timer that reads the desktop absent when none joins in time; one at a time. */
     offlineWait: ReturnType<typeof setTimeout> | null;
+    /** The revision of each scenario-change target the desktop last answered with: what the next change to it expects. */
+    readonly controlRevisions: Map<string, number>;
 };
 
 export const createPeerBridgeContext = (transport: RemoteTransport): PeerBridgeContext => ({
@@ -52,4 +58,5 @@ export const createPeerBridgeContext = (transport: RemoteTransport): PeerBridgeC
     everConnected: false,
     stopped: false,
     offlineWait: null,
+    controlRevisions: new Map(),
 });

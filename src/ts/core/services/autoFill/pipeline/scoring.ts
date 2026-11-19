@@ -36,6 +36,8 @@ const loadFillCandidates = async ({
     mustIncludeTags,
     shouldIncludeTags,
     usage,
+    trackReads = false,
+    logLabel,
 }: {
     label: string;
     challenge: Challenge;
@@ -44,6 +46,10 @@ const loadFillCandidates = async ({
     mustIncludeTags: readonly string[] | null;
     shouldIncludeTags: readonly string[] | null;
     usage?: LibraryUsage;
+    /** Ask the fetch whether any read stopped early (`incomplete` on the result); only the read-only scan asks. */
+    trackReads?: boolean;
+    /** The label the fetch's own log lines carry (the scan's, so they are not taken for a fill's). */
+    logLabel?: string;
 }): Promise<
     | FetchErrorResult
     | {
@@ -52,6 +58,8 @@ const loadFillCandidates = async ({
           semanticScores: SemanticScoreMap | null;
           ignoreWords: IgnoreWords;
           walkedUnfiltered: boolean;
+          /** Some read of the library stopped early or failed, so `eligible` may lack photos it holds (only when tracked). */
+          incomplete: boolean;
       }
 > => {
     const { logger } = deps;
@@ -64,7 +72,10 @@ const loadFillCandidates = async ({
     const excludeIds = swappedOutIdsForUsage(challenge, usage);
 
     let eligible;
-    const trace = { walkedUnfiltered: false };
+    const trace: { walkedUnfiltered: boolean; readFailed?: boolean; truncated?: boolean } = {
+        walkedUnfiltered: false,
+        ...(trackReads ? { readFailed: false, truncated: false } : {}),
+    };
     try {
         eligible = await fetchCandidatesForChallenge(
             challenge,
@@ -72,7 +83,7 @@ const loadFillCandidates = async ({
             { mustIncludeTags, shouldIncludeTags, ignoreWords },
             // The whole deps bundle, so a dep added upstream reaches this path
             // (auto-fill, emergency fill and manual fill alike) unnamed.
-            { ...deps, usage, trace, excludeIds },
+            { ...deps, usage, trace, excludeIds, ...(logLabel ? { logLabel } : {}) },
         );
     } catch (error) {
         logger
@@ -88,7 +99,14 @@ const loadFillCandidates = async ({
     // probe and its actual pick rank the same eligible set, so they must see
     // the same map).
     const semanticScores = await resolveSemanticScores(challenge, eligible, { ...deps, ignoreWords });
-    return { status: 'loaded', eligible, semanticScores, ignoreWords, walkedUnfiltered: trace.walkedUnfiltered };
+    return {
+        status: 'loaded',
+        eligible,
+        semanticScores,
+        ignoreWords,
+        walkedUnfiltered: trace.walkedUnfiltered,
+        incomplete: trace.readFailed === true || trace.truncated === true,
+    };
 };
 
 /**

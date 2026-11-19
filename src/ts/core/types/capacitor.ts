@@ -41,6 +41,15 @@ export interface AutoVoteBackgroundPlugin {
         expected?: string | null;
         value: string;
     }): Promise<{ saved: boolean; current: string | null }>;
+    /**
+     * A full Stop, straight to the native side: the service's work and alarms are cancelled first, then the Stop is recorded
+     * in the priority fence by compare-and-set. It reads and writes no other store. `durable` says whether the fence holds the
+     * Stop (with its `epoch`), or why not (`reason`); the cancellation stands either way. Rejects an invalid request id or time.
+     */
+    stopAll(options: {
+        requestId: string;
+        at: number;
+    }): Promise<{ stopped: boolean; durable: boolean; epoch?: number; reason?: string }>;
     /** Stops the service, cancels its alarms and clears every native store and cache; `ok` when all of it went. */
     wipeLocalData(): Promise<{ ok: boolean }>;
 }
@@ -99,7 +108,11 @@ export type HeadlessGlobals = typeof globalThis & {
     /** The native `@JavascriptInterface` the cycle result is reported through. */
     AndroidHeadlessBridge?: { onCycleComplete(json: string): void };
     /** The entry point the native service calls on each alarm tick. */
-    GS?: { runOneCycle: () => Promise<void> };
+    GS?: {
+        runOneCycle: () => Promise<void>;
+        /** Latches the cancellation flag: the cycle running stops at its next work boundary (a full Stop, from the service). */
+        cancel: () => void;
+    };
 };
 
 /**

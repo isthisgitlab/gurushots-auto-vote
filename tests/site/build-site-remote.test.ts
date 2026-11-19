@@ -28,10 +28,10 @@ describe('the current remote page tree', () => {
         write(nodePath.join('dist', 'remoteLoader-bundle.js'), '// launcher');
         write(nodePath.join('dist', 'styles.css'), 'body{}');
         write(nodePath.join('dist', 'THIRD_PARTY_NOTICES.txt'), 'root-notices');
-        write(nodePath.join('dist', 'remote', 'v2', 'index.html'), '<html>current</html>');
-        write(nodePath.join('dist', 'remote', 'v2', 'remote-bundle.js'), '// current page');
-        write(nodePath.join('dist', 'remote', 'v2', 'styles.css'), 'staged-css');
-        write(nodePath.join('dist', 'remote', 'v2', 'THIRD_PARTY_NOTICES.txt'), 'page-notices');
+        write(nodePath.join('dist', 'remote', 'v3', 'index.html'), '<html>current</html>');
+        write(nodePath.join('dist', 'remote', 'v3', 'remote-bundle.js'), '// current page');
+        write(nodePath.join('dist', 'remote', 'v3', 'styles.css'), 'staged-css');
+        write(nodePath.join('dist', 'remote', 'v3', 'THIRD_PARTY_NOTICES.txt'), 'page-notices');
     };
 
     beforeEach(() => {
@@ -46,7 +46,7 @@ describe('the current remote page tree', () => {
         fs.rmSync(tmp, { recursive: true, force: true });
     });
 
-    test('stages only the current launcher, stylesheet, notices, and v2 page', () => {
+    test('stages only the current launcher, stylesheet, notices, and v3 page', () => {
         seedDist();
 
         buildRemoteSite(out, dist);
@@ -56,21 +56,22 @@ describe('the current remote page tree', () => {
             'index.html',
             'remoteLoader-bundle.js',
             'styles.css',
-            'v2',
+            'v3',
         ]);
         expect(read('index.html')).toContain('launcher');
         expect(read('remoteLoader-bundle.js')).toBe('// launcher');
         expect(read('styles.css')).toBe('body{}');
         expect(read('THIRD_PARTY_NOTICES.txt')).toBe('root-notices');
-        expect(read('v2', 'index.html')).toBe('<html>current</html>');
-        expect(read('v2', 'remote-bundle.js')).toBe('// current page');
-        expect(read('v2', 'styles.css')).toBe('body{}');
-        expect(read('v2', 'THIRD_PARTY_NOTICES.txt')).toBe('page-notices');
+        expect(read('v3', 'index.html')).toBe('<html>current</html>');
+        expect(read('v3', 'remote-bundle.js')).toBe('// current page');
+        expect(read('v3', 'styles.css')).toBe('body{}');
+        expect(read('v3', 'THIRD_PARTY_NOTICES.txt')).toBe('page-notices');
     });
 
-    test('removes stale older-version output before staging v2', () => {
+    test('removes stale older-version output before staging v3', () => {
         seedDist();
         write(nodePath.join('dist-site', 'remote', 'v1', 'index.html'), '<html>stale</html>');
+        write(nodePath.join('dist-site', 'remote', 'v2', 'index.html'), '<html>stale</html>');
         write(nodePath.join('dist-site', 'remote', 'v99', 'index.html'), '<html>stale</html>');
 
         buildRemoteSite(out, dist);
@@ -80,9 +81,10 @@ describe('the current remote page tree', () => {
             'index.html',
             'remoteLoader-bundle.js',
             'styles.css',
-            'v2',
+            'v3',
         ]);
         expect(fs.existsSync(nodePath.join(out, 'remote', 'v1'))).toBe(false);
+        expect(fs.existsSync(nodePath.join(out, 'remote', 'v2'))).toBe(false);
         expect(fs.existsSync(nodePath.join(out, 'remote', 'v99'))).toBe(false);
     });
 
@@ -124,8 +126,8 @@ describe('the current remote page tree', () => {
 
         expect(listing()).toEqual(['styles.css']);
         expect(read('styles.css')).toBe('body{}');
-        expect(fs.existsSync(nodePath.join(out, 'remote', 'v2'))).toBe(false);
-        expect(logSpy).toHaveBeenCalledWith('⏭️  remote/v2/: build:react has not staged it yet');
+        expect(fs.existsSync(nodePath.join(out, 'remote', 'v3'))).toBe(false);
+        expect(logSpy).toHaveBeenCalledWith('⏭️  remote/v3/: build:react has not staged it yet');
     });
 
     test('leaves no remote output when the local build has produced no current assets', () => {
@@ -133,7 +135,7 @@ describe('the current remote page tree', () => {
 
         expect(fs.existsSync(nodePath.join(out, 'remote'))).toBe(false);
         expect(logSpy).toHaveBeenCalledWith('⏭️  remote/ launcher: build:react has not produced it yet');
-        expect(logSpy).toHaveBeenCalledWith('⏭️  remote/v2/: build:react has not staged it yet');
+        expect(logSpy).toHaveBeenCalledWith('⏭️  remote/v3/: build:react has not staged it yet');
         expect(logSpy).toHaveBeenCalledWith('⏭️  remote/styles.css: build:css has not produced it yet');
     });
 });

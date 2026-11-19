@@ -56,6 +56,16 @@ nextCurrencyRule, nextScenarioWake, nextBoostHold }`:
   challenge counts, flash included. Resolvers: `nodeResolvers.resolveScenarioWake`
   (over `services/scenarioStatus.ts`) and its IPC twin in
   `src/ts/core/autovote/resolvers.ts` (`get-scenario-status`).
+- **account**: the soonest boundary that belongs to the account and not to an
+  active challenge (`resolveAccountWake`, `thresholdWindow/ruleWakes.ts`
+  `soonestAccountWake`): the installation scenario's rule conditions and its
+  publication's `validUntil`, a candidate's opening and its pre-join rule
+  conditions, the claim throttle, the earliest unfinished-mission expiry. None
+  is bounded by a challenge's close time: the installation looks ahead to an
+  explicit horizon (`discoverUpcomingHours`). Only instants that are known
+  count; unknown evidence supplies no deadline. The Node resolver is
+  `nodeResolvers.resolveAccountWake`; the WebView asks the main process for the
+  same answer through the host (`getAccountWake`).
 - **normal**: otherwise the random delay in `[checkFrequencyMin,
 checkFrequencyMax]`.
 
@@ -243,6 +253,58 @@ Deliberate semantics and caveats:
   disabled/corrupt, is skipped for the cadence cap; the rule-side read is
   optional-chained like every other per-challenge API read so one bad
   challenge never aborts the pass.
+
+### What the scenario boundary collects
+
+`scenarios/nextWake.ts` returns the soonest instant after `now` at which a
+condition of the current phase can change its answer. Besides the daily window,
+`beforeEnd` / `afterStart` / `inPhaseFor` / percent bounds and the once-per-day
+midnight, it collects (nested and negated conditions included):
+
+- the instants an expression of a `compare`, `present` / `absent` or `contains*`
+  condition stands for (a close time, a point offset from it, a free Boost's
+  expiry, a Turbo's opening, a mission's expiry) and the second after each;
+- the second a clock-driven duration (`challenge.timeLeft`, `challenge.elapsed`,
+  `phase.elapsed`, `boost.freeRemaining`) reaches the number it is compared with;
+- the resolved rows of the phase's dynamic submit, vote and pause schedules
+  (a deadline, a window's start, the first second after its inclusive end);
+- the publication's own `validUntil`.
+
+Nothing worked out from the clock itself (`clock.now`) is a boundary. A subject
+with no challenge (the installation) passes an explicit `horizon` instead of a
+close time. The scheduler knows only what the challenge itself shows; account
+evidence it does not hold is unknown and supplies no instant.
+
+### Execution modes and the Stop fence
+
+The controller (and the CLI scheduler) run in one of three modes, kept apart
+from `running` (the voting stages): `stopped` (no chain), `armed` (the one chain
+runs for the installation scenario while the voting stages are paused: no
+active challenge is read, and only the account boundary and the normal cadence
+decide the wait) and `voting`. Turning the voting stages on or off under an armed
+chain (the installation actions `startAutovote` / `stopAutovote`, or the user's
+Resume) re-arms the same timer: there is never a second chain.
+
+A full Stop is not an ordinary request. In this order, and without waiting for a
+queued Start or an in-flight rule: the local latch (the generation advances), the
+timer is cleared, the mode becomes `stopped`, then the installation's
+publication is withdrawn and the priority fence is recorded
+(`settings/scenarioLifecycle.ts`: `stopEpoch` + `blocked`). Every request that can
+arm captures the generation and the epoch when it is created (`autovote/runGate.ts`)
+and is admitted at the arm boundary and at every timer dispatch: an obsolete
+request, timer or continuation arms and authorizes nothing. Only the user's own
+Run lifts `blocked`; a startup resume, a scenario request and a timer never do.
+A Stop the fence cannot save stays a local Stop (`stopped-locally`, `durable:
+false`) and the process cannot run again until a later save succeeds.
+
+### Cadence settings are captured once per cycle
+
+The check frequency and the time zone are the installation's effective values
+(the saved ones, or the installation scenario's published phase over them),
+captured once as a decision starts and frozen for it; a publication that lands
+meanwhile applies from the next cycle. One that cannot be read is never replaced by
+the saved value: the chain falls back to the plain default cadence, and a
+boundary that needs the zone supplies none.
 
 ## Pre-boost fill cadence
 

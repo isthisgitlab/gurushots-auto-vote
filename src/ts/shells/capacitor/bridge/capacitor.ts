@@ -26,6 +26,9 @@ import { isSafeExternalUrl } from '../../../core/format/urlSafe';
 import { logout, LogoutNotSavedError } from '../../../core/services/auth';
 import * as updateChecker from '../../../core/services/UpdateChecker';
 import * as androidUpdateInstaller from '../AndroidUpdateInstaller';
+import * as nativeAutovote from '../NativeAutovoteBridge';
+import { announceEffectiveChange } from '../../../core/services/effectiveEvents';
+import { refreshStopFenceAsync } from '../../../core/settings/scenarioLifecycle';
 import { hasBundledModel } from '../../../core/services/visionVerifier';
 import { buildReleaseUpdateHandlers } from '../../../core/ipc/releaseUpdates';
 // kebab-case channel name → camelCase renderer method name — shared with
@@ -72,6 +75,29 @@ const wrap =
     (channel: string, impl: IpcHandler) =>
     (...args: unknown[]) =>
         Promise.resolve(invokeHandler(channel, impl, null, args));
+
+/**
+ * The user's full Stop on Android goes to the native service first (AutoVotePlugin.stopAll): its work and alarms are cancelled
+ * and the Stop is recorded in the native priority fence, by a compare-and-write on the fence alone: never waiting behind, and
+ * never touching, the control inbox. Only then is the window's own copy of the fence read again (the native Stop wrote it
+ * behind that cache) and the change announced. A Stop the fence did not take is answered as not saved: the local cancellation
+ * stands (the controller has already latched), and the controller says the Stop is not durable. With no native plugin the
+ * window's own record is the whole Stop, as on any host without a service.
+ */
+const buildNativeFullStop =
+    (recordLocally: (event: unknown, requestId: string, at: number) => Promise<unknown>) =>
+    async (event: unknown, requestId: string, at: number) => {
+        // A call that is not a request id and a time is the handler's to refuse.
+        if (typeof requestId !== 'string' || typeof at !== 'number') return recordLocally(event, requestId, at);
+        const stopped = await nativeAutovote.stopAll(requestId, at);
+        if (stopped === null) return recordLocally(event, requestId, at);
+        if (!stopped.durable) return { success: false as const, error: stopped.reason };
+        if (!(await refreshStopFenceAsync())) {
+            logger.withCategory('scenario').warning('The Stop fence could not be read again after the native Stop');
+        }
+        announceEffectiveChange();
+        return { success: true as const, epoch: stopped.epoch };
+    };
 
 const buildAllHandlers = () => {
     // Every successful settings write (save-settings, set-setting and the
@@ -138,6 +164,7 @@ const buildAllHandlers = () => {
         'log-remote-info': notApplicable('the remote host logs'),
     };
 
+    const scenarios = scenariosHandlers.buildHandlers();
     return {
         ...settingsHandlers.buildHandlers(),
         ...votingHandlers.buildHandlers(),
@@ -145,7 +172,8 @@ const buildAllHandlers = () => {
         ...actionsHandlers.buildHandlers(),
         ...computationsHandlers.buildHandlers(),
         ...currencyHandlers.buildHandlers(),
-        ...scenariosHandlers.buildHandlers(),
+        ...scenarios,
+        'record-full-stop': buildNativeFullStop(scenarios['record-full-stop']),
         ...updateStubs,
         ...remotePairingStubs,
     };

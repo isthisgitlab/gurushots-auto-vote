@@ -51,17 +51,20 @@
  */
 
 import * as logger from '../logger';
+import { clockSec } from '../simulationScope';
 import * as votingLogic from './VotingLogic';
 import * as photoStats from './photoStats';
 import * as currencyAuto from './currencyAuto';
 import { consumeMission, registerMissionNeeds } from './missions';
 import { turboRunSnapshot } from './turboRunLock';
 import { runScenarioStep } from './scenarioRunner';
+import { createOperationRecord } from '../scenarios/runtime';
+import type { OperationKind } from '../scenarios/runtime';
 import * as cancellation from '../voting/cancellation';
 import { beginVotingPass, isVotingPassRunning } from '../voting/passActivity';
 import { failureText } from '../format/logSafe';
 import { errorKind, errorMessage } from '../errorMessage';
-import { consumeChosenPhotos } from '../settings';
+import { consumeChosenPhotos, reconcilePhotoPool, scenarioSubjectAvailable, scenarioSubjectReason } from '../settings';
 import { isMarkedChallenge } from '../challengeMarks';
 import { getEntries } from './autoFill/challengeState';
 import { buildFillDeps, cancelPass } from './votingOrchestrator/context';
@@ -198,10 +201,11 @@ const processChallenge = async (
     // Manual Only skip on purpose, so a Manual Only challenge's external
     // entries are consumed too.
     try {
-        consumeChosenPhotos(
-            challenge.id,
-            getEntries(challenge).map((entry) => String(entry?.id)),
-        );
+        const enteredIds = getEntries(challenge).map((entry) => String(entry?.id));
+        consumeChosenPhotos(challenge.id, enteredIds);
+        // The same read settles a scenario phase's photo pool: a photo that went out unanswered and shows as entered
+        // landed (consumed), one that does not show did not (released). Before the scenario's own step, never inside it.
+        reconcilePhotoPool(challenge.id, enteredIds);
     } catch (error) {
         logger
             .withCategory('voting')
@@ -221,8 +225,24 @@ const processChallenge = async (
     // the history as sent, never on the object at call time.
     const swapHistorySent = Array.isArray(challenge.member?.ranking?.swaps);
     await runScenarioStep(challenge, now, pass);
+    // What a scenario action just did on this challenge is not done again by the normal automation in the same pass
+    // (an operation the scenario's own steps reflect onto the live challenge, a boost or a turbo, already shows as used).
+    const doneThisPass = (kind: OperationKind) => pass.operations?.has(kind, String(challenge.id)) === true;
 
-    await playAutoTurbo(challenge, now, pass);
+    // A phase with bindings or a profile is read through the settings its runner published. Without a valid
+    // publication (the step could not prepare it, another process owns it) nothing below may run on inherited
+    // values: this challenge waits for the next pass, the rest of the pass goes on.
+    if (scenarioSubjectAvailable(challenge.id) === false) {
+        logger
+            .withCategory('voting')
+            .warning(
+                `${logger.challengeTag(challenge)} scenario settings unavailable — skipped this pass (${scenarioSubjectReason(challenge.id)})`,
+                null,
+            );
+        return null;
+    }
+
+    if (!doneThisPass('earn')) await playAutoTurbo(challenge, now, pass);
 
     // Automatic key unlock and photo swap (opt-in per challenge/profile). They
     // run ahead of the deadline actions on purpose: an unlocked boost is then
@@ -230,7 +250,7 @@ const processChallenge = async (
     // boost/turbo lands, so neither spends on the photo about to be replaced.
     const currencyCtx = { challenge, token: pass.token, now, currency: pass.currency, swapHistorySent };
     await currencyAuto.runAutoKey(currencyCtx);
-    await currencyAuto.runAutoSwap(currencyCtx);
+    if (!doneThisPass('swap')) await currencyAuto.runAutoSwap(currencyCtx);
 
     const actionsCancelled = await runDeadlineActions(challenge, now, pass);
     if (actionsCancelled) return actionsCancelled;
@@ -238,7 +258,9 @@ const processChallenge = async (
     // A "Use Fill" mission's fill goes BEFORE the vote: the vote lifts exposure to
     // ~100%, and a fill on a full challenge is refused. It reflects 100% exposure
     // onto the challenge, so the vote decision below sees it and spends no votes.
-    if (await currencyAuto.runMissionFill(currencyCtx, pass.missions)) consumeMission(pass.missions, 'fill');
+    if (!doneThisPass('fill') && (await currencyAuto.runMissionFill(currencyCtx, pass.missions))) {
+        consumeMission(pass.missions, 'fill');
+    }
 
     // New-entry detection runs AFTER the deadline actions on purpose: auto-fill /
     // emergency fill / boost-turbo fill-new all reflect their new entry into
@@ -263,13 +285,15 @@ const processChallenge = async (
     // onVoteLanded fires only when a cancel follows a submit that already
     // landed, so it records the snapshot with voteThrew=false; calling it from
     // a failure path would disarm a forced-vote retry.
-    const vote = await voteOnChallenge(
-        challenge,
-        voteDecision,
-        pass,
-        () => recordEntrySnapshot(pass.entryTracker, entry, decision, false),
-        missionVote?.maxVotes,
-    );
+    const vote = doneThisPass('vote')
+        ? { cancelled: null, voteThrew: false, votePool: undefined }
+        : await voteOnChallenge(
+              challenge,
+              voteDecision,
+              pass,
+              () => recordEntrySnapshot(pass.entryTracker, entry, decision, false),
+              missionVote?.maxVotes,
+          );
     if (vote.cancelled) return vote.cancelled;
 
     recordEntrySnapshot(pass.entryTracker, entry, decision, vote.voteThrew);
@@ -277,7 +301,11 @@ const processChallenge = async (
     // Automatic exposure fill, AFTER the vote: a fill is only worth spending
     // when this pass's voting could not lift exposure to the fill threshold.
     // It counts toward a "Use Fill" mission too.
-    if (!vote.voteThrew && (await currencyAuto.runAutoExposureFill(currencyCtx, vote.votePool))) {
+    if (
+        !vote.voteThrew &&
+        !doneThisPass('fill') &&
+        (await currencyAuto.runAutoExposureFill(currencyCtx, vote.votePool))
+    ) {
         consumeMission(pass.missions, 'fill');
     }
     return null;
@@ -301,6 +329,7 @@ const runVotingPass = async (
         scenarios = null,
         missions = null,
         refreshMissionNeeds = null,
+        operations = createOperationRecord(),
     } = deps;
     const fillDeps = buildFillDeps(api, entryAges);
     // Clear the photo-stats failure breaker so a pass that hit a rate limit does
@@ -382,6 +411,7 @@ const runVotingPass = async (
             ),
             allChallenges,
             turboSnapshot,
+            operations,
             snapGames: { played: 0 },
         };
 
@@ -397,7 +427,7 @@ const runVotingPass = async (
             // pass-start clock would evaluate every later challenge against a time biased
             // into the past, missing last-minute/emergency/boost/turbo windows that opened
             // mid-pass and treating an already-closed challenge as still open.
-            const now = Math.floor(Date.now() / 1000);
+            const now = clockSec();
 
             // One malformed challenge must not cost the pass every challenge after it: an
             // unguarded property read would otherwise throw into the single outer catch

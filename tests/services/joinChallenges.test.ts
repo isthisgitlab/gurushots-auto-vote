@@ -61,8 +61,8 @@ jest.mock('../../src/ts/core/services/visionVerifier', () => ({
         ids.slice(0, wantCount),
     ),
 }));
-jest.mock('../../src/ts/core/settings', () => ({
-    getEffectiveSetting: jest.fn((key: string) => {
+jest.mock('../../src/ts/core/settings', () => {
+    const getEffectiveSetting = jest.fn((key: string) => {
         const map: Record<string, unknown> = {
             autoJoin: true,
             autoJoinTypes: '',
@@ -71,16 +71,26 @@ jest.mock('../../src/ts/core/settings', () => ({
             submitWithoutTagMatch: true,
         };
         return map[key];
-    }),
-    getEffectiveTagSetting: jest.fn(() => []),
-    getTitleRules: jest.fn(() => []),
-    getChallengeProfiles: jest.fn(() => ({})),
-    resolveRuleSetting: jest.fn(() => null),
-    resolveRuleSettingGroup: jest.fn(() => null),
-    hasRuleJoinOptIn: jest.fn(() => false),
-    getChallengeOverride: jest.fn(() => null),
-    getSetting: jest.fn(() => false),
-}));
+    });
+    return {
+        getEffectiveSetting,
+        // The pass captures the installation's join settings together as it starts; with no installation scenario they are the
+        // same values the tests give the effective read (a test overrides them through getEffectiveSetting).
+        captureInstallationSettings: jest.fn((keys: string[]) => ({
+            ok: true,
+            values: Object.fromEntries(keys.map((key) => [key, getEffectiveSetting(key)])),
+        })),
+        getEffectiveTagSetting: jest.fn(() => []),
+        getTitleRules: jest.fn(() => []),
+        getChallengeProfiles: jest.fn(() => ({})),
+        resolveRuleSetting: jest.fn(() => null),
+        resolveRuleSettingGroup: jest.fn(() => null),
+        hasRuleJoinOptIn: jest.fn(() => false),
+        getChallengeOverride: jest.fn(() => null),
+        getSetting: jest.fn(() => false),
+        scenarioSubjectAvailable: jest.fn(() => true),
+    };
+});
 
 import cancellationModule = require('../../src/ts/core/voting/cancellation');
 const cancellation = jest.mocked(cancellationModule);
@@ -213,6 +223,11 @@ beforeEach(() => {
     settings.resolveRuleSettingGroup.mockReturnValue(null);
     settings.hasRuleJoinOptIn.mockReturnValue(false);
     settings.getEffectiveSetting.mockImplementation((key) => DEFAULT_SETTINGS[key]);
+    // With no installation scenario the captured join settings are the effective values the test gives (a test may override).
+    settings.captureInstallationSettings.mockImplementation((keys) => ({
+        ok: true,
+        values: Object.fromEntries(keys.map((key) => [key, settings.getEffectiveSetting(key, null)])),
+    }));
     inFlight.clear();
 });
 
@@ -712,6 +727,52 @@ describe('runJoinPass', () => {
         expect(deps.getMemberChallenges).not.toHaveBeenCalled();
     });
 
+    test('the installation settings are captured together as the pass starts, and the whole pass runs on them', async () => {
+        const captured = settings.captureInstallationSettings;
+        captured.mockImplementation((keys) => ({
+            ok: true,
+            values: Object.fromEntries(keys.map((key) => [key, key === 'autoJoinCycleCoinBudget' ? 120 : false])),
+        }));
+        const deps = makeDeps({
+            getMemberChallenges: openList([
+                { id: 1, join_coins: 100, type: 'flash' },
+                { id: 2, join_coins: 100, type: 'flash' },
+            ]),
+        });
+        const res = await runJoinPass('tok', Date.now(), deps);
+        expect(captured).toHaveBeenCalledTimes(1);
+        expect(captured).toHaveBeenCalledWith([
+            'autoJoinCycleCoinBudget',
+            'missionJoinEarly',
+            'autoJoinShortChallengesImmediately',
+        ]);
+        // the captured budget of 120 pays for one 100-coin join, not two
+        expect(res.results.map((result) => result.status)).toEqual(['joined', 'skipped:over-cycle-budget']);
+    });
+
+    test('a setting the installation cannot read means no join this cycle, said so, with nothing requested', async () => {
+        settings.captureInstallationSettings.mockReturnValue({
+            ok: false,
+            key: 'autoJoinCycleCoinBudget',
+            reason: 'the published settings of this phase have expired',
+        });
+        const deps = makeDeps({ getMemberChallenges: openList([{ id: 1, join_coins: 0, type: 'flash' }]) });
+        const res = await runJoinPass('tok', Date.now(), deps);
+        expect(res).toEqual({ ran: false, joined: 0, results: [] });
+        expect(deps.getMemberChallenges).not.toHaveBeenCalled();
+        expect(deps.getBankroll).not.toHaveBeenCalled();
+        expect(invalid<LoggerMock>(require('../../src/ts/core/logger')).withCategory().warning).toHaveBeenCalledWith(
+            'no joins this cycle: autoJoinCycleCoinBudget is unavailable (the published settings of this phase have expired)',
+            null,
+        );
+    });
+
+    test('the pass is not asked for settings while joining is off: nothing is said about an unavailable one', async () => {
+        settings.getEffectiveSetting.mockImplementation((k) => (k === 'autoJoin' ? false : undefined));
+        await runJoinPass('tok', Date.now(), makeDeps());
+        expect(settings.captureInstallationSettings).not.toHaveBeenCalled();
+    });
+
     test('master off with only photo-tag rules (no join profile) → pass short-circuits, no API calls', async () => {
         settings.getEffectiveSetting.mockImplementation((k) => (k === 'autoJoin' ? false : DEFAULT_SETTINGS[k]));
         // A rule that only adds photo tags carries no profile that enables
@@ -742,6 +803,21 @@ describe('runJoinPass', () => {
         expect(byId[1]).toBe('joined');
         expect(byId[2]).toBe('skipped:autojoin-off');
         expect(res.joined).toBe(1);
+    });
+
+    test('a candidate whose scenario settings are unavailable is left alone, the others join', async () => {
+        settings.scenarioSubjectAvailable.mockImplementation((id) => String(id) !== '1');
+        const deps = makeDeps({
+            getMemberChallenges: openList([
+                { id: 1, join_coins: 0, type: 'flash', title: 'Bound' },
+                { id: 2, join_coins: 0, type: 'flash', title: 'Other' },
+            ]),
+        });
+        const res = await runJoinPass('tok', Date.now(), deps);
+        const byId = Object.fromEntries(res.results.map((r) => [r.id, r.status])) as Record<string, string>;
+        expect(byId[1]).toBe('skipped:scenario-unavailable');
+        expect(byId[2]).toBe('joined');
+        settings.scenarioSubjectAvailable.mockReset().mockReturnValue(true);
     });
 
     test('master ON but a rule disables autoJoin → that title is skipped, others join', async () => {
@@ -1711,6 +1787,7 @@ describe('join timing as one group', () => {
     const configFor = (challenge: Partial<Challenge>) =>
         resolveCandidateConfig(
             invalid<Challenge>({ id: 1, join_coins: 0, type: 'flash', title: 'Ruled', ...challenge }),
+            false,
         );
 
     test('a global after-start does not beat a rule percent: a group in force omits what its source does not set', () => {

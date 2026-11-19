@@ -16,6 +16,7 @@ export type CadenceMode =
     | 'boost-hold'
     | 'currency-rule'
     | 'scenario'
+    | 'account'
     | 'normal';
 
 /**
@@ -50,6 +51,13 @@ export type ScenarioWakeStart = {
     challengeTitle: string;
     startTime: number;
     phase: string;
+};
+
+/** One boundary of the account itself (no challenge close time bounds it): which kind, when, and what it is for. */
+export type AccountWakeStart = {
+    kind: 'installation' | 'pre-join' | 'claim' | 'mission';
+    startTime: number;
+    label: string;
 };
 
 export type BoostHoldEnd = { challengeId: Challenge['id']; challengeTitle: string; startTime: number };

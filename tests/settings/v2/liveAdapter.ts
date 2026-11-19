@@ -91,6 +91,7 @@ const loadModules = (): Modules => {
         __esModule: true,
         scenarioStateLedger: { get: ledgerGet },
         mockScenarioStateLedger: { get: ledgerGet },
+        ledgerFor: () => ({ get: ledgerGet }),
         scenarioStepLock: () => ({ ok: true, release: () => {} }),
     }));
     let modules: Modules | null = null;

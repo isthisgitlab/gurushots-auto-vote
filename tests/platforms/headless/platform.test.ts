@@ -26,6 +26,7 @@ const headlessHttp = jest.mocked(
 // service WebView has no windows to broadcast to or relaunch).
 const windows: PlatformWindows = {
     broadcastSettingsChanged: () => undefined,
+    broadcastEvent: () => undefined,
     afterWipe: () => undefined,
 };
 
@@ -38,7 +39,12 @@ describe('the headless platform', () => {
 
     test('the service is itself the native side, and the windows are the no-ops the shell passes', () => {
         const p = createHeadlessPlatform(windows);
-        expect(p.native).toEqual({ autovote: null, foregroundService: null, apkInstaller: null });
+        expect(p.native).toEqual({
+            autovote: null,
+            foregroundService: null,
+            apkInstaller: null,
+            readScenarioHostStatus: expect.any(Function),
+        });
         expect(p.windows).toBe(windows);
     });
 
@@ -58,6 +64,7 @@ describe('the headless platform', () => {
 
     test('the capabilities name the service answers', () => {
         const c = createHeadlessPlatform(windows).capabilities;
+        expect(c.executor).toBe('android-service');
         expect(c.refreshMissionNeeds).toBe(true);
         expect(c.snapAllowed).toBe(false);
         expect(c.backgroundServiceOwnsScenarios()).toBe(false);
@@ -70,10 +77,20 @@ describe('the headless platform', () => {
 describe('the headless test installer', () => {
     test('it installs the family, and overrides replace a member group whole', () => {
         const installed = installHeadlessTestPlatform({
-            native: { autovote: null, foregroundService: null, apkInstaller: null },
+            native: {
+                autovote: null,
+                foregroundService: null,
+                apkInstaller: null,
+                readScenarioHostStatus: async () => ({ supported: false as const }),
+            },
         });
         expect(platform()).toBe(installed);
-        expect(installed.native).toEqual({ autovote: null, foregroundService: null, apkInstaller: null });
+        expect(installed.native).toEqual({
+            autovote: null,
+            foregroundService: null,
+            apkInstaller: null,
+            readScenarioHostStatus: expect.any(Function),
+        });
     });
 
     test('a plain install puts the family on the port', () => {

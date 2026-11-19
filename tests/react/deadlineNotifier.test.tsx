@@ -25,7 +25,7 @@ const act = (action: string, secondsUntil: number) => ({ action, dueAt: NOW + se
 
 const settingsAllOff: Record<string, unknown> = { notifyLeadTime: 5 };
 const settingsBoostOn: Record<string, unknown> = { notifyOnBoost: true, notifyLeadTime: 5 };
-// The getGlobalDefault IPC: one key per call.
+// The getEffectiveSetting IPC for a global key: one key per call.
 const readerFor = (store: Record<string, unknown>) => jest.fn(async (key: string) => store[key]);
 
 const makeNotifier = (over: Partial<NotifierDeps> = {}) =>
@@ -48,6 +48,37 @@ describe('createDeadlineNotifier', () => {
         });
 
         await notify(invalid([{ id: '1', title: 'A' }]), NOW);
+
+        expect(getDeadlineActions).not.toHaveBeenCalled();
+        expect(deliver).not.toHaveBeenCalled();
+    });
+
+    test('the switch is read again immediately before delivery: a notice turned off meanwhile is not sent, nor used up', async () => {
+        const store: Record<string, unknown> = { ...settingsBoostOn };
+        const deliver = jest.fn();
+        // the user (or the installation phase) turns the notice off while the cycle's deadline reads are under way
+        const getDeadlineActions = jest.fn(async () => {
+            store.notifyOnBoost = false;
+            return okActions(act('boost', 120));
+        });
+        const notify = makeNotifier({ getSetting: readerFor(store), getDeadlineActions, deliver });
+
+        await notify(invalid([{ id: '1', title: 'Sunset' }]), NOW);
+        expect(deliver).not.toHaveBeenCalled();
+
+        // on again: the notice that was not sent is still due
+        store.notifyOnBoost = true;
+        getDeadlineActions.mockImplementation(async () => okActions(act('boost', 120)));
+        await notify(invalid([{ id: '1', title: 'Sunset' }]), NOW);
+        expect(deliver).toHaveBeenCalledTimes(1);
+    });
+
+    test('a switch that cannot be read (the effective read answers null) sends nothing and asks for no deadline', async () => {
+        const getDeadlineActions = jest.fn();
+        const deliver = jest.fn();
+        const notify = makeNotifier({ getSetting: jest.fn(async () => null), getDeadlineActions, deliver });
+
+        await notify(invalid([{ id: '1', title: 'Sunset' }]), NOW);
 
         expect(getDeadlineActions).not.toHaveBeenCalled();
         expect(deliver).not.toHaveBeenCalled();

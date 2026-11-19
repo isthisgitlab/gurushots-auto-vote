@@ -6,8 +6,11 @@
 
 import type { Challenge } from '../types/gurushots';
 import type { TimerHandle } from '../scheduling/cadenceChain';
+import type { RunCapture } from '../scheduling/cadenceChain/types';
 import type { WindowApi } from '../types/ipc';
-import type { AutovoteAction, AutovoteState } from './state';
+import type { AutovoteAction, AutovoteState, ExecutionMode } from './state';
+import type { StopFencePort, WithdrawalOutcome } from './runGate';
+import type { AccountWakeSources } from '../scheduling/thresholdWindow';
 
 /**
  * A per-cycle notifier the cadence chain calls with the cycle's challenges.
@@ -70,6 +73,22 @@ export type AutovoteHost = {
     background: BackgroundHost;
     formatTime: (ms: number) => string;
     translate: (key: string, params?: Record<string, string>) => string;
+    // The priority Stop fence, where the host can reach it (the main process owns it: the WebView reaches it over its own
+    // channel). Absent: a Stop is local only, and says so (`stopped-locally`, reason `no-fence`).
+    stopFence?: StopFencePort | null;
+    // One installation-only cycle (the installation scenario's publication and account rules, nothing else): what an `armed`
+    // controller runs each cycle. Absent: the host cannot run one, and the controller cannot be armed.
+    runArmedCycle?: WindowApi['runVotingCycle'] | null;
+    // The account's own scheduling boundaries (installation scenario, pre-join candidates, claim throttle, mission expiry),
+    // worked out by the main process: the renderer has no route to the ledgers they come from. Absent: none are collected.
+    getAccountWake?: (() => Promise<AccountWakeSources | null>) | null;
+    // Withdraws the installation scenario's publication on a full Stop, under the Stop epoch it is made under (its progress is
+    // kept; the saved values apply at once). Absent: the host has no such route (the Stop says `no-route`).
+    withdrawInstallation?:
+        | ((epoch: number) => Exclude<WithdrawalOutcome, 'no-route'> | Promise<Exclude<WithdrawalOutcome, 'no-route'>>)
+        | null;
+    // Lifts that withdrawal on an explicit user re-arm, before the next publication. Absent: nothing to lift.
+    reArmInstallation?: (() => 'restored' | 'none' | 'failed' | Promise<'restored' | 'none' | 'failed'>) | null;
     // Per-cycle OS deadline notifier, or null when not wired (native Android).
     notifier: CycleNotifier | null;
     // Read on each use, so a new identity never re-arms the chain.
@@ -80,9 +99,28 @@ export type AutovoteHost = {
  * The controller's public surface, as the adapter and the tests consume it.
  */
 export type AutovoteController = {
+    /** The user's Run / Resume. In `armed` mode it turns the voting stages on under the same chain. */
     start: () => Promise<void>;
+    /**
+     * Full Stop (every caller): cancels at once, withdraws the installation's publication and records the priority fence. What
+     * it came to is `getState().lastStop`.
+     */
     stop: () => Promise<void>;
     rearmSchedule: () => Promise<void>;
+    /**
+     * Whether a Run / Resume was sent to a host that has not answered yet (the paired phone only; the local controller never
+     * waits for an answer). Not part of the state a host relays: the state a phone holds is the host's, and this is the phone's own.
+     */
+    getStartPending?: () => boolean;
+    /** The user's explicit installation arm: the chain runs for the installation scenario with the voting stages paused. */
+    arm?: () => Promise<void>;
+    /**
+     * A scenario's request (`startAutovote` / `stopAutovote`) to turn the voting stages on or off under an armed chain. It is
+     * bound to the Stop epoch captured when it was created, never creates a chain and never lifts a user Stop.
+     */
+    requestVotingStages?: (on: boolean, captured: RunCapture) => Promise<VotingStagesResult>;
+    /** The capture a scenario request is made under (Stop generation now, and the epoch last acknowledged). */
+    captureRequest?: () => RunCapture;
     /** The mount-time auto-resume check; the adapter calls it once on mount. */
     maybeResume: () => Promise<void>;
     /** Cancel the timers and a pending resume; never touches persisted state. */
@@ -97,8 +135,10 @@ export type AutovoteController = {
  * mid-flight, and the parts must see the current one at each read.
  */
 export type SessionFlags = {
-    /** the live running flag the chain's isRunning reads */
+    /** the chain is live: voting stages on, or armed. (False only when stopped.) */
     running: () => boolean;
+    /** exactly what the controller is doing */
+    mode: () => ExecutionMode;
     /** set once the user (or the hold itself) has acted this session */
     userActed: () => boolean;
     /** whether dispose() ran */
@@ -109,7 +149,7 @@ export type SessionFlags = {
  * The flag transitions only the lifecycle part performs (start/stop).
  */
 export type SessionFlagWriters = {
-    setRunning: (value: boolean) => void;
+    setMode: (value: ExecutionMode) => void;
     setUserActed: () => void;
 };
 
@@ -122,3 +162,8 @@ export type ControllerCore = {
     apply: (action: AutovoteAction) => void;
     flags: SessionFlags;
 };
+
+/** What a scenario's request for the voting stages came to. */
+export type VotingStagesResult =
+    | { ok: true; mode: ExecutionMode; changed: boolean }
+    | { ok: false; reason: 'obsolete' | 'not-armed' | 'unsupported' };

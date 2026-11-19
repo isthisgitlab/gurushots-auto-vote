@@ -454,11 +454,15 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                         })}
                         <TitleRulesSection titleRules={titleRules} />
                         <ProfilesSection isOpen={isOpen} onDirtyChange={save.setProfileDirty} />
-                        <ScenariosSection isOpen={isOpen} onDirtyChange={save.setScenarioDirty} />
+                        <ScenariosSection
+                            isOpen={isOpen}
+                            onDirtyChange={save.setScenarioDirty}
+                            onBusyChange={save.setScenarioBusy}
+                        />
                         <ModalActionRow
                             className="mt-auto"
                             onSave={save.handleSave}
-                            saving={saving}
+                            saving={saving || save.scenarioBusy}
                             onSecondary={handleResetAll}
                             secondaryLabel={t('app.resetAll')}
                             onCancel={save.dismiss}

@@ -71,6 +71,10 @@ class AutoVoteService : Service() {
         const val ACTION_START = "com.isthisgitlab.gurushotsautovote.START"
         const val ACTION_STOP = "com.isthisgitlab.gurushotsautovote.STOP"
         const val ACTION_RUN_CYCLE = "com.isthisgitlab.gurushotsautovote.RUN_CYCLE"
+        // The Stop epoch an alarm (and the RUN_CYCLE it forwards) was scheduled under: a delivery checks it against the fence.
+        const val EXTRA_STOP_EPOCH = "com.isthisgitlab.gurushotsautovote.STOP_EPOCH"
+        // What an intent without the extra reads as: no epoch a fence can hold, so it never passes the fence.
+        const val NO_EPOCH = -1L
         const val NOTIFICATION_ID = 27782
         const val CHANNEL_ID = "autovote-foreground"
         // Recorded as the last error when the service stopped itself for the system's sake and left an alarm to resume.
@@ -99,13 +103,18 @@ class AutoVoteService : Service() {
         private const val HEADLESS_URL = "https://$ASSET_HOST/assets/public/headless.html"
         // The vision verifier fetches entry photos from here (src/ts/core/services/visionVerifier.ts): the one other origin.
         private const val PHOTO_HOST = "photos.gurushots.com"
+        // Latches the headless page's cancellation flag (GS.cancel): the cycle in it stops at its next work boundary.
+        private const val CANCEL_JS = "(function(){try{if(window.GS&&window.GS.cancel){window.GS.cancel();}}catch(e){}})()"
 
         private fun isPhotoFetch(url: Uri, method: String): Boolean =
             url.scheme == "https" && url.host == PHOTO_HOST && (url.port == -1 || url.port == 443) && method == "GET"
 
-        private fun alarmIntent(context: Context): PendingIntent {
+        // [stopEpoch] stamps the alarm with the Stop epoch it was scheduled under; the extras are not part of the
+        // PendingIntent's identity, so a cancel (no stamp) still reaches the alarm a stamped schedule made.
+        private fun alarmIntent(context: Context, stopEpoch: Long?): PendingIntent {
             val intent = Intent(context, AutoVoteAlarmReceiver::class.java).apply {
                 action = ACTION_RUN_CYCLE
+                stopEpoch?.let { putExtra(EXTRA_STOP_EPOCH, it) }
             }
             // minSdk is 26, so FLAG_IMMUTABLE (API 23) is always available.
             val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
@@ -117,27 +126,62 @@ class AutoVoteService : Service() {
             return if (configured > 0) configured * 1000L else DEFAULT_CYCLE_INTERVAL_MS
         }
 
-        internal fun scheduleAlarm(context: Context, delayMs: Long) {
+        /**
+         * Schedules the next cycle's alarm, stamped with [stopEpoch], the Stop epoch the run holds. Nothing is scheduled
+         * (false) while the fence is unreadable, blocked or past that epoch: a Stop ends the run, and no alarm may carry on
+         * what it ended.
+         */
+        internal fun scheduleAlarm(context: Context, delayMs: Long, stopEpoch: Long): Boolean {
+            if (!StopFence.allows(context, stopEpoch)) {
+                Log.w(TAG, "Not scheduling the next alarm: the Stop fence does not allow this run to continue")
+                return false
+            }
             val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             val triggerAt = System.currentTimeMillis() + delayMs.coerceAtLeast(1_000L)
+            val pending = alarmIntent(context, stopEpoch)
             try {
                 // setExactAndAllowWhileIdle is the only Android primitive that
                 // pierces Doze for sub-15-min cadence. Android 12+ requires
                 // SCHEDULE_EXACT_ALARM; without it, fall back to the inexact
                 // (best-effort) variant which does not throw.
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !am.canScheduleExactAlarms()) {
-                    am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, alarmIntent(context))
+                    am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pending)
                 } else {
-                    am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, alarmIntent(context))
+                    am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pending)
                 }
             } catch (sec: SecurityException) {
-                am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, alarmIntent(context))
+                am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pending)
             }
+            return true
         }
 
         internal fun cancelAlarm(context: Context) {
             val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            am.cancel(alarmIntent(context))
+            am.cancel(alarmIntent(context, null))
+        }
+
+        // Set by the live service instance: asks the headless page to latch its cancellation flag, so a cycle already
+        // running stops at its next work boundary (an event, not a poll). Null when no service instance is alive.
+        @Volatile internal var cancelCycle: (() -> Unit)? = null
+
+        /**
+         * Cancels new work at once, in this process and without reading or writing any store: the running cycle is told to
+         * stop at its next boundary, the running flag the queued cycles check and the enabled flag an alarm checks are
+         * cleared, and the pending alarm is cancelled. A full Stop does this first, before it records anything.
+         */
+        internal fun cancelWork(context: Context) {
+            cancelCycle?.invoke()
+            isRunning = false
+            ServiceState.setEnabled(context, false)
+            cancelAlarm(context)
+        }
+
+        /**
+         * Ends the service (its WebView, wake lock and foreground notification). A full Stop does this after the fence holds
+         * the Stop, so nothing the service checks in between finds the fence still open.
+         */
+        internal fun endService(context: Context) {
+            context.startService(Intent(context, AutoVoteService::class.java).apply { action = ACTION_STOP })
         }
 
         // Test seam: JVM unit tests swap in a client whose interceptor reroutes
@@ -167,6 +211,9 @@ class AutoVoteService : Service() {
     @Volatile private var pageReady = false
     private val cycleDone = AtomicBoolean(true)
     private var cycleWakeLock: PowerManager.WakeLock? = null
+    // The Stop epoch the run in this instance holds (NO_EPOCH until a start or an alarm admitted one): the stamp of every
+    // alarm it schedules, so that a Stop that moves the fence ends what this run would carry on.
+    @Volatile private var runEpoch: Long = NO_EPOCH
 
     private val http: OkHttpClient by lazy { httpClientFactory() }
 
@@ -181,18 +228,44 @@ class AutoVoteService : Service() {
     override fun onCreate() {
         super.onCreate()
         ensureNotificationChannel()
+        cancelCycle = ::cancelInFlightCycle
+    }
+
+    private fun cancelInFlightCycle() {
+        mainHandler.post { webView?.evaluateJavascript(CANCEL_JS, null) }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> handleStart()
-            ACTION_RUN_CYCLE -> handleRunCycle()
+            ACTION_RUN_CYCLE -> handleRunCycle(intent.getLongExtra(EXTRA_STOP_EPOCH, NO_EPOCH))
             ACTION_STOP -> {
                 handleStop()
                 return START_NOT_STICKY
             }
+            null -> handleRecreated()
         }
         return START_STICKY
+    }
+
+    /**
+     * The system started this service again with no intent (it was killed while started). It has no work of its own to
+     * resume: an alarm carries on a run. On a fence that blocks every run (a Stop, or data that cannot be read) it ends.
+     */
+    private fun handleRecreated() {
+        if (StopFence.armEpoch(this) != null) return
+        Log.w(TAG, "Service restarted while the Stop fence blocks work — stopping")
+        stopSelf()
+    }
+
+    /**
+     * Answers the start request that brought the service here (startForegroundService obliges it to enter the foreground),
+     * then leaves: no work was built.
+     */
+    private fun endWithoutWork() {
+        enterForeground(localized().getString(R.string.notification_starting))
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     private fun handleStart() {
@@ -214,6 +287,15 @@ class AutoVoteService : Service() {
             pageReady = false
             SideStores.resume()
         }
+        // The user's Run: the app lifted any Stop block before it asked for this start, so a fence that still blocks (or
+        // cannot be read) means no run may begin. The run holds the epoch it begins under.
+        val epoch = StopFence.armEpoch(this)
+        if (epoch == null) {
+            Log.w(TAG, "START refused: the Stop fence blocks work")
+            endWithoutWork()
+            return
+        }
+        runEpoch = epoch
         isRunning = true
         cycleCount = 0
         lastError = null
@@ -227,16 +309,22 @@ class AutoVoteService : Service() {
         scheduleNextAlarm(INITIAL_DELAY_MS)
     }
 
-    private fun handleRunCycle() {
+    private fun handleRunCycle(stamp: Long) {
         if (!ServiceState.isEnabled(this)) {
             // A stale alarm: the one that fired after a STOP. The start request that brought it here still has to be
             // answered with startForeground before the service may stop, or the system kills the app for not doing so.
             Log.i(TAG, "RUN_CYCLE received but background voting is not enabled — stopping")
-            enterForeground(localized().getString(R.string.notification_starting))
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
+            endWithoutWork()
             return
         }
+        if (!StopFence.allows(this, stamp)) {
+            // An alarm of a run a Stop ended (it was delayed past it, or the service was built again on a fence that
+            // blocks): no work is built and nothing is scheduled.
+            Log.w(TAG, "RUN_CYCLE refused: its Stop epoch is not the live one")
+            endWithoutWork()
+            return
+        }
+        runEpoch = stamp
         if (!isRunning) {
             // A new process (or instance): what the last one knew is in the persisted state.
             val saved = ServiceState.status(this)
@@ -341,6 +429,7 @@ class AutoVoteService : Service() {
     }
 
     override fun onDestroy() {
+        cancelCycle = null
         isRunning = false
         mainHandler.removeCallbacks(cycleWatchdog)
         // onDestroy runs on the main thread (like completeCycle and releaseResources' posted
@@ -591,7 +680,10 @@ class AutoVoteService : Service() {
 
     private fun cycleIntervalMs(): Long = cycleIntervalMs(this)
 
-    private fun scheduleNextAlarm(delayMs: Long) = scheduleAlarm(this, delayMs)
+    // A run the fence no longer allows is over: no alarm is left to resume it, so the service ends it.
+    private fun scheduleNextAlarm(delayMs: Long) {
+        if (!scheduleAlarm(this, delayMs, runEpoch)) handleStop()
+    }
 
     private fun cancelPendingAlarm() = cancelAlarm(this)
 
@@ -736,13 +828,24 @@ internal object SideStores {
     /** The most the configuration and the settings.json blobs may hold: every challenge's overrides and profiles live in them, so they dwarf a side store. */
     const val MAX_SETTINGS_BYTES = 2 * 1024 * 1024
 
+    /** The most the priority Stop fence may hold: one small cell, independent of every other store's capacity. */
+    const val MAX_FENCE_BYTES = 1024
+
+    /**
+     * The most the scenario control inbox may hold: twice the scenario import size (SCENARIO_CAPS.importBytes, 256 KiB),
+     * so one maximum-sized document and its bounded request metadata fit. Only this key; the side-store cap is unchanged.
+     */
+    const val MAX_CONTROLS_BYTES = 2 * 256 * 1024
+
     // Lexicon diagnostics; the scenario state and the resets of it the app asks for; the fills spent (what
     // autoExposureFillMax counts against: a service that started from an empty one after every restart would spend
     // past the cap) and the swap-back offers; the paid-join claims (an unlock that was charged and not yet submitted:
     // forgotten on a restart, it would be charged again); the marker that the settings import has run (the service reads
     // it to know not to import again) and the title pins (the import seeds them, and both contexts pin titles); the
     // entry-age ledger (when each entry went into a challenge: the window records the photos it submits, the service the
-    // ones it submits and what it first sees, and the boost hold and the fill-new `pending` photo must outlast a cycle).
+    // ones it submits and what it first sees, and the boost hold and the fill-new `pending` photo must outlast a cycle);
+    // the priority Stop fence (the epoch and block of full Stops, which the alarm receiver and the service read before
+    // they build work) and the ordinary control inbox (the requests the app queues for the service and what became of each).
     private val names = mapOf(
         CONFIG_KEY to "config",
         LEGACY_SETTINGS_KEY to "settings",
@@ -754,8 +857,13 @@ internal object SideStores {
         "gs_auto_spends" to "auto-spend ledger",
         "gs_swap_backs" to "swap-back ledger",
         "gs_join_state" to "join-state",
-        "gs_entry_ages" to "entry-age ledger"
+        "gs_entry_ages" to "entry-age ledger",
+        StopFence.KEY to "stop fence",
+        CONTROLS_KEY to "control inbox"
     )
+
+    /** The scenario control inbox (`scenarioControls.json` on a desktop). */
+    const val CONTROLS_KEY = "gs_scenario_controls"
 
     /** The `code` a plugin call rejects with, and the reason [HeadlessStore.lastWriteRefusal] answers, for a value past its cap. */
     const val TOO_LARGE = "too-large"
@@ -770,7 +878,12 @@ internal object SideStores {
     // The configuration and the settings.json blob hold every challenge's overrides and profiles: the settings cap.
     private val settingsKeys = setOf(CONFIG_KEY, LEGACY_SETTINGS_KEY)
 
-    private fun maxBytes(key: String): Int = if (key in settingsKeys) MAX_SETTINGS_BYTES else MAX_BYTES
+    private fun maxBytes(key: String): Int = when (key) {
+        in settingsKeys -> MAX_SETTINGS_BYTES
+        StopFence.KEY -> MAX_FENCE_BYTES
+        CONTROLS_KEY -> MAX_CONTROLS_BYTES
+        else -> MAX_BYTES
+    }
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
 
@@ -817,6 +930,8 @@ internal object SideStores {
             "gs_entry_ages",
             "gs_v2_import",
             "gs_title_pins",
+            StopFence.KEY,
+            CONTROLS_KEY,
             CONFIG_KEY,
             LEGACY_SETTINGS_KEY
         )
@@ -878,9 +993,139 @@ internal object SideStores {
         if (fromService && refusedByWipe(name)) return Result(Outcome.REFUSED, null)
         if (tooLarge(name, data, maxBytes(key))) return Result(Outcome.TOO_LARGE, null)
         if (!isJsonObject(name, data)) return Result(Outcome.REFUSED, null)
+        // The fence is read natively before work is built: a value of another shape is never stored over it.
+        if (key == StopFence.KEY && StopFence.parse(data) == null) {
+            Log.w(AutoVoteService.TAG, "Refusing to persist malformed $name blob")
+            return Result(Outcome.REFUSED, null)
+        }
         val prefs = prefs(context)
         val current = prefs.getString(key, null)
         if (current != expected?.takeIf { it.isNotEmpty() }) return Result(Outcome.MISMATCH, current)
         return if (commit(prefs, key, current, data)) Result(Outcome.SAVED, null) else Result(Outcome.REFUSED, current)
+    }
+}
+
+/**
+ * The priority Stop fence (`scenarioStopFence.json` / `gs_scenario_stop_fence`): `{ stopEpoch, blocked, lastStop, lastArm }`,
+ * exactly that shape, at most [SideStores.MAX_FENCE_BYTES]. The app window and the TypeScript scheduler keep it through
+ * compare-and-set (SideStores); this object is the native side: it reads the fence before an alarm or the service builds work,
+ * and records a full Stop in it. It reads and writes no other store, so nothing else (the control inbox included) can refuse
+ * a Stop.
+ *
+ * A fence that was never created is epoch 0, not blocked (an install that never used scenarios has none). Data that cannot
+ * be read as exactly this shape is never epoch 0: nothing runs on it.
+ */
+internal object StopFence {
+    const val KEY = "gs_scenario_stop_fence"
+    private const val MAX_COUNT = 9_007_199_254_740_991L
+    private const val MAX_ATTEMPTS = 5
+    private val REQUEST_ID = Regex("^[A-Za-z0-9@:._-]{1,64}$")
+
+    /** What the stored fence is: never created, readable ([Present]), or data that is not exactly the shape. */
+    sealed interface State
+
+    object Missing : State
+
+    object Unreadable : State
+
+    /** A fence that reads: [lastStop] and [lastArm] are kept as stored, so a Stop writes back what it does not change. */
+    class Present(val epoch: Long, val blocked: Boolean, val lastStop: JSONObject?, val lastArm: JSONObject?) : State
+
+    /** What [recordStop] came to: saved in the fence ([durable], with the [epoch] it holds), or why it was not. */
+    class Recorded(val durable: Boolean, val epoch: Long, val reason: String?)
+
+    fun isRequestId(value: String): Boolean = REQUEST_ID.matches(value)
+
+    private fun count(value: Any?): Long? =
+        when (value) {
+            is Int -> value.toLong()
+            is Long -> value
+            else -> null
+        }?.takeIf { it in 0..MAX_COUNT }
+
+    // JSON has no NaN or infinity, and the tokener reads a literal past the double range as a string: a Number is finite.
+    private fun finite(value: Any?): Boolean = value is Number
+
+    private fun hasOnly(obj: JSONObject, keys: List<String>): Boolean = obj.length() == keys.size && keys.all { obj.has(it) }
+
+    private fun validStop(obj: JSONObject): Boolean =
+        hasOnly(obj, listOf("requestId", "at", "durable")) &&
+            obj.get("requestId") is String && finite(obj.get("at")) && obj.get("durable") is Boolean
+
+    private fun validArm(obj: JSONObject): Boolean =
+        hasOnly(obj, listOf("epoch", "at")) && count(obj.get("epoch")) != null && finite(obj.get("at"))
+
+    /** Whether the member [key] is JSON null or an object that [valid] accepts. */
+    private fun nullOrValid(obj: JSONObject, key: String, valid: (JSONObject) -> Boolean): Boolean {
+        val value = obj.get(key)
+        return value == JSONObject.NULL || (value is JSONObject && valid(value))
+    }
+
+    /** The fence a text holds: exactly the shape and within [SideStores.MAX_FENCE_BYTES], or null. */
+    fun parse(raw: String): Present? {
+        if (raw.toByteArray(Charsets.UTF_8).size > SideStores.MAX_FENCE_BYTES) return null
+        val tokener = JSONTokener(raw)
+        val obj = try {
+            (tokener.nextValue() as? JSONObject)?.takeIf { tokener.nextClean() == '\u0000' }
+        } catch (e: JSONException) {
+            null
+        } ?: return null
+        if (!hasOnly(obj, listOf("stopEpoch", "blocked", "lastStop", "lastArm"))) return null
+        val epoch = count(obj.get("stopEpoch")) ?: return null
+        val blocked = obj.get("blocked") as? Boolean ?: return null
+        if (!nullOrValid(obj, "lastStop", ::validStop) || !nullOrValid(obj, "lastArm", ::validArm)) return null
+        return Present(epoch, blocked, obj.get("lastStop") as? JSONObject, obj.get("lastArm") as? JSONObject)
+    }
+
+    private fun read(context: Context): State {
+        val raw = SideStores.read(context, KEY) ?: return Missing
+        return parse(raw) ?: Unreadable
+    }
+
+    /**
+     * Whether work stamped [stamp] may run now: the fence reads, is not blocked, and is still at that epoch (a never-created
+     * fence is epoch 0). A stamp that is [AutoVoteService.NO_EPOCH] is no epoch, so it never does.
+     */
+    fun allows(context: Context, stamp: Long): Boolean =
+        when (val fence = read(context)) {
+            Missing -> stamp == 0L
+            is Present -> !fence.blocked && fence.epoch == stamp
+            Unreadable -> false
+        }
+
+    /** The epoch a run may begin under now, or null while the fence blocks or cannot be read. */
+    fun armEpoch(context: Context): Long? =
+        when (val fence = read(context)) {
+            Missing -> 0L
+            is Present -> fence.epoch.takeIf { !fence.blocked }
+            Unreadable -> null
+        }
+
+    /**
+     * Records a full Stop: the epoch one higher and `blocked`, with [requestId] and [at] as the last Stop, in compare-and-set
+     * on the fence alone (a change by the other context in between is read again, up to [MAX_ATTEMPTS] times). The same
+     * [requestId] twice advances the epoch once. A fence that cannot be read is not written over: its epoch is unknown.
+     * Never throws; a Stop that was not saved says why.
+     */
+    fun recordStop(context: Context, requestId: String, at: Long): Recorded {
+        repeat(MAX_ATTEMPTS) {
+            val raw = SideStores.read(context, KEY)
+            val before = raw?.let { parse(it) ?: return Recorded(false, 0L, "unreadable") }
+            if (before?.lastStop?.getString("requestId") == requestId) return Recorded(true, before.epoch, null)
+            val epoch = (before?.epoch ?: 0L) + 1
+            val text = JSONObject()
+                .put("stopEpoch", epoch)
+                .put("blocked", true)
+                .put("lastStop", JSONObject().put("requestId", requestId).put("at", at).put("durable", true))
+                .put("lastArm", before?.lastArm ?: JSONObject.NULL)
+                .toString()
+            when (SideStores.compareAndSet(context, KEY, raw, text).outcome) {
+                SideStores.Outcome.SAVED -> return Recorded(true, epoch, null)
+                SideStores.Outcome.MISMATCH -> Unit
+                SideStores.Outcome.TOO_LARGE -> return Recorded(false, 0L, "oversize")
+                SideStores.Outcome.REFUSED -> return Recorded(false, 0L, "not-saved")
+            }
+        }
+        return Recorded(false, 0L, "not-saved")
     }
 }

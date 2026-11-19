@@ -77,6 +77,115 @@ describe('evaluateScenario', () => {
         expect(run({ ...scenario([]), phases: { main: {} } }).fire).toBeNull();
     });
 
+    describe('a rule fires only on a known true result', () => {
+        const noBankroll = { type: 'balance', currency: 'keys', op: '>=', value: 0 };
+        const explained = (conditions: unknown[]) => run(scenario([rule('r1', conditions)]));
+
+        test('an unknown condition keeps the rule from firing, and the reason says it could not be decided', () => {
+            const result = explained([noBankroll]);
+            expect(result.fire).toBeNull();
+            expect(result.explain).toEqual([
+                {
+                    ruleId: 'r1',
+                    label: 'r1',
+                    status: 'waiting',
+                    reason: 'condition 1 (balance) cannot be decided: bankroll-unavailable',
+                },
+            ]);
+        });
+
+        test('the reason names the first condition that is not true, and whether it is false or unknown', () => {
+            expect(explained([yes, noBankroll]).explain[0].reason).toBe(
+                'condition 2 (balance) cannot be decided: bankroll-unavailable',
+            );
+            expect(explained([no, noBankroll]).explain[0].reason).toBe('condition 1 (entries) does not hold');
+            expect(explained([noBankroll, no]).explain[0].reason).toBe(
+                'condition 1 (balance) cannot be decided: bankroll-unavailable',
+            );
+        });
+
+        test('not over unreadable data does not fire', () => {
+            const result = explained([{ type: 'not', condition: noBankroll }]);
+            expect(result.fire).toBeNull();
+            expect(result.explain[0].reason).toBe('condition 1 (not) cannot be decided: bankroll-unavailable');
+        });
+
+        test('any with one known true and one unknown fires', () => {
+            expect(explained([{ type: 'any', of: [noBankroll, yes] }]).fire?.ruleId).toBe('r1');
+        });
+
+        test('all with one known false and one unknown does not fire, and reports false', () => {
+            const result = explained([{ type: 'all', of: [noBankroll, no] }]);
+            expect(result.fire).toBeNull();
+            expect(result.explain[0].reason).toBe('condition 1 (all) does not hold');
+        });
+
+        test('a known bankroll lets the same rule fire', () => {
+            const result = run(scenario([rule('r1', [noBankroll])]), undefined, {
+                bankroll: { keys: 1, swaps: 0, fills: 0, coins: 0 },
+            });
+            expect(result.fire?.ruleId).toBe('r1');
+        });
+
+        describe('the evidence a loader fetched reaches the facts', () => {
+            const needsJoin = {
+                type: 'compare',
+                left: { kind: 'fact', name: 'missions.joinNeed' },
+                op: '>',
+                right: { kind: 'literal', value: 0, quantity: 'count' },
+            };
+            const missions = (join: number) => ({
+                readable: true as const,
+                needs: { join, fill: 0, turbo: 0, boost: 0, vote: 0 },
+                unreadable: [],
+                nextExpiry: null,
+                expiryUnreadable: false,
+            });
+
+            test('without it the rule waits: the evidence was not loaded', () => {
+                const result = explained([needsJoin]);
+                expect(result.fire).toBeNull();
+                expect(result.explain[0].reason).toBe('condition 1 (compare) cannot be decided: evidence-not-loaded');
+            });
+
+            test('with it the rule decides, and a failed read keeps it waiting with the reason', () => {
+                const fires = run(scenario([rule('r1', [needsJoin])]), undefined, {
+                    evidence: { missions: missions(3) },
+                });
+                expect(fires.fire?.ruleId).toBe('r1');
+                const holds = run(scenario([rule('r1', [needsJoin])]), undefined, {
+                    evidence: { missions: missions(0) },
+                });
+                expect(holds.fire).toBeNull();
+                expect(holds.explain[0].reason).toBe('condition 1 (compare) does not hold');
+                const failed = run(scenario([rule('r1', [needsJoin])]), undefined, {
+                    evidence: { missions: { readable: false, reason: 'missions-unreadable' } },
+                });
+                expect(failed.fire).toBeNull();
+                expect(failed.explain[0].reason).toBe('condition 1 (compare) cannot be decided: missions-unreadable');
+            });
+
+            test('a bankroll in the evidence reads like the bankroll input', () => {
+                const result = run(scenario([rule('r1', [noBankroll])]), undefined, {
+                    evidence: { bankroll: { keys: 1, swaps: 0, fills: 0, coins: 0 } },
+                });
+                expect(result.fire?.ruleId).toBe('r1');
+            });
+        });
+
+        test('a rule asking a setting question waits until a reader supplies the setting', () => {
+            const askSetting = {
+                type: 'compare',
+                left: { kind: 'setting', key: 'boostTime', view: 'base' },
+                op: '>',
+                right: { kind: 'literal', value: 0, quantity: 'duration', unit: 'seconds' },
+            };
+            expect(explained([askSetting]).explain[0].reason).toBe(
+                'condition 1 (compare) cannot be decided: settings-unavailable',
+            );
+        });
+    });
+
     test('rules already fired in this pass are skipped', () => {
         const result = run(scenario([rule('r1', [yes])]), undefined, { skipRuleIds: new Set(['r1']) });
         expect(result.fire).toBeNull();
@@ -293,6 +402,56 @@ describe('nextWakeAt', () => {
         expect(wake([{ type: 'inPhaseFor', min: '4m' }], { challenge: challenge({ close_time: null }) })).toBeNull();
     });
 
+    describe('the resolved instants of the phase’s dynamic schedules', () => {
+        const publication = (phase: string, schedules: object) =>
+            invalid<ScenarioEngineState['published']>({
+                revision: 1,
+                documentFingerprint: 'f',
+                phase,
+                phaseEnteredAt: NOW - 60,
+                observedAt: NOW - 60,
+                validUntil: null,
+                bindings: {},
+                profile: null,
+                schedules,
+            });
+        const schedules = {
+            submit: {
+                alignment: 'end',
+                rows: [
+                    { count: 2, state: 'known', at: NOW + 100 },
+                    { count: 3, state: 'unknown', reason: 'r' },
+                ],
+            },
+            pause: { rows: [{ state: 'known', start: NOW + 50, end: NOW + 80 }] },
+        };
+        const wakeWith = (published: ScenarioEngineState['published'], now = NOW) =>
+            nextWakeAt({
+                scenario: scenario([]),
+                state: { ...initialState('Plan', 'main', NOW - 60), published },
+                challenge: challenge(),
+                now,
+                timezone: TZ,
+            });
+
+        test('the next known row instant is a wake, whichever kind it comes from', () => {
+            expect(wakeWith(publication('main', schedules))).toBe(NOW + 50);
+            expect(wakeWith(publication('main', schedules), NOW + 50)).toBe(NOW + 81);
+            expect(wakeWith(publication('main', schedules), NOW + 81)).toBe(NOW + 100);
+            // an unknown or absent row supplies none, and nothing remains after the last one
+            expect(wakeWith(publication('main', schedules), NOW + 100)).toBeNull();
+        });
+
+        test('a publication of another phase entry is not read', () => {
+            expect(wakeWith(publication('other', schedules))).toBeNull();
+            expect(wakeWith(undefined)).toBeNull();
+        });
+
+        test('a publication with no schedules adds nothing', () => {
+            expect(wakeWith(publication('main', {}))).toBeNull();
+        });
+    });
+
     test('an unknown phase has nothing to wake for', () => {
         expect(
             nextWakeAt({
@@ -303,5 +462,94 @@ describe('nextWakeAt', () => {
                 timezone: TZ,
             }),
         ).toBeNull();
+    });
+});
+
+describe('the count-1 admission of an absolute submit schedule', () => {
+    const phaseWith = (alignment: 'absolute' | 'end', counts: number[]) =>
+        invalid<ScenarioDocument>({
+            name: 'Plan',
+            version: 1,
+            start: 'main',
+            phases: {
+                main: {
+                    schedules: {
+                        submit: {
+                            alignment,
+                            rows: counts.map((count) => ({ count, at: { kind: 'fact', name: 'challenge.end' } })),
+                        },
+                    },
+                },
+            },
+        });
+    const published = (rows: object[], phase = 'main') =>
+        invalid<ScenarioEngineState['published']>({
+            revision: 1,
+            documentFingerprint: 'f',
+            phase,
+            phaseEnteredAt: NOW - 60,
+            observedAt: NOW,
+            validUntil: null,
+            bindings: {},
+            profile: null,
+            schedules: { submit: { alignment: 'absolute', rows } },
+        });
+    const run = (over: {
+        scenario?: ScenarioDocument;
+        state?: ScenarioEngineState;
+        stage?: 'preJoin' | 'active';
+        skip?: Set<string>;
+    }) =>
+        evaluateScenario({
+            scenario: over.scenario ?? phaseWith('absolute', [1]),
+            state: over.state ?? {
+                ...initialState('Plan', 'main', NOW - 60),
+                published: published([{ count: 1, state: 'known', at: NOW - 1 }]),
+            },
+            challenge: challenge(),
+            stage: over.stage ?? 'preJoin',
+            skipRuleIds: over.skip,
+            now: NOW,
+            timezone: TZ,
+        });
+
+    test('a known due count-1 row fires the implicit join, in the pre-join stage only', () => {
+        expect(run({}).fire).toMatchObject({ ruleId: '@admission', startIndex: 0, rule: { do: [{ type: 'join' }] } });
+        expect(run({ stage: 'active' }).fire).toBeNull();
+    });
+
+    test('a row that is future, unknown or absent, another phase’s publication, or none, fires nothing', () => {
+        for (const rows of [
+            [{ count: 1, state: 'known', at: NOW + 1 }],
+            [{ count: 1, state: 'unknown', reason: 'r' }],
+            [{ count: 1, state: 'absent', reason: 'r' }],
+            [{ count: 2, state: 'known', at: NOW - 1 }],
+        ]) {
+            const state = { ...initialState('Plan', 'main', NOW - 60), published: published(rows) };
+            expect(run({ state }).fire).toBeNull();
+        }
+        const other = {
+            ...initialState('Plan', 'main', NOW - 60),
+            published: published([{ count: 1, state: 'known', at: NOW - 1 }], 'other'),
+        };
+        expect(run({ state: other }).fire).toBeNull();
+        expect(run({ state: initialState('Plan', 'main', NOW - 60) }).fire).toBeNull();
+    });
+
+    test('an end-aligned schedule, or one with no count-1 row, never fires it', () => {
+        expect(run({ scenario: phaseWith('end', [1]) }).fire).toBeNull();
+        expect(run({ scenario: phaseWith('absolute', [2, 3]) }).fire).toBeNull();
+    });
+
+    test('it is skipped when this pass already tried the candidate’s join', () => {
+        expect(run({ skip: new Set(['@admission']) }).fire).toBeNull();
+    });
+
+    test('an interrupted admission resumes in the pre-join stage, and is another stage’s elsewhere', () => {
+        const state = { ...initialState('Plan', 'main', NOW - 60), inFlight: { ruleId: '@admission', actionIndex: 0 } };
+        expect(run({ state }).fire).toMatchObject({ ruleId: '@admission', startIndex: 0 });
+        expect(run({ state, stage: 'active' })).toMatchObject({ fire: null, halted: null });
+        // a phase that no longer has the row no longer knows the rule
+        expect(run({ state, scenario: phaseWith('absolute', [2]) }).halted).toMatch(/no longer matches/);
     });
 });

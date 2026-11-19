@@ -9,6 +9,7 @@
  */
 
 import type { getUiDefaultSettings } from '../settings/uiDefaults';
+import type { INSTALLATION_EXECUTORS } from '../settings/loadValidation';
 import type { TitleRule, WindowBounds, WindowType } from './settings';
 
 /** A sparse map of setting values keyed by setting name. */
@@ -88,6 +89,20 @@ export interface ImportedV2 {
     failure?: { reason: string; detail: string };
 }
 
+/** The runtime that runs the installation scenario (see `ConfigDocument.installationScenario`). */
+export type InstallationExecutor = (typeof INSTALLATION_EXECUTORS)[number];
+
+/**
+ * The one scenario the user selected for the whole installation, and who runs it. `generation` counts the changes of
+ * the assignment and of its owner: the scenario's progress record holds the same count, and a write made under an
+ * older one is refused (settings/scenarioLifecycle.ts).
+ */
+export interface InstallationScenarioV2 {
+    scenario: string;
+    executor: InstallationExecutor;
+    generation: number;
+}
+
 /** The configuration document, over the shape of its `app` block and of a rule. */
 interface ConfigDocument<App, Rule> {
     version: 2;
@@ -106,6 +121,18 @@ interface ConfigDocument<App, Rule> {
     rules: Rule[];
     /** Challenge id to what is stored for it. */
     challenges: Record<string, ChallengeRecordV2>;
+    /**
+     * Named photo pools of this account: pool name to its photo ids, in order (a scenario phase's `photoPool` names one). Never
+     * part of a scenario export. A malformed pool is dropped by a load.
+     */
+    photoPools?: Record<string, string[]>;
+    /** The scenario selected for the installation and its owner; absent: none. A malformed one is dropped by a load. */
+    installationScenario?: InstallationScenarioV2;
+    /**
+     * Counts the changes of the scenario collection (a save, an import over a name, a rename, a delete); absent: 0
+     * before the first. Not validated by a load: a malformed one blocks scenario changes, it is never read as 0.
+     */
+    scenarioDefinitionsRevision?: number;
 }
 
 /** The whole configuration, loaded: validated, with every container and every `app` key present. */

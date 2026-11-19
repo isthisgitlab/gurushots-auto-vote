@@ -54,6 +54,8 @@ beforeEach(() => {
     settings.getEffectiveSetting.mockImplementation(
         invalid((key: string) => (key === 'discoverUpcomingHours' ? 24 : [])),
     );
+    // The Discover horizon is the installation's effective value (24 h with no installation scenario).
+    settings.captureInstallationSettings.mockReturnValue(invalid({ ok: true, values: { discoverUpcomingHours: 24 } }));
     settings.getSetting.mockReturnValue(invalid(''));
     settings.getChallengeOverride.mockReturnValue(invalid(null));
     settings.resolveRuleSetting.mockReturnValue(invalid(null));

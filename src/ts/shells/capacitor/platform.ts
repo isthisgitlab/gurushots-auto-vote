@@ -12,7 +12,7 @@
  * first, before any other import.
  */
 
-import { installPlatform } from '../../core/platform/port';
+import { installPlatform, unsupportedScenarioHostStatus } from '../../core/platform/port';
 import { createWebviewPlatform } from '../../platforms/webview';
 import { isPlainObject } from '../../core/plainObject';
 
@@ -66,10 +66,13 @@ const capacitorPlatform = createWebviewPlatform({
         get apkInstaller(): PlatformApkInstaller {
             return apkInstaller();
         },
+        // The app has no remote-access pairing to observe.
+        readScenarioHostStatus: unsupportedScenarioHostStatus,
     } satisfies PlatformNative,
     // The bridge's pub/sub emit and the WebView reload into the login screen.
     windows: {
         broadcastSettingsChanged: (newSettings) => capacitorBridge().emit('settings-changed', newSettings),
+        broadcastEvent: (channel, payload) => capacitorBridge().emit(channel, payload),
         afterWipe: () => {
             void capacitorBridge().reloadWindow();
         },

@@ -6,8 +6,9 @@
 import { memo } from 'react';
 import { render, act, waitFor } from '@testing-library/preact';
 import { TranslationProvider, useTranslation } from '@/contexts/TranslationContext';
-import { mockApi, mockTranslator } from './helpers/setup';
+import { fireSettingsChanged, mockApi, mockTranslator } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
+import { installEffectiveBus, presentationOf } from './helpers/effective';
 
 describe('TranslationContext', () => {
     let ctx: ReturnType<typeof useTranslation>;
@@ -232,8 +233,11 @@ describe('TranslationContext', () => {
         beforeEach(() => {
             savedOnSettingsChanged = mockApi.onSettingsChanged;
             unsubscribe = jest.fn<void, []>();
+            // Every subscriber of the channel (the provider, and the effective-presentation read that follows a saved setting).
+            const callbacks: ((payload?: object) => void)[] = [];
+            fire = (payload) => callbacks.forEach((cb) => cb(payload));
             mockApi.onSettingsChanged = jest.fn((cb) => {
-                fire = cb as (payload?: object) => void;
+                callbacks.push(cb as (payload?: object) => void);
                 return unsubscribe;
             });
         });
@@ -258,8 +262,9 @@ describe('TranslationContext', () => {
             expect(mockApi.setSetting).not.toHaveBeenCalled();
             expect(mockApi.refreshMenu).not.toHaveBeenCalled();
 
-            unmount();
-            expect(unsubscribe).toHaveBeenCalledTimes(1);
+            act(() => unmount());
+            // Both subscriptions are released: the provider's and the effective projection's.
+            expect(unsubscribe).toHaveBeenCalledTimes(2);
         });
 
         it('an unknown broadcast language resolves to English', async () => {
@@ -313,5 +318,140 @@ describe('TranslationContext', () => {
 
         expect(renders).toBe(rendersBefore);
         expect(ctx).toBe(first);
+    });
+
+    describe('the effective language', () => {
+        let bus: ReturnType<typeof installEffectiveBus>;
+        beforeEach(() => {
+            bus = installEffectiveBus();
+            mockApi.getSetting.mockResolvedValue('en');
+        });
+
+        it('paints a language a running scenario publishes, and the menu follows, without writing the settings', async () => {
+            bus.answer({ presentation: { success: true, ...presentationOf(5, { language: 'en' }) } });
+            const { findByText } = renderProvider();
+            await findByText('ready');
+            expect(ctx.language).toBe('en');
+            mockApi.refreshMenu.mockClear();
+
+            act(() => bus.firePresentation(presentationOf(6, { language: 'lv' })));
+
+            expect(ctx.language).toBe('lv');
+            expect(mockTranslator.setCurrentLanguage).toHaveBeenLastCalledWith('lv');
+            expect(document.documentElement.lang).toBe('lv');
+            expect(mockApi.refreshMenu).toHaveBeenCalledTimes(1);
+            expect(mockApi.setSetting).not.toHaveBeenCalled();
+        });
+
+        it('a withdrawal restores the saved language, again without a write', async () => {
+            bus.answer({ presentation: { success: true, ...presentationOf(5, { language: 'lv' }) } });
+            const { findByText } = renderProvider();
+            await findByText('ready');
+            expect(ctx.language).toBe('lv');
+
+            act(() => bus.firePresentation(presentationOf(6, { language: 'en' })));
+
+            expect(ctx.language).toBe('en');
+            expect(mockApi.setSetting).not.toHaveBeenCalled();
+            expect(mockApi.saveSettings).not.toHaveBeenCalled();
+        });
+
+        it('an effective language that arrives before the saved one is read is not overwritten by it', async () => {
+            const saved = deferred();
+            mockApi.getSetting.mockReturnValue(saved.promise as never);
+            bus.answer({ presentation: { success: true, ...presentationOf(5, { language: 'lv' }) } });
+            const { findByText } = renderProvider();
+            await waitFor(() => expect(ctx.language).toBe('lv'));
+            saved.resolve('en');
+            await findByText('ready');
+            expect(ctx.language).toBe('lv');
+        });
+
+        it('a saved language change made elsewhere does not repaint over an effective one', async () => {
+            bus.answer({ presentation: { success: true, ...presentationOf(5, { language: 'lv' }) } });
+            const { findByText } = renderProvider();
+            await findByText('ready');
+            act(() => fireSettingsChanged({ app: { language: 'en' } }));
+            expect(ctx.language).toBe('lv');
+        });
+
+        it('an event that is not newer is ignored', async () => {
+            bus.answer({ presentation: { success: true, ...presentationOf(5, { language: 'lv' }) } });
+            const { findByText } = renderProvider();
+            await findByText('ready');
+            act(() => bus.firePresentation(presentationOf(5, { language: 'en' })));
+            act(() => bus.firePresentation(presentationOf(4, { language: 'en' })));
+            expect(ctx.language).toBe('lv');
+        });
+
+        it('a missed event is made up on focus and on reconnect', async () => {
+            bus.answer({ presentation: { success: true, ...presentationOf(5, { language: 'en' }) } });
+            const { findByText } = renderProvider();
+            await findByText('ready');
+            bus.answer({ presentation: { success: true, ...presentationOf(7, { language: 'lv' }) } });
+            await act(async () => {
+                window.dispatchEvent(new Event('focus'));
+            });
+            await waitFor(() => expect(ctx.language).toBe('lv'));
+        });
+
+        it('keeps the language shown when the language cannot be read now', async () => {
+            bus.answer({ presentation: { success: true, ...presentationOf(5, { language: 'lv' }) } });
+            const { findByText } = renderProvider();
+            await findByText('ready');
+            act(() =>
+                bus.firePresentation(
+                    presentationOf(6, { available: false, language: null, reason: 'language-unavailable' }),
+                ),
+            );
+            expect(ctx.language).toBe('lv');
+        });
+
+        it('an unsupported effective language reads as English', async () => {
+            bus.answer({ presentation: { success: true, ...presentationOf(5, { language: 'de' }) } });
+            mockApi.getSetting.mockResolvedValue('lv');
+            const { findByText } = renderProvider();
+            await findByText('ready');
+            await waitFor(() => expect(ctx.language).toBe('en'));
+        });
+
+        it('a menu refresh that fails on an effective change changes the language anyway', async () => {
+            bus.answer({ presentation: { success: true, ...presentationOf(5, { language: 'en' }) } });
+            const { findByText } = renderProvider();
+            await findByText('ready');
+            mockApi.refreshMenu.mockRejectedValue(new Error('no menu'));
+            act(() => bus.firePresentation(presentationOf(6, { language: 'lv' })));
+            await waitFor(() => expect(ctx.language).toBe('lv'));
+            expect(document.documentElement.lang).toBe('lv');
+        });
+
+        it('a saved language is painted when the host says what applies: the effective one, once it is read again', async () => {
+            bus.answer({ presentation: { success: true, ...presentationOf(5, { language: 'en' }) } });
+            const { findByText } = renderProvider();
+            await findByText('ready');
+            // The scenario keeps its language over the saved one the user just chose.
+            bus.answer({ presentation: { success: true, ...presentationOf(6, { language: 'en' }) } });
+            await act(async () => {
+                await ctx.setLanguage('lv');
+            });
+            expect(mockApi.setSetting).toHaveBeenCalledWith('language', 'lv');
+            expect(ctx.language).toBe('en');
+            // Without a scenario the host publishes the saved language and the window follows it.
+            bus.answer({ presentation: { success: true, ...presentationOf(7, { language: 'lv' }) } });
+            await act(async () => {
+                await ctx.setLanguage('lv');
+            });
+            expect(ctx.language).toBe('lv');
+        });
+
+        it('is not ready before the effective language has been asked for', async () => {
+            const asked = deferred();
+            mockApi.getEffectivePresentation.mockReturnValue(asked.promise as never);
+            const { getByText, findByText } = renderProvider();
+            await waitFor(() => expect(mockApi.getSetting).toHaveBeenCalled());
+            expect(getByText('waiting')).toBeTruthy();
+            asked.resolve({ success: true, ...presentationOf(5) });
+            expect(await findByText('ready')).toBeTruthy();
+        });
     });
 });

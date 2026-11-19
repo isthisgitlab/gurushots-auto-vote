@@ -105,6 +105,20 @@ const parseState = (raw: string | null): State => {
     return state;
 };
 
+/**
+ * Whether stored text is a ledger that can be trusted: nothing stored yet is an empty ledger, and text that parses to a
+ * plain object is one. Text that does not parse, or parses to anything else, is a ledger that cannot be read: it
+ * reads as empty (parseState) but is not an empty record.
+ */
+const isReadableText = (raw: string | null): boolean => {
+    if (!raw) return true;
+    try {
+        return isPlainObject(JSON.parse(raw));
+    } catch {
+        return false;
+    }
+};
+
 /** The change a write logs: `edit` made of the parsed stored state and stringified back, bookkeeping starting clean. */
 const makeChange = (kind: ChangeKind, edit: Edit): Change => ({
     apply: (current) => {
@@ -150,6 +164,10 @@ const refreshReplay = (changes: Change[]): { keep: Change[]; replay: Change[] } 
  */
 export const createStateLog = (store: RawJsonStore, refreshStore?: () => Promise<boolean>) => {
     let changes: Change[] = [];
+    // Whether the last read of the stored value, and the last refresh of the cache behind it, worked. A failure reads as
+    // an empty state (callers that act on it do no harm), but a caller that must tell it from an empty record asks.
+    let readHealthy = true;
+    let refreshHealthy = true;
     store.onDiscard?.(() => {
         changes = [];
     });
@@ -192,8 +210,11 @@ export const createStateLog = (store: RawJsonStore, refreshStore?: () => Promise
     return {
         read: (): State => {
             try {
-                return parseState(applyChanges(store.readRaw(), changes));
+                const stored = store.readRaw();
+                readHealthy = isReadableText(stored);
+                return parseState(applyChanges(stored, changes));
             } catch (error) {
+                readHealthy = false;
                 logger
                     .withCategory('boost')
                     .warning(`entry-age ledger unreadable (read failed: ${errorKind(error)})`, null);
@@ -203,11 +224,15 @@ export const createStateLog = (store: RawJsonStore, refreshStore?: () => Promise
 
         write,
 
+        /** Whether the last read and the last refresh worked (see `readHealthy`). */
+        health: () => ({ read: readHealthy, refresh: refreshHealthy }),
+
         refresh: async (): Promise<void> => {
             if (!refreshStore) return;
             let failure = 'the read failed';
             try {
                 if (await refreshStore()) {
+                    refreshHealthy = true;
                     const { keep, replay } = refreshReplay(changes);
                     changes = keep;
                     for (const change of replay) write(change.kind, change.edit);
@@ -216,6 +241,7 @@ export const createStateLog = (store: RawJsonStore, refreshStore?: () => Promise
             } catch (error) {
                 failure = errorKind(error);
             }
+            refreshHealthy = false;
             logger
                 .withCategory('boost')
                 .warning(`entry-age ledger not refreshed (${failure}) — using the cached copy`, null);

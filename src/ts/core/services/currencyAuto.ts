@@ -143,8 +143,8 @@ const baseGate = (action: CurrencyAction, prefix: RulePrefix, ctx: CurrencyCtx):
 };
 
 /**
- * True when the balance stays at or above the global reserve after spending
- * one. An unreadable bankroll refuses — never spend blind. Shared with the
+ * True when the balance stays at or above the installation's reserve after spending
+ * one. An unreadable bankroll or reserve refuses — never spend blind. Shared with the
  * scenario runner (services/scenarioRunner.ts), which passes its own log
  * label, so both automations honour the same user-set reserves.
  */
@@ -160,7 +160,17 @@ const reserveAllows = async (
         log().warning(`${label}: balance unreadable for ${logger.challengeTag(challenge)} — not spending`, null);
         return false;
     }
-    const keep = settings.getEffectiveSetting(RESERVE_KEY[action]);
+    // The reserve is read again here, at the spend: the installation's effective value now (the saved one, or the published
+    // phase over it). One that cannot be read refuses the spend; the saved reserve never stands in for it.
+    const reserve = settings.captureInstallationSettings([RESERVE_KEY[action]]);
+    if (!reserve.ok) {
+        log().warning(
+            `${label}: ${logger.challengeTag(challenge)} not spending — ${reserve.key} is unavailable (${reserve.reason})`,
+            null,
+        );
+        return false;
+    }
+    const keep = reserve.values[RESERVE_KEY[action]];
     if (balance > keep) return true;
     log().info(
         `${label}: ${logger.challengeTag(challenge)} skipped — balance ${balance} would go below the reserve of ${keep}`,

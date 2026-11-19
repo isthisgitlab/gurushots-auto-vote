@@ -96,6 +96,31 @@ describe('the Electron shell platform module', () => {
         expect(dead.webContents.send).not.toHaveBeenCalled();
     });
 
+    test('broadcastEvent sends an effective-projection event to every live window, never a destroyed one', () => {
+        const send = (): FakeBrowserWindow['webContents']['send'] => jest.fn<void, [string, unknown]>();
+        const live: FakeBrowserWindow = { isDestroyed: () => false, webContents: { send: send() } };
+        const dead: FakeBrowserWindow = { isDestroyed: () => true, webContents: { send: send() } };
+        electron.BrowserWindow.getAllWindows.mockReturnValue([live, dead]);
+        const payload = { revision: 4 };
+        installed.windows.broadcastEvent('effective-settings-changed', payload);
+        expect(live.webContents.send).toHaveBeenCalledWith('effective-settings-changed', payload);
+        expect(dead.webContents.send).not.toHaveBeenCalled();
+    });
+
+    test('the scenario host status reads the pairing through its own module, at call time, and only the enabled flag', async () => {
+        const hostStatus =
+            require('../../src/ts/shells/electron/remote/hostStatus') as typeof import('../../src/ts/shells/electron/remote/hostStatus');
+        hostStatus.setHostStatusSource(null);
+        await expect(installed.native.readScenarioHostStatus()).rejects.toThrow('The remote pairing is not ready');
+        hostStatus.setHostStatusSource(() => ({ enabled: true, key: 'never read' }) as { enabled: boolean });
+        await expect(installed.native.readScenarioHostStatus()).resolves.toEqual({
+            supported: true,
+            remoteEnabled: true,
+            remoteConnected: null,
+        });
+        hostStatus.setHostStatusSource(null);
+    });
+
     test('afterWipe relaunches and exits once the reply is out', () => {
         jest.useFakeTimers();
         try {
@@ -126,6 +151,7 @@ describe('the Electron shell platform module', () => {
 
     test('the capabilities answer the Electron values', () => {
         const capabilities = installed.capabilities;
+        expect(capabilities.executor).toBe('electron');
         expect(capabilities.refreshMissionNeeds).toBe(false);
         expect(capabilities.snapAllowed).toBe(true);
         expect(capabilities.backgroundServiceOwnsScenarios()).toBe(false);

@@ -187,7 +187,65 @@ const CLI_PARITY: Record<InvokeChannel, ParityEntry> = {
     'reset-scenario-state': { commands: ['scenario-reset'], flag: '--challenge' },
     'reset-all-scenario-state': { commands: ['scenario-reset'], flag: '--all' },
     'dry-run-scenario': { commands: ['scenario-dry-run'], flag: '--challenge' },
-    'simulate-scenario': { commands: ['scenario-simulate'], flag: '--challenge' },
+    'simulate-scenario': { commands: ['scenario-simulate'], flag: '--subject' },
+    'get-scenario-capabilities': {
+        reason: 'The capability catalogue is for the builder and the remote page; the CLI reads the settings a scenario writes through scenario-snapshot.',
+    },
+    'get-scenario-snapshot': { commands: ['scenario-snapshot'], flag: null },
+    'get-installation-scenario': { commands: ['scenario-installation'], flag: null },
+    'list-simulation-subjects': {
+        reason: 'The subject list feeds the builder; the CLI names its subject with --challenge.',
+    },
+    'set-installation-scenario': { commands: ['scenario-installation'], flag: '--executor' },
+    'transfer-installation-scenario-owner': { commands: ['scenario-owner-transfer'], flag: '--generation' },
+    'pause-scenario': { commands: ['scenario-pause'], flag: null },
+    'resume-scenario': { commands: ['scenario-resume'], flag: null },
+    'handoff-scenario': { commands: ['scenario-handoff'], flag: '--generation' },
+    'clear-scenario-assignment': { commands: ['scenario-handoff', 'scenario-installation'], flag: '--clear' },
+    'get-photo-pools': { commands: ['photo-pool'], flag: 'list' },
+    'set-photo-pool': { commands: ['photo-pool'], flag: 'save' },
+    'create-photo-pool': { commands: ['photo-pool'], flag: 'create' },
+    'get-phase-profiles': {
+        reason: 'The profile picker of the scenario builder; the CLI names a profile directly and the validator refuses one a phase may not apply.',
+    },
+    'delete-photo-pool': { commands: ['photo-pool'], flag: 'delete' },
+    'rename-photo-pool': { commands: ['photo-pool'], flag: 'rename' },
+    'get-effective-entry-pins': { commands: ['scenario-snapshot'], flag: null },
+    'get-effective-installation-settings': { commands: ['scenario-snapshot'], flag: null },
+    'get-effective-presentation': {
+        reason: 'The theme and language the Login and Logs windows paint; the CLI has no window.',
+    },
+    'get-stop-status': { commands: ['stop-status'], flag: null },
+    'get-scenario-request-status': {
+        reason: 'The control inbox answers a paired phone about its own requests; the CLI changes a scenario directly.',
+    },
+    'begin-scenario-request': {
+        reason: "The remote host persists a paired phone's request before applying it; the CLI changes a scenario directly.",
+    },
+    'finish-scenario-request': {
+        reason: "The remote host records the result of a paired phone's request; the CLI changes a scenario directly.",
+    },
+    'scenario-stop-fence': {
+        reason: 'The controller route of the window controller; the CLI scheduler reads the fence itself (autovote/nodeSeams).',
+    },
+    'record-full-stop': {
+        reason: 'The controller route of the window controller; the CLI scheduler records its own Stop (autovote/nodeSeams).',
+    },
+    'arm-autovote': {
+        reason: 'The controller route of the window controller; the CLI scheduler arms itself (autovote/nodeSeams).',
+    },
+    'arm-if-allowed': {
+        reason: 'The controller route of the window controller; the CLI scheduler arms itself (autovote/nodeSeams).',
+    },
+    'withdraw-installation': {
+        reason: 'The controller route of the window controller; the CLI scheduler withdraws on its own Stop (autovote/nodeSeams).',
+    },
+    'rearm-installation': {
+        reason: 'The controller route of the window controller; the CLI scheduler re-arms itself (autovote/nodeSeams).',
+    },
+    'get-account-wake': {
+        reason: 'The window controller asks the main process for the account boundaries; the CLI scheduler works them out itself.',
+    },
 
     // Window control
     'reload-window': { reason: 'Window and OS shell.' },

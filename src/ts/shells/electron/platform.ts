@@ -45,6 +45,17 @@ const broadcastSettingsChanged: BroadcastSettingsChange = (newSettings) => {
     });
 };
 
+/**
+ * Sends one effective-projection event to every window (the Logs window's own send filter keeps it to the presentation one,
+ * registerHandlers.ts).
+ */
+const broadcastEvent: PlatformWindows['broadcastEvent'] = (channel, payload) => {
+    const { BrowserWindow } = require('electron') as typeof import('electron');
+    BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) win.webContents.send(channel, payload);
+    });
+};
+
 // The window is closed by the exit, so the reply to the wipe is let out first.
 const afterWipe = () => {
     setTimeout(() => {
@@ -55,9 +66,13 @@ const afterWipe = () => {
 };
 
 /** The Electron windows: every live window's settings broadcast, and the relaunch. */
-const windows: PlatformWindows = { broadcastSettingsChanged, afterWipe };
+const windows: PlatformWindows = { broadcastSettingsChanged, broadcastEvent, afterWipe };
 
-const electronPlatform = createNodePlatform(windows);
+// The pairing's status is read at call time, like every other module the install must not load first.
+const readScenarioHostStatus = () =>
+    (require('./remote/hostStatus') as typeof import('./remote/hostStatus')).readHostStatus();
+
+const electronPlatform = createNodePlatform(windows, 'electron', {}, readScenarioHostStatus);
 // The Electron wipe also clears the app's browser session; ElectronPlatform requires it.
 const installed: ElectronPlatform = Object.assign(electronPlatform, {
     wipe: {

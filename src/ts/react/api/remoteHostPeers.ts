@@ -7,7 +7,7 @@
 
 import { MAX_PEER_FIELD_LENGTH } from '../../core/remote/protocol';
 
-import type { AutovoteStateMessage } from '../../core/remote/protocol';
+import type { AutovoteStateMessage, CommandAck } from '../../core/remote/protocol';
 import type { RemoteTransport } from '../../core/remote/relays';
 import type { AutovoteState } from '../../core/autovote/state';
 import type { RemoteHostDeps } from './remoteHostCreate';
@@ -23,6 +23,8 @@ export type HostContext = {
     readonly notified: Set<string>;
     /** The subset of peers that want the log stream. */
     readonly logPeers: Set<string>;
+    /** The identities of the Start and re-arm commands already seen (newest last, at most MAX_COMMAND_IDS): a repeat is not run again. */
+    readonly commandIds: Set<string>;
     /** The connected-count listeners (the header badge). */
     readonly countListeners: Set<() => void>;
 };
@@ -35,13 +37,17 @@ const HOST_RUN = Array.from(globalThis.crypto.getRandomValues(new Uint8Array(8))
 /** How many autovote states this renderer has stamped: it only grows, across every host the renderer creates. */
 let statesStamped = 0;
 
-/** An `autovote-state` message stamped with this run and the next count, so a phone can drop a stale one. */
-export const stampedAutovoteState = (state: AutovoteState): AutovoteStateMessage => ({
+/** An `autovote-state` message stamped with this run and the next count, so a phone can drop a stale one; `ack` marks it as the answer to that phone's command. */
+export const stampedAutovoteState = (state: AutovoteState, ack?: CommandAck): AutovoteStateMessage => ({
     t: 'autovote-state',
     state,
     hostRun: HOST_RUN,
     n: statesStamped++,
+    ...(ack === undefined ? {} : { ack }),
 });
+
+/** How many command identities the room remembers. */
+export const MAX_COMMAND_IDS = 64;
 
 /** A peer id clipped for a log line: ids are bounded like every other logged field. */
 export const clippedId = (value: string): string => value.slice(0, MAX_PEER_FIELD_LENGTH);

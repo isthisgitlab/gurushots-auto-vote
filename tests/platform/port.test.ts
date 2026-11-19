@@ -6,12 +6,16 @@
  */
 
 import { buildNodeTestPlatform, clearInstalledPlatform, installTestPlatform } from '../helpers/platform';
-import { installPlatform, platform } from '../../src/ts/core/platform/port';
+import { installPlatform, platform, unsupportedScenarioHostStatus } from '../../src/ts/core/platform/port';
 
 import type { ElectronPlatform } from '../../src/ts/core/platform/port';
 import type * as portModule from '../../src/ts/core/platform/port';
 
 describe('the platform port', () => {
+    test('a shell with no remote-access pairing reports its host status unsupported, never as a status of nothing', async () => {
+        await expect(unsupportedScenarioHostStatus()).resolves.toEqual({ supported: false });
+    });
+
     test('platform() throws when nothing is installed', () => {
         clearInstalledPlatform();
         expect(() => platform()).toThrow(

@@ -105,7 +105,7 @@ beforeEach(() => {
 describe('runRun — the stale-settings prune', () => {
     test('a normal read prunes the active ids through the handler, never the facade', async () => {
         await expect(runRun([])).resolves.toBe(0);
-        expect(mw.cliVote).toHaveBeenCalledWith(null);
+        expect(mw.cliVote).toHaveBeenCalledWith(null, 'full');
         expect(settingsHandlers.__cleanup).toHaveBeenCalledWith(null, ['111', '222']);
         expect(settings.cleanupStaleChallengeSetting).not.toHaveBeenCalled();
     });

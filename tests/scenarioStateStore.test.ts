@@ -65,6 +65,155 @@ describe('initialState', () => {
     });
 });
 
+describe('createStateLedger — the lifecycle fields', () => {
+    test('a write under a generation the stored record has left is stale, decided in the same locked step as the write', () => {
+        const store = rawStore();
+        const ledger = createStateLedger(store);
+        expect(ledger.change('7', () => ({ ...state(), generation: 2 }))).toMatchObject({ ok: true });
+        // No epoch: nothing but the generation can tell this write is old.
+        expect(ledger.set(7, { ...state(), generation: 1 })).toBe('stale');
+        expect(ledger.set(7, state())).toBe('stale');
+        expect(ledger.set(7, { ...state(), generation: 2, memory: { a: 'b' } })).toBe('saved');
+        expect(ledger.get(7).state?.memory).toEqual({ a: 'b' });
+        // A record that does not exist yet is generation 0.
+        expect(ledger.set(8, state())).toBe('saved');
+        expect(ledger.set(9, { ...state(), generation: 1 })).toBe('stale');
+        expect(ledger.get(9).state).toBeNull();
+    });
+
+    test('a stale write on the file is decided with the file locked, not before', () => {
+        const lock = { ok: true, release: jest.fn() };
+        const acquire = jest.fn(() => lock);
+        const ledger = createStateLedger(rawStore(), acquire);
+        ledger.change('7', () => ({ ...state(), generation: 1 }));
+        acquire.mockClear();
+        lock.release.mockClear();
+        expect(ledger.set(7, state())).toBe('stale');
+        expect(acquire).toHaveBeenCalledTimes(1);
+        expect(lock.release).toHaveBeenCalledTimes(1);
+    });
+
+    test('a change that carries a generation on is stale for a state read before it', () => {
+        const ledger = createMemoryStateLedger();
+        ledger.set(7, state());
+        const read = ledger.get(7).state!;
+        ledger.change('7', (current) => ({ ...current!, generation: 1 }));
+        expect(ledger.set(7, { ...read, memory: { late: 'x' } })).toBe('stale');
+    });
+
+    test('the installation key is a subject; `@all` and every other `@` key are not', async () => {
+        const ledger = createMemoryStateLedger();
+        expect(ledger.set('@installation', state())).toBe('saved');
+        expect(ledger.get('@installation').state?.scenario).toBe('Plan');
+        expect(ledger.set('@all', state())).toBe('refused');
+        expect(ledger.set('@x', state())).toBe('refused');
+        expect(ledger.get('@all')).toEqual({ corrupt: 'record', state: null, epoch: { all: 0, gen: 0 } });
+        expect(ledger.change('@x', () => state())).toEqual({ ok: false, reason: 'reserved-subject' });
+        await expect(ledger.remove('@all')).resolves.toBe('unreadable');
+        expect(ledger.list().subjects.map(({ key }) => key)).toEqual(['@installation']);
+    });
+
+    test('a record keeps the lifecycle fields it was written with, and a malformed one makes the record unreadable', () => {
+        const fields = {
+            generation: 3,
+            paused: { at: 5, reason: 'asked' },
+            handoff: { from: 'A', to: null, generation: 3, at: 5 },
+            lastRequest: { id: 'r', result: 'ok', at: 5 },
+        };
+        const ledger = createMemoryStateLedger();
+        ledger.change('7', () => ({ ...state(), ...fields }));
+        expect(ledger.get(7).state).toMatchObject(fields);
+        for (const bad of [{ generation: 1.5 }, { paused: {} }, { handoff: { from: 'A' } }, { lastRequest: 'x' }]) {
+            const raw = rawStore(JSON.stringify({ 7: { ...state(), ...bad } }));
+            expect(createStateLedger(raw).get(7).corrupt).toBe('record');
+        }
+    });
+
+    test('a record keeps a runtime phase patch and profile, and a malformed one makes the record unreadable', () => {
+        const fields = {
+            phasePatch: { exposure: 80, useTurbo: true, autoSwapMode: 'fewest', mustIncludeTags: ['sea', 'light'] },
+            phaseProfile: 'Calm',
+        };
+        const ledger = createMemoryStateLedger();
+        ledger.change('7', () => ({ ...state(), ...fields }));
+        expect(ledger.get(7).state).toMatchObject(fields);
+        ledger.change('8', () => ({ ...state(), phasePatch: {}, phaseProfile: null }));
+        expect(ledger.get(8).state).toMatchObject({ phasePatch: {}, phaseProfile: null });
+        const tooMany = Object.fromEntries(Array.from({ length: 21 }, (_, index) => [`k${index}`, index]));
+        for (const bad of [
+            { phasePatch: [] },
+            { phasePatch: 'x' },
+            { phasePatch: { '': 1 } },
+            { phasePatch: { exposure: null } },
+            { phasePatch: { exposure: Infinity } },
+            { phasePatch: { exposure: { nested: 1 } } },
+            { phasePatch: { tags: [1] } },
+            { phasePatch: { tags: Array.from({ length: 51 }, () => 'x') } },
+            { phasePatch: { text: 'x'.repeat(201) } },
+            { phasePatch: { ['k'.repeat(201)]: 1 } },
+            { phasePatch: tooMany },
+            { phaseProfile: '' },
+            { phaseProfile: 7 },
+            { phaseProfile: 'x'.repeat(61) },
+        ]) {
+            const raw = rawStore(JSON.stringify({ 7: { ...state(), ...bad } }));
+            expect(createStateLedger(raw).get(7).corrupt).toBe('record');
+        }
+    });
+
+    test('a record that holds a handoff is never pruned, the installation record is never aged out', () => {
+        const old = Date.now() - 40 * 24 * 3600 * 1000;
+        const raw = rawStore(
+            JSON.stringify({
+                '@installation': { ...state(), generation: 4, updatedAt: old },
+                1: { ...state(), updatedAt: old },
+                2: { ...state(), handoff: { from: 'A', to: 'B', generation: 0, at: 1 }, updatedAt: old },
+            }),
+        );
+        createStateLedger(raw).set(3, state());
+        expect(Object.keys(parseJsonObject(raw.raw!)).sort()).toEqual(['2', '3', '@installation']);
+    });
+
+    test('a file that is not loaded yet lists nothing, and says it is not loaded', () => {
+        expect(createStateLedger(rawStore('{}'), undefined, undefined, () => false).list()).toEqual({
+            corrupt: 'unloaded',
+            subjects: [],
+        });
+        expect(createStateLedger(rawStore('{bad'), undefined, undefined).list()).toEqual({
+            corrupt: 'file',
+            subjects: [],
+        });
+    });
+
+    test('a change reads the record under the lock, writes what it answers, and leaves the file alone when it refuses', () => {
+        const store = rawStore();
+        const ledger = createStateLedger(store);
+        const refuse = ledger.change('7', () => ({ refuse: 'because' }));
+        expect(refuse).toEqual({ ok: false, reason: 'because' });
+        expect(store.writeRaw).not.toHaveBeenCalled();
+        expect(ledger.change('7', (current) => ({ ...(current ?? state()), memory: { a: 'b' } }))).toMatchObject({
+            ok: true,
+            state: { memory: { a: 'b' }, gen: 0 },
+        });
+        expect(store.writeRaw).toHaveBeenCalledTimes(1);
+        expect(createStateLedger(rawStore('{broken')).change('7', () => state())).toEqual({
+            ok: false,
+            reason: 'state-unreadable',
+        });
+        const busy = createStateLedger(rawStore(), () => ({ ok: false, release: () => {} }));
+        expect(busy.change('7', () => state())).toEqual({ ok: false, reason: 'busy' });
+    });
+
+    test('a reset count the record carries is kept by a change, and a tombstone reads as no record', () => {
+        const raw = rawStore(JSON.stringify({ 7: { tombstone: true, gen: 5, updatedAt: Date.now() } }));
+        const ledger = createStateLedger(raw);
+        expect(ledger.change('7', (current) => (current === null ? state() : { refuse: 'x' }))).toMatchObject({
+            ok: true,
+            state: { gen: 5 },
+        });
+    });
+});
+
 describe('createStateLedger', () => {
     test('no record yet reads as no state', () => {
         const ledger = createStateLedger(rawStore());

@@ -12,8 +12,12 @@ import {
     AUTOVOTE_RUNNING_KEY,
     HOST_ANSWERED,
     REFUSED,
+    READ_REMOTE_CHANNELS,
     SPEND_REMOTE_CHANNELS,
     classifyRemoteChannel,
+    classifyRemoteCommand,
+    classifyRemoteOperation,
+    scenarioControlTarget,
 } from '../../src/ts/core/remote/allowlist';
 
 import type {
@@ -163,5 +167,198 @@ describe('the spend channels', () => {
 describe('the autovoteRunning key guard', () => {
     test('the guarded key is the settings key itself', () => {
         expect(AUTOVOTE_RUNNING_KEY).toBe('autovoteRunning');
+    });
+});
+
+/** The channels P12a added, and what a paired phone may do with each (the plan's remote matrix). */
+const READS = [
+    'get-scenario-capabilities',
+    'get-scenario-snapshot',
+    'get-effective-installation-settings',
+    'get-effective-presentation',
+    'list-simulation-subjects',
+    'get-installation-scenario',
+    'get-stop-status',
+    'get-photo-pools',
+    'get-effective-entry-pins',
+    'get-scenario-request-status',
+];
+const EFFECTS = [
+    'set-installation-scenario',
+    'pause-scenario',
+    'resume-scenario',
+    'handoff-scenario',
+    'clear-scenario-assignment',
+    'set-photo-pool',
+    'delete-photo-pool',
+    'rename-photo-pool',
+];
+const LOCAL_ONLY = [
+    'transfer-installation-scenario-owner',
+    'scenario-stop-fence',
+    'record-full-stop',
+    'arm-autovote',
+    'arm-if-allowed',
+    'withdraw-installation',
+    'rearm-installation',
+    'get-account-wake',
+    'begin-scenario-request',
+    'finish-scenario-request',
+];
+
+describe('the scenario channels', () => {
+    test.each([...READS, ...EFFECTS])('%s is allowed to a paired phone', (channel) => {
+        expect(asAllowed(classifyRemoteChannel(channel))).toBe(true);
+    });
+
+    test.each(LOCAL_ONLY)('%s is refused: it is done on the computer', (channel) => {
+        const classified = classifyRemoteChannel(channel);
+        expect(asRefusal(classified)).toBe(true);
+        if (asRefusal(classified)) expect(classified.reason.length).toBeGreaterThan(0);
+    });
+
+    test('an owner transfer names the selected computer; the other local routes keep the generic reason', () => {
+        expect(classifyRemoteChannel('transfer-installation-scenario-owner')).toEqual({
+            kind: 'refused',
+            reason: 'Owner transfer is done on the selected computer.',
+        });
+        expect(classifyRemoteChannel('arm-autovote')).toEqual({
+            kind: 'refused',
+            reason: 'This is done on the computer.',
+        });
+    });
+
+    test('the effective projections reach a phone as events only: a peer-to-host event is refused', () => {
+        for (const channel of ['effective-settings-changed', 'effective-presentation-changed']) {
+            expect(classifyRemoteChannel(channel)).toEqual({
+                kind: 'refused',
+                reason: 'Events flow from the computer to the phone only.',
+            });
+        }
+    });
+
+    test('no raw controller or lifecycle flag, credential or reset channel became allowed', () => {
+        for (const channel of [
+            'run-voting-cycle',
+            'set-cancel-voting',
+            'set-remote-access',
+            'reset-remote-pairing',
+            'reset-all-settings',
+            'reset-all-scenario-state',
+            'import-scenario',
+            'wipe-local-data',
+            'authenticate',
+        ]) {
+            expect(asRefusal(classifyRemoteChannel(channel))).toBe(true);
+        }
+    });
+});
+
+describe('the operation class', () => {
+    test.each(READS)('%s is a read: it may wait for the host and be asked again', (channel) => {
+        expect(classifyRemoteOperation(channel)).toBe('read');
+    });
+
+    test.each([
+        'check-scenario',
+        'dry-run-scenario',
+        'simulate-scenario',
+        'preview-scenario-import',
+        'export-scenario',
+    ])('%s is a read', (channel) => {
+        expect(classifyRemoteOperation(channel)).toBe('read');
+    });
+
+    test.each([...EFFECTS, 'save-scenario', 'rename-scenario', 'delete-scenario', 'set-setting', 'save-settings'])(
+        '%s is an effect: never queued, never sent again',
+        (channel) => {
+            expect(classifyRemoteOperation(channel)).toBe('effect');
+        },
+    );
+
+    test('every spend channel is a spend', () => {
+        for (const channel of SPEND_REMOTE_CHANNELS) expect(classifyRemoteOperation(channel)).toBe('spend');
+    });
+
+    test('a refused or unknown channel is an effect: nothing about it waits or repeats', () => {
+        expect(classifyRemoteOperation('transfer-installation-scenario-owner')).toBe('effect');
+        expect(classifyRemoteOperation('a-channel-nobody-listed')).toBe('effect');
+    });
+
+    test('every read is a channel the phone may use, and none of them is a spend', () => {
+        for (const channel of READ_REMOTE_CHANNELS) {
+            expect(classifyRemoteChannel(channel).kind).not.toBe('refused');
+            expect(SPEND_REMOTE_CHANNELS.has(channel)).toBe(false);
+        }
+    });
+
+    test('a Stop is the priority operation; a Start and a re-arm are effects', () => {
+        expect(classifyRemoteCommand('stop')).toBe('priority-stop');
+        expect(classifyRemoteCommand('start')).toBe('effect');
+        expect(classifyRemoteCommand('rearm')).toBe('effect');
+    });
+});
+
+describe('which calls change a scenario', () => {
+    test.each([
+        ['set-installation-scenario', ['Plan', 'electron', 0], '@installation'],
+        ['pause-scenario', ['123'], '123'],
+        ['resume-scenario', [123], '123'],
+        ['handoff-scenario', ['@installation', 'Plan', 2], '@installation'],
+        ['clear-scenario-assignment', ['123', 1], '123'],
+        ['reset-scenario-state', ['123'], '123'],
+        ['pause-scenario', [{}], 'subject'],
+        ['save-scenario', [{}], 'definitions'],
+        ['rename-scenario', ['a', 'b'], 'definitions'],
+        ['delete-scenario', ['a'], 'definitions'],
+        ['set-photo-pool', ['p', []], 'pools'],
+        ['delete-photo-pool', ['p'], 'pools'],
+        ['rename-photo-pool', ['p', 'q'], 'pools'],
+        ['set-entry-pin', ['1', 'boost', 'x'], 'pins'],
+        ['apply-challenge-profile', ['1', 'p'], 'assignments'],
+        ['save-challenge-profile', ['p', {}], 'assignments'],
+        ['delete-challenge-profile', ['p'], 'assignments'],
+        ['set-title-rules', [[]], 'assignments'],
+    ])('%s %j is a scenario change with the target %s', (channel, args, target) => {
+        expect(scenarioControlTarget(channel, args)).toBe(target);
+    });
+
+    test.each([
+        'set-setting',
+        'reset-setting',
+        'set-global-default',
+        'reset-global-default',
+        'set-challenge-override',
+        'remove-challenge-override',
+    ])('%s is a scenario change for the scenario key only', (channel) => {
+        expect(scenarioControlTarget(channel, ['scenario', 'x'])).toBe('assignments');
+        expect(scenarioControlTarget(channel, ['exposure', 'x'])).toBeNull();
+    });
+
+    test.each(['save-settings', 'set-challenge-overrides', 'replace-challenge-overrides'])(
+        '%s is a scenario change when its arguments carry the scenario key at any depth',
+        (channel) => {
+            expect(scenarioControlTarget(channel, [{ scenario: 'x' }])).toBe('assignments');
+            expect(scenarioControlTarget(channel, ['1', { values: { scenario: 'x' } }])).toBe('assignments');
+            expect(scenarioControlTarget(channel, [[{ a: { scenario: 'x' } }]])).toBe('assignments');
+            expect(scenarioControlTarget(channel, [{ exposure: 1, nested: { fine: [1, 'two', null] } }])).toBeNull();
+            expect(scenarioControlTarget(channel, [])).toBeNull();
+        },
+    );
+
+    test('an argument nested deeper than the search is treated as carrying the key', () => {
+        let deep: unknown = { fine: 1 };
+        for (let level = 0; level < 12; level++) deep = { next: deep };
+        expect(scenarioControlTarget('save-settings', [deep])).toBe('assignments');
+    });
+
+    test.each([
+        'get-settings',
+        'get-installation-scenario',
+        'join-challenge',
+        'acknowledge-import-report',
+        'a-channel-nobody-listed',
+    ])('%s is not a scenario change', (channel) => {
+        expect(scenarioControlTarget(channel, [])).toBeNull();
     });
 });

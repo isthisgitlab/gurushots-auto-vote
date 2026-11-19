@@ -1214,3 +1214,159 @@ describe('formatOversleptMessage', () => {
         expect(formatOversleptMessage(MS_PER_MINUTE, MS_PER_MINUTE)).not.toMatch(/⚠/);
     });
 });
+
+describe('createCadenceChain — the Stop fence, the armed decision and the account boundary', () => {
+    beforeEach(() => {
+        jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+        jest.clearAllTimers();
+        jest.useRealTimers();
+        jest.clearAllMocks();
+    });
+
+    const capture = { epoch: 4, generation: 2 };
+    const makeGate = (admits = true, current = true) => ({
+        run: jest.fn(() => capture),
+        admits: jest.fn(async () => admits),
+        current: jest.fn(() => current),
+    });
+
+    test('a run the fence admits arms its timer under the run capture, and dispatches the cycle', async () => {
+        const gate = makeGate();
+        const deps = makeDeps({ gate });
+        const chain = createCadenceChain(invalid(deps));
+        await chain.scheduleNext([farChallenge()]);
+        expect(gate.run).toHaveBeenCalled();
+        expect(gate.admits).toHaveBeenCalledWith(capture);
+        expect(jest.getTimerCount()).toBe(1);
+        await jest.advanceTimersByTimeAsync(FIXED_DELAY_MS);
+        await flushMicrotasks();
+        // admitted at the arm boundary and again at the dispatch boundary
+        expect(gate.admits.mock.calls.length).toBeGreaterThanOrEqual(2);
+        expect(deps.runCycle).toHaveBeenCalledTimes(1);
+    });
+
+    test('an obsolete run arms nothing, at either arm check', async () => {
+        for (const gate of [makeGate(false), makeGate(true, false)]) {
+            const deps = makeDeps({ gate });
+            const chain = createCadenceChain(invalid(deps));
+            await chain.scheduleNext([farChallenge()]);
+            expect(jest.getTimerCount()).toBe(0);
+            expect(deps.setTimer).toHaveBeenLastCalledWith(null);
+        }
+    });
+
+    test('a timer the fence refuses at dispatch runs nothing, empties the slot and says the run is over', async () => {
+        const gate = makeGate();
+        const onObsolete = jest.fn();
+        const deps = makeDeps({ gate, onObsolete });
+        const chain = createCadenceChain(invalid(deps));
+        await chain.scheduleNext([farChallenge()]);
+        gate.admits.mockResolvedValue(false);
+        await jest.advanceTimersByTimeAsync(FIXED_DELAY_MS);
+        await flushMicrotasks();
+        expect(deps.runCycle).not.toHaveBeenCalled();
+        expect(onObsolete).toHaveBeenCalledTimes(1);
+        expect(deps.setTimer).toHaveBeenLastCalledWith(null);
+        expect(jest.getTimerCount()).toBe(0);
+    });
+
+    test('a timer replaced while the fence is asked is left alone, and so is a refusal with no host hook', async () => {
+        const gate = makeGate();
+        const deps = makeDeps({ gate });
+        const chain = createCadenceChain(invalid(deps));
+        await chain.scheduleNext([farChallenge()]);
+        let replace!: () => void;
+        gate.admits.mockImplementation(async () => {
+            replace();
+            return false;
+        });
+        replace = () => deps.getTimer.mockReturnValue(null);
+        const onObsolete = jest.fn();
+        await jest.advanceTimersByTimeAsync(FIXED_DELAY_MS);
+        await flushMicrotasks();
+        expect(deps.runCycle).not.toHaveBeenCalled();
+        expect(onObsolete).not.toHaveBeenCalled();
+
+        // Admitted, but the timer slot moved on while it was asked.
+        const gate2 = makeGate();
+        const deps2 = makeDeps({ gate: gate2 });
+        const chain2 = createCadenceChain(invalid(deps2));
+        await chain2.scheduleNext([farChallenge()]);
+        gate2.admits.mockImplementation(async () => {
+            deps2.getTimer.mockReturnValue(null);
+            return true;
+        });
+        await jest.advanceTimersByTimeAsync(FIXED_DELAY_MS);
+        await flushMicrotasks();
+        expect(deps2.runCycle).not.toHaveBeenCalled();
+
+        // Refused with the slot still current and no hook: the slot is emptied, nothing throws.
+        const gate3 = makeGate();
+        const deps3 = makeDeps({ gate: gate3 });
+        const chain3 = createCadenceChain(invalid(deps3));
+        await chain3.scheduleNext([farChallenge()]);
+        gate3.admits.mockResolvedValue(false);
+        await jest.advanceTimersByTimeAsync(FIXED_DELAY_MS);
+        await flushMicrotasks();
+        expect(deps3.runCycle).not.toHaveBeenCalled();
+    });
+
+    test('armed: no active challenge is read, and only the account boundary and the normal cadence decide the wait', async () => {
+        const now = Math.floor(Date.now() / 1000);
+        const resolveAccountWake = jest.fn(() => ({
+            installation: null,
+            candidates: [],
+            claimAt: now + 60,
+            missionExpiry: null,
+        }));
+        const deps = makeDeps({ isArmed: () => true, resolveAccountWake });
+        const chain = createCadenceChain(invalid(deps));
+        await chain.scheduleNext([inWindowChallenge()]);
+        expect(deps.fetchChallenges).not.toHaveBeenCalled();
+        // The prefetched list that sits inside a last-minute window decides nothing: the account boundary does.
+        expect(deps.log.cadence).toHaveBeenCalledWith('account', expect.stringContaining('the prize claim (claim)'));
+        await jest.advanceTimersByTimeAsync(59_000);
+        expect(deps.runCycle).not.toHaveBeenCalled();
+        await jest.advanceTimersByTimeAsync(2_000);
+        expect(deps.runCycle).toHaveBeenCalledTimes(1);
+    });
+
+    test('not armed: the same list is read as before', async () => {
+        const deps = makeDeps({ isArmed: () => false });
+        const chain = createCadenceChain(invalid(deps));
+        await chain.scheduleNext();
+        expect(deps.fetchChallenges).toHaveBeenCalledTimes(1);
+    });
+
+    test('the cycle settings are captured once: a decision that fails after the capture falls back on that capture', async () => {
+        const deps = makeDeps();
+        deps.resolveLastMinuteCheckMinutes.mockImplementation(() => {
+            throw new Error('late failure');
+        });
+        const chain = createCadenceChain(invalid(deps));
+        await chain.scheduleNext([farChallenge()]);
+        expect(deps.loadSettings).toHaveBeenCalledTimes(1);
+        expect(deps.log.decisionError).toHaveBeenCalled();
+        await jest.advanceTimersByTimeAsync(FIXED_DELAY_MS);
+        await flushMicrotasks();
+        expect(deps.runCycle).toHaveBeenCalledTimes(1);
+    });
+
+    test('a capture that cannot be read is tried once more, and when that fails too the plain default cadence stands', async () => {
+        const deps = makeDeps();
+        deps.loadSettings.mockImplementation(() => {
+            throw new Error('cadence is unavailable');
+        });
+        const chain = createCadenceChain(invalid(deps));
+        await chain.scheduleNext([farChallenge()]);
+        expect(deps.loadSettings).toHaveBeenCalledTimes(2);
+        // The default is 3 minutes, never a saved value.
+        await jest.advanceTimersByTimeAsync(3 * MS_PER_MINUTE - 1);
+        expect(deps.runCycle).not.toHaveBeenCalled();
+        await jest.advanceTimersByTimeAsync(1);
+        expect(deps.runCycle).toHaveBeenCalledTimes(1);
+    });
+});

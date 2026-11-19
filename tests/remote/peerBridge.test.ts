@@ -17,6 +17,7 @@ import {
 } from '../../src/ts/core/remote/protocol';
 import { REMOTE_SAY_HELLO_FIRST } from '../../src/ts/core/remote/dispatch';
 import { TransportStub } from '../helpers/remoteTransport';
+import { readHostPresentation } from '../../src/ts/core/remote/hostPresentation';
 import {
     remoteConnectionState,
     remoteHostPath,
@@ -973,6 +974,7 @@ describe('installPeerBridge: which peer counts', () => {
         await expect(pending).resolves.toEqual({
             success: false,
             error: expect.stringContaining('before retrying'),
+            unclear: true,
         });
     });
 
@@ -997,6 +999,248 @@ describe('installPeerBridge: which peer counts', () => {
         await expect(spend).resolves.toEqual({
             success: false,
             error: expect.stringContaining('before retrying'),
+            unclear: true,
+        });
+    });
+
+    describe("the host's effective projections", () => {
+        const connect = (): void => {
+            phone.emitJoin('host');
+            phone.receiveFromPeer(hostHello, 'host');
+        };
+
+        test('reach the listeners once each: a stale or repeated revision is dropped, and only the host counts', () => {
+            connect();
+            const presentation = jest.fn();
+            const effective = jest.fn();
+            (api.onEffectivePresentationChanged as (callback: (payload: unknown) => void) => unknown)(presentation);
+            (api.onEffectiveSettingsChanged as (callback: (payload: unknown) => void) => unknown)(effective);
+            const shown = { revision: 3, available: true, theme: 'dark', language: 'en', reason: null };
+            phone.receiveFromPeer({ t: 'event', channel: 'effective-presentation-changed', payload: shown }, 'host');
+            phone.receiveFromPeer({ t: 'event', channel: 'effective-presentation-changed', payload: shown }, 'host');
+            phone.receiveFromPeer(
+                { t: 'event', channel: 'effective-presentation-changed', payload: { ...shown, revision: 2 } },
+                'host',
+            );
+            phone.receiveFromPeer(
+                { t: 'event', channel: 'effective-presentation-changed', payload: { ...shown, revision: 9 } },
+                'fellow',
+            );
+            expect(presentation).toHaveBeenCalledTimes(1);
+            expect(presentation).toHaveBeenCalledWith(shown);
+            const projected = { revision: 1, subject: 'installation', generation: 0, values: {} };
+            phone.receiveFromPeer({ t: 'event', channel: 'effective-settings-changed', payload: projected }, 'host');
+            phone.receiveFromPeer({ t: 'event', channel: 'effective-settings-changed', payload: 'nonsense' }, 'host');
+            expect(effective).toHaveBeenCalledTimes(1);
+            expect(effective).toHaveBeenCalledWith(projected);
+        });
+
+        test("the page reads what the computer paints through the bridge, and the read answer keeps the phone's own choices", async () => {
+            connect();
+            expect(readHostPresentation()).toBeNull();
+            await expect(api.setSetting('theme', 'dark')).resolves.toBe(true);
+            phone.receiveFromPeer(
+                {
+                    t: 'event',
+                    channel: 'effective-presentation-changed',
+                    payload: { revision: 4, available: true, theme: 'host-theme', language: 'en', reason: null },
+                },
+                'host',
+            );
+            expect(readHostPresentation()).toEqual({
+                revision: 4,
+                available: true,
+                theme: 'host-theme',
+                language: 'en',
+            });
+
+            const read = api.getEffectivePresentation() as Promise<unknown>;
+            const sentRead = phone.sent.filter(
+                ({ message }) => (message as { channel?: string }).channel === 'get-effective-presentation',
+            );
+            phone.receiveFromPeer(
+                {
+                    t: 'result',
+                    id: (sentRead[sentRead.length - 1].message as { id: number }).id,
+                    ok: true,
+                    result: {
+                        success: true,
+                        revision: 5,
+                        available: true,
+                        theme: 'host-two',
+                        language: 'en',
+                        reason: null,
+                    },
+                },
+                'host',
+            );
+            await expect(read).resolves.toMatchObject({ revision: 5, theme: 'dark' });
+            expect(readHostPresentation()).toMatchObject({ revision: 5, theme: 'host-two' });
+        });
+
+        test('the current projection is an ordinary read, which a reconnected phone asks for itself', () => {
+            connect();
+            void api.getEffectivePresentation();
+            expect(phone.sent.map(({ message }) => (message as { channel: string }).channel)).toContain(
+                'get-effective-presentation',
+            );
+        });
+    });
+
+    describe('effects, request identity and connection loss', () => {
+        const ID = /^[0-9a-f]{32}$/;
+        const connect = (): void => {
+            phone.emitJoin('host');
+            phone.receiveFromPeer(hostHello, 'host');
+        };
+        const invokes = () =>
+            phone.sent
+                .map(
+                    ({ message }) =>
+                        message as {
+                            t: string;
+                            id: number;
+                            channel: string;
+                            requestId?: string;
+                            expectedRevision?: number;
+                        },
+                )
+                .filter((message) => message.t === 'invoke');
+
+        test('an effect is refused before the host says hello and never queued; a read waits and is sent at hello', async () => {
+            phone.emitJoin('host');
+            const effect = api.pauseScenario('c1') as Promise<unknown>;
+            const spend = api.joinChallenge('c1', true) as Promise<unknown>;
+            const read = api.getInstallationScenario() as Promise<unknown>;
+            await expect(effect).rejects.toThrow('The connection to your computer dropped.');
+            await expect(spend).rejects.toThrow('The connection to your computer dropped.');
+            expect(invokes()).toHaveLength(0);
+            phone.receiveFromPeer(hostHello, 'host');
+            expect(invokes().map((message) => message.channel)).toEqual(['get-installation-scenario']);
+            phone.receiveFromPeer({ t: 'result', id: invokes()[0].id, ok: true, result: { success: true } }, 'host');
+            await expect(read).resolves.toEqual({ success: true });
+        });
+
+        test('a scenario change carries a fresh request identity; a read and an unrelated write carry none', () => {
+            connect();
+            void api.pauseScenario('c1');
+            void api.pauseScenario('c1');
+            void api.getInstallationScenario();
+            void api.acknowledgeImportReport();
+            const sent = invokes();
+            expect(sent.map((message) => message.requestId)).toEqual([
+                expect.stringMatching(ID),
+                expect.stringMatching(ID),
+                undefined,
+                undefined,
+            ]);
+            expect(sent[0].requestId).not.toBe(sent[1].requestId);
+        });
+
+        test('the revision the host answered for a target is what the next change to it expects', async () => {
+            connect();
+            const first = api.pauseScenario('c1') as Promise<unknown>;
+            const { id, requestId } = invokes()[0] as { id: number; requestId: string };
+            expect(invokes()[0].expectedRevision).toBeUndefined();
+            phone.receiveFromPeer(
+                {
+                    t: 'result',
+                    id,
+                    ok: true,
+                    result: { success: true },
+                    control: { requestId, target: 'c1', revision: 3 },
+                },
+                'host',
+            );
+            await first;
+            void api.resumeScenario('c1');
+            void api.resumeScenario('c2');
+            const [, second, other] = invokes();
+            expect(second.expectedRevision).toBe(3);
+            expect(other.expectedRevision).toBeUndefined();
+        });
+
+        test('a stale refusal brings the revision the target stands at now, which the next change to it expects', async () => {
+            connect();
+            const stale = api.pauseScenario('c1') as Promise<unknown>;
+            const { id, requestId } = invokes()[0] as { id: number; requestId: string };
+            phone.receiveFromPeer(
+                {
+                    t: 'result',
+                    id,
+                    ok: true,
+                    result: { success: false, error: 'stale', revision: 7 },
+                    control: { requestId, target: 'c1', revision: 7 },
+                },
+                'host',
+            );
+            await expect(stale).resolves.toEqual({ success: false, error: 'stale', revision: 7 });
+            void api.pauseScenario('c1');
+            expect(invokes()[1].expectedRevision).toBe(7);
+        });
+
+        test('an owner the host will not change is the host’s own answer, not an old-computer refusal', async () => {
+            connect();
+            const refused = api.setInstallationScenario('Plan', 'cli', 3) as Promise<unknown>;
+            const { id } = invokes()[0] as { id: number };
+            phone.receiveFromPeer(
+                { t: 'result', id, ok: true, result: { success: false, error: 'owner-policy', generation: 3 } },
+                'host',
+            );
+            await expect(refused).resolves.toEqual({ success: false, error: 'owner-policy', generation: 3 });
+        });
+
+        test('a loss after the send is unclear and carries the identity to ask about; nothing is sent again after the reconnect', async () => {
+            connect();
+            const lost = api.pauseScenario('c1') as Promise<{
+                success: boolean;
+                unclear: boolean;
+                requestId: string;
+                error: string;
+            }>;
+            const { requestId } = invokes()[0] as { requestId: string };
+            phone.emitLeave('host');
+            const answer = await lost;
+            expect(answer).toEqual({
+                success: false,
+                unclear: true,
+                requestId,
+                error: expect.not.stringMatching(/currency|spent|coin/i),
+            });
+            expect(answer.error).toContain('result is unknown');
+            // The reconnect re-sends nothing; the status is asked as a read, by identity.
+            phone.emitJoin('host');
+            phone.receiveFromPeer(hostHello, 'host');
+            expect(invokes()).toHaveLength(1);
+            void api.getScenarioRequestStatus({ requestId });
+            expect(invokes()[1]).toMatchObject({ channel: 'get-scenario-request-status', args: [{ requestId }] });
+        });
+
+        test('a send that fails is unclear with its identity too', async () => {
+            connect();
+            phone.failNextSendOnce();
+            await expect(api.setPhotoPool('p', ['1'])).resolves.toMatchObject({
+                success: false,
+                unclear: true,
+                requestId: expect.stringMatching(ID),
+            });
+        });
+
+        test('a too-large or unsendable answer to a scenario change is unclear with its identity', async () => {
+            connect();
+            const pending = api.deletePhotoPool('p') as Promise<unknown>;
+            phone.receiveFromPeer(
+                { t: 'result', id: invokes()[0].id, ok: false, error: REMOTE_RESULT_TOO_LARGE, reason: 'too-large' },
+                'host',
+            );
+            await expect(pending).resolves.toMatchObject({ unclear: true, requestId: invokes()[0].requestId });
+        });
+
+        test('a generic write that carries the scenario key is a scenario change, with an identity', () => {
+            connect();
+            void api.setSetting('scenario', 'x');
+            void api.saveSettings({ challengeSettings: { 1: { values: { scenario: 'x' } } } });
+            expect(invokes().map((message) => Boolean(message.requestId))).toEqual([true, true]);
         });
     });
 

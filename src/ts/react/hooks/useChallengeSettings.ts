@@ -14,6 +14,8 @@ import * as ipc from '@/api/ipc';
  *   manualPhotosOnly    effective manualPhotosOnly value
  *   isCompact           effective compactCards value
  *   hasCompactOverride  whether compactCards has a per-challenge override
+ *   unavailableReason   why the challenge's settings cannot be read (its scenario phase needs settings that were not
+ *                       published), else null; the values above then stay as they were, never an "off" read
  *   toggleCompact()     flip the per-card density (or remove the override)
  *
  * `initialCompact` seeds isCompact until the IPC read lands — pass the global
@@ -34,6 +36,7 @@ export function useChallengeSettings(
     const [manualPhotosOnly, setManualPhotosOnly] = useState(false);
     const [isCompact, setIsCompact] = useState(initialCompact);
     const [hasCompactOverride, setHasCompactOverride] = useState(false);
+    const [unavailableReason, setUnavailableReason] = useState<string | null>(null);
 
     // Whether the card is still mounted; a reload settling after unmount applies nothing.
     const mountedRef = useRef(true);
@@ -57,6 +60,7 @@ export function useChallengeSettings(
             const overrides = await ipc.getChallengeOverrides(id);
             if (!overrides || !current()) return;
             setHasCustomSettings(Object.values(overrides).some((o) => o !== null));
+            setHasCompactOverride((overrides.compactCards ?? null) !== null);
 
             const [fillOn, manualOnly, compact] = await Promise.all([
                 ipc.getEffectiveSetting('autoSubmit', id),
@@ -64,10 +68,18 @@ export function useChallengeSettings(
                 ipc.getEffectiveSetting('compactCards', id),
             ]);
             if (!current()) return;
+            // Each of these is a boolean whenever it can be read: anything else is an unavailable challenge (the channel
+            // answers null for a setting that cannot be read), which must not show as "off".
+            if ([fillOn, manualOnly, compact].some((value) => typeof value !== 'boolean')) {
+                const status = await ipc.getScenarioStatus(id);
+                if (!current()) return;
+                setUnavailableReason(status?.success ? (status.overlay.reason ?? 'unavailable') : 'unavailable');
+                return;
+            }
+            setUnavailableReason(null);
             setAutoSubmitEnabled(fillOn === true);
             setManualPhotosOnly(manualOnly === true);
             setIsCompact(compact === true);
-            setHasCompactOverride((overrides.compactCards ?? null) !== null);
         } catch {
             // Leave the previous values in place; the parent context
             // re-runs this effect when settings-changed fires.
@@ -102,6 +114,7 @@ export function useChallengeSettings(
         manualPhotosOnly,
         isCompact,
         hasCompactOverride,
+        unavailableReason,
         toggleCompact,
     };
 }

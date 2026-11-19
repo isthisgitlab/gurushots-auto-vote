@@ -13,6 +13,7 @@ import { ACTIONS } from './state';
 
 import type { TimerHandle } from '../scheduling/cadenceChain';
 import type { AutovoteAction } from './state';
+import type { RunGate } from './runGate';
 import type { AutovoteHost, SessionFlags } from './types';
 
 type ChainDeps = Parameters<typeof createCadenceChain>[0];
@@ -45,6 +46,22 @@ const createChainLog = (host: AutovoteHost): ChainLog => ({
 });
 
 /**
+ * The app settings one cadence decision runs on, captured once as the decision starts: the saved app block with the
+ * installation's effective check frequency and time zone over it (the saved ones, or the installation scenario's published
+ * phase over them: the main process answers each key's effective value). A key that cannot be read rejects the capture: the
+ * saved value never takes its place, and the chain's own degraded path answers with the plain default cadence.
+ */
+const loadCadenceSettings = async (host: AutovoteHost) => {
+    const [settings, timezone, checkFrequencyMin, checkFrequencyMax] = await Promise.all([
+        host.getSettings(),
+        host.getEffectiveSetting('timezone', 'global'),
+        host.getEffectiveSetting('checkFrequencyMin', 'global'),
+        host.getEffectiveSetting('checkFrequencyMax', 'global'),
+    ]);
+    return { ...settings.app, timezone, checkFrequencyMin, checkFrequencyMax } as typeof settings.app;
+};
+
+/**
  * Build the shared cadence chain (decide delay → arm the single timer → run
  * cycle → re-arm) — the same loop the CLI/Android scheduler drives. Built
  * exactly once per controller; the cycle runner reads
@@ -55,18 +72,25 @@ export const createControllerChain = ({
     host,
     apply,
     flags,
+    gate,
+    onObsolete,
     runCycle,
     cycleTimer,
 }: {
     host: AutovoteHost;
     apply: (action: AutovoteAction) => void;
     flags: SessionFlags;
+    gate: RunGate;
+    onObsolete: () => void;
     runCycle: () => Promise<ChallengeList>;
     cycleTimer: { current: TimerHandle | null };
 }): ReturnType<typeof createCadenceChain> => {
     // The per-challenge IPC resolvers (`./resolvers`), built over the same host.
     const resolvers = createResolvers(host);
     const chain = createCadenceChain({
+        // The Stop fence: a run that a full Stop made obsolete arms and dispatches nothing.
+        gate,
+        onObsolete,
         // A disposed controller must not re-arm from the chain's finally: the
         // mount went away, so even a still-true running flag stops the loop.
         isRunning: () => flags.running() && !flags.disposed(),
@@ -74,7 +98,7 @@ export const createControllerChain = ({
         setTimer: (handle) => {
             cycleTimer.current = handle;
         },
-        loadSettings: async () => (await host.getSettings()).app,
+        loadSettings: () => loadCadenceSettings(host),
         fetchChallenges: () => host.getActiveChallenges(),
         // The key-agnostic channel is typed `unknown`; the main process resolves
         // the schema-validated (numeric) effective value.
@@ -88,6 +112,8 @@ export const createControllerChain = ({
         resolveBoostPrefill: resolvers.resolveBoostPrefill,
         resolveCurrencyAuto: resolvers.resolveCurrencyAuto,
         resolveScenarioWake: resolvers.resolveScenarioWake,
+        resolveAccountWake: resolvers.resolveAccountWake,
+        isArmed: () => flags.mode() === 'armed',
         runCycle: () => runCycle(),
         log: createChainLog(host),
         // Surface the next armed cycle as an absolute wall-clock instant

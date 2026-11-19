@@ -11,10 +11,19 @@ const SETTINGS = '../../src/ts/core/settings';
 const LOGGER = '../../src/ts/core/logger';
 const INDEX = '../../src/ts/core/translations/index';
 
+/** The value state `readInstallationSetting` answers for a saved string, or the unknown one for nothing. */
+const stateOf = (value: unknown) =>
+    value === undefined
+        ? invalid({ state: 'unknown', reason: 'unset', keys: [] })
+        : invalid({ state: 'known', value: { kind: 'string', value } });
+
 /** Fresh module instance (the manager is module-level and reads settings on load). */
-const load = (getSetting: () => unknown) => {
+const load = (read: () => unknown) => {
     jest.resetModules();
-    jest.doMock(SETTINGS, () => ({ getSetting: jest.fn(getSetting) }));
+    jest.doMock(SETTINGS, () => ({
+        getSetting: jest.fn(),
+        readInstallationSetting: jest.fn(read),
+    }));
     const logger = jest.mocked(require(LOGGER) as typeof import('../../src/ts/core/logger'));
     const log = { warning: jest.fn() };
     logger.withCategory.mockReturnValue(invalid(log));
@@ -31,15 +40,15 @@ afterEach(() => {
 });
 
 describe('startup', () => {
-    test('adopts the saved language from the settings facade on load', () => {
-        const { translationManager, settings } = load(() => 'lv');
-        expect(settings.getSetting).toHaveBeenCalledWith('language');
+    test('adopts the effective language from the settings facade on load', () => {
+        const { translationManager, settings } = load(() => stateOf('lv'));
+        expect(settings.readInstallationSetting).toHaveBeenCalledWith('language');
         expect(translationManager.getCurrentLanguage()).toBe('lv');
         expect(translationManager.t('themes.dark')).toBe(latvian.themes.dark);
     });
 
     test('an unset or unknown saved language falls back to English', () => {
-        const { translationManager } = load(() => undefined);
+        const { translationManager } = load(() => stateOf(undefined));
         expect(translationManager.getCurrentLanguage()).toBe('en');
         expect(translationManager.t('themes.dark')).toBe(english.themes.dark);
     });
@@ -56,9 +65,9 @@ describe('startup', () => {
 });
 
 describe('loadLanguageFromSettings', () => {
-    test('re-reads the saved language (menu refresh after a language change)', async () => {
-        let saved = 'en';
-        const { translationManager } = load(() => saved);
+    test('re-reads the effective language (menu refresh after a language change)', async () => {
+        let saved: unknown = 'en';
+        const { translationManager } = load(() => stateOf(saved));
         saved = 'lv';
         await translationManager.loadLanguageFromSettings();
         expect(translationManager.getCurrentLanguage()).toBe('lv');

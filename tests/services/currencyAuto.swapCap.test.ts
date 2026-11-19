@@ -156,6 +156,13 @@ beforeEach(() => {
     };
     settings.getEntryPins.mockReturnValue({ boost: null, turbo: null });
     settings.getEffectiveSetting = invalid(jest.fn((key: string) => values[key]));
+    // The reserve is the installation's effective value, read again at each spend (the saved one with no installation scenario).
+    settings.captureInstallationSettings = invalid(
+        jest.fn((keys: string[]) => ({
+            ok: true,
+            values: Object.fromEntries(keys.map((key) => [key, values[key]])),
+        })),
+    );
     currencyActions.previewSwap.mockResolvedValue({ ...OK, candidate: { id: 'new1', member_id: 'm' } });
     currencyActions.fillExposure.mockResolvedValue(OK);
 });

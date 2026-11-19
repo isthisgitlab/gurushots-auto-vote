@@ -16,7 +16,9 @@
  */
 
 import * as logger from '../logger';
+import * as settings from '../settings';
 import * as votingLogic from '../services/VotingLogic';
+import { SCENARIO_UNAVAILABLE_ERROR } from './actions/shared';
 import { getEntryAgeLedger } from '../apiFactory';
 
 import type { IpcHandlerMap } from './invokeHandler';
@@ -36,6 +38,10 @@ const buildHandlers = () =>
                 const idType = typeof challenge.id;
                 if (idType !== 'string' && idType !== 'number') {
                     return { success: false as const, error: 'invalid challenge id' };
+                }
+                // Its timings come from the challenge's own settings: none while its scenario settings are unavailable.
+                if (settings.scenarioSubjectAvailable(challenge.id) === false) {
+                    return { success: false as const, error: SCENARIO_UNAVAILABLE_ERROR };
                 }
                 const now = Math.floor(Date.now() / 1000);
                 const {

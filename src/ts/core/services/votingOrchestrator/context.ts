@@ -8,6 +8,7 @@ import type { CurrencyPassDeps } from '../currencyAuto';
 import type { EntryTracker } from '../newEntryTracker';
 import type { EntryAgeLedger } from '../../types/stores';
 import type { MissionNeeds } from '../missions';
+import type { OperationRecord } from '../../scenarios/runtime';
 
 /**
  * Per-challenge context threaded to every deadline-action runner. All of a
@@ -44,6 +45,8 @@ export const VOTING_PASS_ENDPOINTS = [
     'runTurboGame',
     'searchTagAutocomplete',
     'getCurrentMemberProfile',
+    'getMyCompletedChallenges',
+    'getMyMissions',
 ] as const;
 
 /**
@@ -89,6 +92,8 @@ export type PassContext = {
     missionVoteQuota: number;
     allChallenges: Challenge[];
     turboSnapshot: number;
+    /** What a scenario action or the normal automation already did for which subject this cycle (absent: no record is kept). */
+    operations?: OperationRecord;
     /** Snap games played so far this pass: one per pass, so the pass is not held up by ten paced answers per challenge. */
     snapGames: { played: number };
 };

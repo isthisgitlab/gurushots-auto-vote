@@ -17,7 +17,7 @@ import type { CategoryLogger } from '../../src/ts/core/logger';
 type AxiosMock = jest.Mock<Promise<unknown>, [config: AxiosRequestConfig]>;
 const axios: AxiosMock = invalid(axiosModule);
 
-jest.mock('../../src/ts/core/settings', () => ({ getSetting: jest.fn() }));
+jest.mock('../../src/ts/core/settings', () => ({ getSetting: jest.fn(), captureInstallationSettings: jest.fn() }));
 jest.mock('../../src/ts/core/timing', () => ({ sleep: jest.fn(() => Promise.resolve()) }));
 jest.mock('../../src/ts/core/api/randomizer', () => ({
     generateRandomHeaders: jest.fn((token: string) => ({ 'x-token': token })),
@@ -36,6 +36,11 @@ const PROFILE_URL = ENDPOINTS.currentMemberProfile;
 const useSettings = (overrides = {}) => {
     const values: Record<string, unknown> = { apiTimeout: 30, apiMaxRetries: 0, apiRetryBaseDelayMs: 0, ...overrides };
     settings.getSetting.mockImplementation((key) => values[key]);
+    // No installation scenario: the captured policy is the saved values.
+    settings.captureInstallationSettings.mockImplementation((keys) => ({
+        ok: true,
+        values: Object.fromEntries(keys.map((key) => [key, values[key]])),
+    }));
 };
 
 const httpError = (status: number, data: unknown) => {

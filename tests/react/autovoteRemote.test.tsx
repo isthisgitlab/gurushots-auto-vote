@@ -20,6 +20,10 @@ const captured: { local: number; remote: number } = { local: 0, remote: 0 };
 /** The state one relayed cycle change carries. */
 const relayedState = {
     running: true,
+    executionMode: 'voting' as const,
+    stopEpoch: null,
+    lastStop: null,
+    startRefusal: null,
     cycles: 1,
     lastRun: null,
     nextRunAt: null,
@@ -111,10 +115,11 @@ describe('AutovoteProvider on the remote kind', () => {
         await act(() => latest!.stop());
         await act(() => latest!.rearmSchedule());
         const commands = phone.sent.map(({ message }) => message as { t: string; command?: string });
+        const requestId = expect.stringMatching(/^[0-9a-f]{32}$/);
         expect(commands).toEqual([
-            { t: 'autovote-command', command: 'start' },
-            { t: 'autovote-command', command: 'stop' },
-            { t: 'autovote-command', command: 'rearm' },
+            { t: 'autovote-command', command: 'start', requestId },
+            { t: 'autovote-command', command: 'stop', requestId },
+            { t: 'autovote-command', command: 'rearm', requestId },
         ]);
     });
 
@@ -160,5 +165,30 @@ describe('AutovoteProvider on the remote kind', () => {
         expect(refreshes).toBe(0);
         expect(latest?.running).toBe(false);
         expect(latest?.cycles).toBe(0);
+    });
+
+    test('a Run sent to the computer is pending until it answers, and a Stop reads as requested, never as stopped', async () => {
+        setRemoteConnectionState('connected');
+        setRemoteHostPeerId('host');
+        render(
+            <AutovoteProvider remoteTransport={phone as RemoteTransport}>
+                <Probe />
+            </AutovoteProvider>,
+        );
+        expect(latest?.startPending).toBe(false);
+        await act(() => latest!.start());
+        expect(latest?.startPending).toBe(true);
+        expect(latest?.executionMode).toBe('stopped');
+
+        await act(async () => {
+            phone.receiveFromPeer({ t: 'autovote-state', state: relayedState, hostRun: 'run-a', n: 1 }, 'host');
+            await Promise.resolve();
+        });
+        expect(latest?.startPending).toBe(false);
+        expect(latest?.executionMode).toBe('voting');
+
+        await act(() => latest!.stop());
+        expect(latest?.lastStop).toEqual({ outcome: 'requested', durable: false });
+        expect(latest?.executionMode).toBe('voting');
     });
 });

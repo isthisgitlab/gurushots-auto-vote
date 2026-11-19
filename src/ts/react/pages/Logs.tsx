@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 import * as ipc from '@/api/ipc';
 import { TranslationProvider, useTranslation } from '@/contexts/TranslationContext';
 import { useDocumentTheme } from '@/hooks/useDocumentTheme';
+import { useEffectivePresentation } from '@/api/useEffectiveSettings';
+import { EffectiveUnavailableNotice } from '@/components/ui/EffectiveUnavailableNotice';
 import { useLogStream } from '@/hooks/useLogStream';
 import { LogsNavbar } from '@/components/logs/LogsNavbar';
 import { LogViewerBody } from '@/components/logs/LogViewerBody';
@@ -16,8 +18,9 @@ function LogsPageContent() {
     const { ready, t } = useTranslation();
     const { entries, connected } = useLogStream();
 
-    // The window reads only `language` and `theme` (logsWindowSettingKeys): the theme on load, then live from the
-    // settings-changed payload, whose `app` block carries just those two for this window.
+    // The window reads only `language` and `theme` (logsWindowSettingKeys) and the presentation-only projection. The saved theme
+    // (on load, then live from the settings-changed payload, whose `app` block carries just those two for this window) is only the
+    // fallback until the host has published the effective one, which is what is painted.
     const [theme, setTheme] = useState<string | null>(null);
     useEffect(() => {
         let current = true;
@@ -36,7 +39,8 @@ function LogsPageContent() {
             off?.();
         };
     }, []);
-    useDocumentTheme(theme);
+    const { presentation, applied } = useEffectivePresentation();
+    useDocumentTheme(presentation?.theme ?? theme, applied);
 
     // Show loading while translation manager initializes
     if (!ready) {
@@ -46,6 +50,12 @@ function LogsPageContent() {
     return (
         <div className="min-h-screen bg-base-200">
             <LogsNavbar connected={connected} />
+
+            <div className="container mx-auto px-6 pt-4">
+                <EffectiveUnavailableNotice
+                    reasons={presentation?.available === false ? [presentation.reason ?? 'unavailable'] : []}
+                />
+            </div>
 
             <div className="container mx-auto p-6">
                 <div className="card bg-base-100 shadow-md">

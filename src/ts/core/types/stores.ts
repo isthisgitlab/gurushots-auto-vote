@@ -5,6 +5,7 @@
  */
 
 import type { EntryEnteredTime } from './gurushots';
+import type { ResolvedSchedules } from './autoFill';
 
 /** What `updateThrough` came to: saved, left alone because `update` declined (answered null), or not saved. */
 export type ThroughResult = 'saved' | 'aborted' | 'failed';
@@ -145,6 +146,46 @@ export interface ScenarioFiredRecord {
     haltOrigin?: 'pending';
 }
 
+/**
+ * What the scenario runner published for a challenge's active phase: the one prepared settings overlay everything else
+ * reads (settings/scenarioOverlay.ts). Only the resolved binding values are held; the phase's literals and its profile
+ * are read from the current configuration, and `documentFingerprint` proves they still are what the publication was
+ * made from.
+ */
+export interface ScenarioPublication {
+    /** Counts the publications of this record (1 for the first). */
+    revision: number;
+    /** A hash of the phase's definition and of the profile it selects, as they were when this was published. */
+    documentFingerprint: string;
+    phase: string;
+    /** The phase entry this was published for: a publication does not outlive its phase entry. */
+    phaseEnteredAt: number;
+    /** unix seconds: when the evidence the bindings were resolved from was observed */
+    observedAt: number;
+    /** unix seconds: the next instant a binding result can change at, or null when none is known */
+    validUntil: number | null;
+    /** setting key → resolved value, one per binding of the phase */
+    bindings: Record<string, unknown>;
+    /** The profile the phase selected, or null. */
+    profile: string | null;
+    /** The phase's dynamic schedules, resolved from the evidence observed at `observedAt` (absent: the phase has none). */
+    schedules?: ResolvedSchedules;
+    /**
+     * Set on the installation's publication only: the installation generation (the owner fence) it was prepared under.
+     * A publication made under another generation is not read.
+     */
+    generation?: number;
+}
+
+/** Why a photo pool leaves nothing to pick from while its phase demands it (`only`): its name is not saved on this account, or every photo of it is given out. */
+export type PhotoPoolBlock = 'pool-unbound' | 'pool-exhausted';
+
+/** One phase's photo pool progress (see ScenarioState.poolProgress): photo ids, in the order they were given out. */
+interface PoolProgress {
+    consumed: string[];
+    reserved: string[];
+}
+
 /** A challenge's runtime position in its scenario (scenarioStateStore record). */
 export interface ScenarioState {
     scenario: string;
@@ -183,6 +224,58 @@ export interface ScenarioState {
     updatedAt?: number;
     /** how many times this challenge's record was reset when the stored one was written (see ScenarioEpoch) */
     gen?: number;
+    /** The overlay the runner published for the active phase (see ScenarioPublication). */
+    published?: ScenarioPublication;
+    /**
+     * The assignment generation of this subject (absent: 0). A runner step writes only while the stored generation is the
+     * one it read; a handoff and an owner change of the installation scenario advance it, so a former owner fails its next write.
+     */
+    generation?: number;
+    /** Set while the subject is paused: no rule action and no publication update runs (`at`: unix seconds). */
+    paused?: { at: number; reason: string } | null;
+    /**
+     * Set on the installation's record by a full user Stop (`epoch`: the Stop epoch it was made under): its publication is
+     * withdrawn, so every installation setting reads its saved value at once, with nothing written to the configuration. It is no
+     * pause and no reset: phase and progress are kept, and an explicit user re-arm clears it before the next publication.
+     * Until then nothing is published.
+     */
+    withdrawn?: { at: number; epoch: number } | null;
+    /**
+     * A handoff to another scenario that was begun and not finished: the assignment it left (`from`), the one it goes to
+     * (`to`; null: none) and the generation it was begun at. While it stands the subject runs no action.
+     */
+    handoff?: { from: string; to: string | null; generation: number; at: number } | null;
+    /**
+     * The runtime phase patch: setting key → value, set by `setSetting` for this phase entry and the top tier of the
+     * subject's overlay (above the phase's literals and bindings). Never written to the configuration; dropped when the
+     * subject leaves the phase.
+     */
+    phasePatch?: Record<string, unknown>;
+    /**
+     * The runtime phase profile, set by `useProfile` for this phase entry: absent, the phase document's `profile`; a name,
+     * that saved profile instead; null, no phase profile. Dropped when the subject leaves the phase.
+     */
+    phaseProfile?: string | null;
+    /**
+     * The runtime pins, set by `setPin` / `clearPin` for this phase entry: an entry's photo id, or null for no pin for that
+     * power whatever the phase and the saved pin say (a power left out inherits). Above the phase's own pins and the user's
+     * saved pins; never written to the configuration; dropped when the subject leaves the phase.
+     */
+    phasePins?: { boost?: string | null; turbo?: string | null };
+    /**
+     * What each phase's photo pool has given out, by phase name: `consumed` photos (entered, or swapped in) are never offered
+     * again, in this phase or after a re-entry; `reserved` photos went out in a submit or swap that got no answer and wait
+     * for the next read of the challenge to say whether they landed. Kept when the subject leaves the phase; the pool's own
+     * definition is never changed.
+     */
+    poolProgress?: Record<string, PoolProgress>;
+    /** The last lifecycle request applied to the subject (unix seconds), for a repeated request to answer the same. */
+    lastRequest?: { id: string; result: string; at: number } | null;
+    /**
+     * Not stored: set when the stored record held a `published` field that is malformed. The field is left out of the
+     * state (the next write drops it), and the publication reads as unavailable; the rest of the record is intact.
+     */
+    publicationUnreadable?: true;
     /**
      * Not stored: the resets this state was read under. A write of a state read under older ones is refused, so a
      * step that was running when its challenge (or every challenge) was reset cannot bring the old progress back.
@@ -194,4 +287,16 @@ export interface ScenarioState {
 export interface ScenarioEpoch {
     all: number;
     gen: number;
+}
+
+/**
+ * The priority Stop fence (scenarioStopFence.json): one small cell, apart from the progress ledger and from any control
+ * inbox. `stopEpoch` counts the full Stops; `blocked` is set by a Stop and cleared only by a fresh explicit user re-arm;
+ * `lastArm` is the last arming the fence allowed (the epoch it was allowed at, and when).
+ */
+export interface ScenarioStopFence {
+    stopEpoch: number;
+    blocked: boolean;
+    lastStop: { requestId: string; at: number; durable: boolean } | null;
+    lastArm: { epoch: number; at: number } | null;
 }

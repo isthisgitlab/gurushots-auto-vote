@@ -39,6 +39,7 @@ import { watchConnection } from './connection';
 import { watchPeerMessages } from './messages';
 import { installApiSurface, LOCAL_CHANNELS } from './apiSurface';
 import { createViewPrefs } from './viewPrefs';
+import { setHostPresentationSource } from '../../../core/remote/hostPresentation';
 
 export { LOCAL_CHANNELS };
 
@@ -67,6 +68,8 @@ const installPeerBridge = (transport: RemoteTransport): void => {
     // One view-prefs store per install: the routed window.api calls, the desktop's settings-changed
     // events and the local events a phone write dispatches must reach the same instance.
     const viewPrefs = createViewPrefs({ ctx, sendInvoke: pipeline.sendInvoke });
+    // What the computer paints is the bridge's to know, and the page's to read (a panel that inspects the host).
+    setHostPresentationSource(viewPrefs.hostPresentation);
     const { settlePendingForLostConnection, stopForIncompatibility, reconnect } = watchConnection({
         ctx,
         hello,

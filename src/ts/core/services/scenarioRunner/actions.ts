@@ -9,20 +9,34 @@ import * as settings from '../../settings';
 import * as currencyActions from '../currencyActions';
 import { isManualPhotosOnly } from '../manualPhotosOnly';
 import { submitNewEntryForAction, reflectNewEntry, reflectEntryFlag, getSlotsRemaining } from '../autoFill';
-import { selectEntry, entriesOf } from '../../scenarios/selectors';
+import { entriesOf } from '../../scenarios/selectors';
+import { selectedEntry } from '../../scenarios/facts';
+import { RANKING_SELECTORS } from '../../scenarios/vocabulary';
 import { isGuruPicked } from '../../voting/currencyAuto';
 import { isKeyUnlockedBoost } from '../../voting/boostWindow';
 import { isKnownTurboMode } from '../../voting/turboMode';
+import { claimChallengeReward, claimMissionReward } from '../autoClaim';
+import { collectPoolEvents } from '../entryTimes';
+import { evaluateExpression } from '../../scenarios/expressions';
 import type {
     ActedChallenge,
     ActionHandler,
     ActionOutcome,
     ActionType,
+    ActiveContext,
+    ContextOf,
+    NotDoneOutcome,
+    PreJoinContext,
     RunnerContext,
     ScenarioAction,
     SpendAction,
     SwapPhoto,
 } from './types';
+import type { RankingEntry } from '../../types/gurushots';
+import type { ScenarioExpr, ScenarioSelector } from '../../types/scenario';
+import { expressionEvidence, loadAccountEvidence, loadSelectorEvidence } from './facts';
+import { AUTOMATION_ACTIONS } from './automation';
+import { PHASE_ACTIONS } from './phaseActions';
 import type { ScenarioState } from '../../types/stores';
 import {
     BOOST_APPLICABLE,
@@ -30,15 +44,16 @@ import {
     deferred,
     done,
     failed,
+    joinOutcome,
     lockedCurrencySpend,
     noAnswer,
     refreshLive,
     rememberedPhoto,
-    selectContext,
     skipped,
     spendAllowed,
     unclearHalted,
     limitOf,
+    nowSec,
 } from './support';
 import type { Retry } from './support';
 
@@ -49,7 +64,45 @@ import type { Retry } from './support';
 // skipped step for good.
 const MANUAL_PHOTOS_SKIP = 'Manual Only is on';
 
-const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type: K }>> } = {
+/** The selectors that read nothing but the entries, the memory and the vote history: a selection they cannot make is a skip. */
+const LEGACY_SELECTORS: ReadonlySet<string> = new Set(['slot', 'memory', 'fastest', ...RANKING_SELECTORS]);
+
+/**
+ * The entry a step's selector picks now, from the evidence the selector reads (loaded fresh), or the outcome of the step
+ * when there is none: no such entry is a skip. A selection the data cannot decide defers, for the newer selectors (an
+ * unreadable comparison on a potential winner is never a guess); the original ones skip, as they always did.
+ *
+ * @param none - the skip message when no entry matches
+ * @param what - what the target is for, for the deferral message
+ */
+const pickTarget = async (
+    selector: ScenarioSelector,
+    ctx: ActiveContext,
+    state: ScenarioState,
+    { none, what }: { none: string; what: string },
+): Promise<{ entry: RankingEntry } | { outcome: NotDoneOutcome }> => {
+    const evidence = await loadSelectorEvidence(selector, ctx);
+    const picked = selectedEntry(
+        {
+            subject: { kind: 'active', challenge: ctx.challenge, provenance: 'active-list' },
+            challenge: ctx.challenge,
+            state: { phaseEnteredAt: state.phaseEnteredAt, memory: state.memory, history: state.history },
+            now: nowSec(),
+            timezone: ctx.timezone,
+            ...evidence,
+        },
+        selector,
+    );
+    if (picked.state === 'known') return { entry: picked.value };
+    if (picked.state === 'unknown' && !LEGACY_SELECTORS.has(selector.by)) {
+        return { outcome: deferred(`the ${what} target cannot be told yet (${picked.reason})`) };
+    }
+    return { outcome: skipped(none) };
+};
+
+const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type: K }>, ContextOf<K>> } = {
+    ...AUTOMATION_ACTIONS,
+    ...PHASE_ACTIONS,
     enterPhoto: async (action, ctx, state) => {
         const { challenge, pass } = ctx;
         if (isManualPhotosOnly(settings, challenge.id)) return skipped(MANUAL_PHOTOS_SKIP);
@@ -65,6 +118,8 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
             if (filled.reason === 'data-incomplete') return deferred('challenge data cannot be read');
             if (filled.reason === 'no-eligible') return skipped('no eligible photo to enter');
             if (filled.reason === 'no-chosen') return skipped('no chosen photo can be entered');
+            // The phase's photo pool has nothing to give: its reason as the code says it (never another photo instead).
+            if (filled.reason === 'pool-unbound' || filled.reason === 'pool-exhausted') return skipped(filled.reason);
             if (!filled.ok) return failed(`no photo was entered (${filled.reason})`);
             enteredId = String(filled.imageId);
         } else {
@@ -91,8 +146,12 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
             return skipped(`memory slot "${(action.with as { memory: string }).memory}" is empty`);
         const stale = await refreshLive(ctx);
         if (stale) return stale;
-        const target = selectEntry(action.entry, challenge, selectContext(state));
-        if (!target) return skipped('no entry matches the swap target');
+        const picked = await pickTarget(action.entry, ctx, state, {
+            none: 'no entry matches the swap target',
+            what: 'swap',
+        });
+        if ('outcome' in picked) return picked.outcome;
+        const target = picked.entry;
         // A refusal, not a re-selection: the selectors know nothing of guru picks, so the rule's
         // condition and its swap still resolve the same photo — the swap just never fires on one.
         if ('skipProtected' in action.entry && action.entry.skipProtected === true && isGuruPicked(target)) {
@@ -149,8 +208,12 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
         if (!BOOST_APPLICABLE.has(challenge.member?.boost?.state)) {
             return skipped(`the boost is not available (${challenge.member?.boost?.state ?? 'unknown'})`);
         }
-        const target = selectEntry(action.entry, challenge, selectContext(state));
-        if (!target) return skipped('no entry matches the boost target');
+        const picked = await pickTarget(action.entry, ctx, state, {
+            none: 'no entry matches the boost target',
+            what: 'boost',
+        });
+        if ('outcome' in picked) return picked.outcome;
+        const target = picked.entry;
         const response = await pass.api.applyBoostToEntry(challenge.id, String(target.id), pass.token);
         if (!response) return failed(`the boost on entry ${target.id} was refused`);
         reflectEntryFlag(challenge, target.id, 'boosted');
@@ -168,8 +231,12 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
         }
         // A turbo without a mode is the mobile copy, whose WON can be false for a Snap game.
         if (!isKnownTurboMode(challenge.member.turbo)) return skipped('the turbo mode is unknown');
-        const target = selectEntry(action.entry, challenge, selectContext(state));
-        if (!target) return skipped('no entry matches the turbo target');
+        const picked = await pickTarget(action.entry, ctx, state, {
+            none: 'no entry matches the turbo target',
+            what: 'turbo',
+        });
+        if ('outcome' in picked) return picked.outcome;
+        const target = picked.entry;
         const result = await pass.api.applyTurbo(challenge.id, String(target.id), pass.token);
         if (!result?.ok) return failed(`the turbo on entry ${target.id} was refused`);
         reflectEntryFlag(challenge, target.id, 'turbo');
@@ -177,6 +244,21 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
         member.turbo = { ...member.turbo, state: 'USED' };
         return done();
     },
+
+    // A pin of this phase entry, written to the subject's progress and never to the saved pins. With no entry to pin the
+    // step waits (a skipped selection of the other actions would pass the step over for good).
+    setPin: async (action, ctx, state) => {
+        const picked = await pickTarget(action.entry, ctx, state, {
+            none: 'no entry matches the pin target',
+            what: 'pin',
+        });
+        if ('outcome' in picked) {
+            return picked.outcome.status === 'skipped' ? deferred(picked.outcome.message) : picked.outcome;
+        }
+        return done({ pin: { power: action.power, id: String(picked.entry.id) } });
+    },
+
+    clearPin: async (action) => done({ pin: { power: action.power, id: null } }),
 
     unlockBoost: async (action, ctx, state) => {
         const blocked = await spendAllowed('unlockBoost', ctx, state);
@@ -214,9 +296,9 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
     },
 
     remember: async (action, ctx, state) => {
-        const target = selectEntry(action.entry, ctx.challenge, selectContext(state));
-        if (!target) return skipped('no entry matches');
-        return done({ remember: { [action.slot]: String(target.id) } });
+        const picked = await pickTarget(action.entry, ctx, state, { none: 'no entry matches', what: 'remember' });
+        if ('outcome' in picked) return picked.outcome;
+        return done({ remember: { [action.slot]: String(picked.entry.id) } });
     },
 
     forget: async (action) => done({ forget: action.slot }),
@@ -224,30 +306,104 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
     goto: async (action) => done({ goto: action.phase }),
 
     notify: async (action) => done({ notice: action.message }),
+
+    join: async (action, ctx, state) => {
+        // What the scenario may still spend on joins, and its price limit worked out now: each can only narrow the caps
+        // the join already has, never widen them. A limit that cannot be worked out defers: nothing is joined on a guess.
+        let cap = coinsLeft(ctx, state);
+        if (action.maxCoins) {
+            const limit = await priceLimit(action.maxCoins, ctx, state);
+            if (limit === null) return deferred('the price limit cannot be worked out yet');
+            cap = cap === null ? limit : Math.min(cap, limit);
+        }
+        return joinOutcome(await ctx.join(cap), 'direct');
+    },
+
+    claimChallengeReward: async (action, ctx) => {
+        const result = await claimChallengeReward(ctx.reads.token, ctx.challengeId, ctx.claims.deps);
+        return claimOutcome(result, 'the rewards of this challenge');
+    },
+
+    claimMissionReward: async (action, ctx) => {
+        const result = await claimMissionReward(ctx.reads.token, action.missionId, ctx.claims.deps);
+        return result === 'unknown'
+            ? skipped(`there is no mission ${action.missionId}`)
+            : claimOutcome(result, `mission ${action.missionId}`);
+    },
+};
+
+/**
+ * What a reward claim came to, as a rule's step: sent and confirmed is done; a read that failed, or a claim sent and not
+ * confirmed, is worth retrying (a claim is safe to send again); nothing waiting is a skip.
+ */
+const claimOutcome = (
+    result: Exclude<Awaited<ReturnType<typeof claimChallengeReward>>, never>,
+    what: string,
+): ActionOutcome => {
+    switch (result) {
+        case 'claimed':
+            return done();
+        case 'nothing':
+            return skipped(`${what} is not waiting to be claimed`);
+        case 'failed':
+            return failed(`the claim of ${what} was not confirmed`);
+        case 'throttled':
+            return deferred(
+                `the claim of ${what} waits: claims are sent at most once an hour, as the automatic ones are`,
+            );
+        default:
+            return deferred(`${what} cannot be claimed now (the list could not be read, or the claim was cancelled)`);
+    }
+};
+
+/**
+ * What the scenario may still spend on joins (its coin limit less what it spent): null with no limit.
+ */
+const coinsLeft = (ctx: PreJoinContext, state: ScenarioState): number | null => {
+    const limit = ctx.scenario.limits?.coins;
+    return limit === undefined ? null : Math.max(0, limit - (state.spent.coins ?? 0));
+};
+
+/**
+ * A join's price limit, worked out now from fresh evidence: the coins, or null when the value is unknown or absent.
+ */
+const priceLimit = async (expr: ScenarioExpr, ctx: PreJoinContext, state: ScenarioState): Promise<number | null> => {
+    const evidence = await loadAccountEvidence(expressionEvidence(expr), ctx.reads);
+    const value = evaluateExpression(expr, {
+        challenge: ctx.challenge,
+        subject: { kind: 'candidate', challenge: ctx.challenge, provenance: 'open-list' },
+        state: { phaseEnteredAt: state.phaseEnteredAt, memory: state.memory, history: state.history },
+        now: nowSec(),
+        timezone: ctx.timezone,
+        ...evidence,
+    });
+    return value.state === 'known' && value.value.kind === 'number' ? Math.max(0, value.value.value) : null;
 };
 
 /**
  * Whether a spend that got no answer has positively taken effect on the live challenge: the boost is unlocked by a
  * key, the exposure is full, the replacement photo is entered. Anything the live state cannot show — a swap whose
- * replacement a selector chooses, a challenge that is gone — is not it. The caller re-reads live first and hands
- * over the step's blocking outcome (null when the live state is good to read on).
+ * replacement a selector chooses or the normal automation picked, a challenge that is gone — is not it. The caller re-reads
+ * live first and hands over the step's blocking outcome (null when the live state is good to read on).
  */
 const spendLanded = async (
-    action: ScenarioAction & { type: SpendAction },
-    ctx: RunnerContext,
+    spend: SpendAction,
+    action: ScenarioAction,
+    ctx: ActiveContext,
     state: ScenarioState,
 ): Promise<{ landed: boolean; remember: Record<string, string> }> => {
     const none = { landed: false, remember: {} };
     const { challenge } = ctx;
-    if (action.type === 'unlockBoost') {
+    if (spend === 'unlockBoost') {
         // Unlocked, or already applied to a photo since: either way the key was spent.
         const boost = challenge.member?.boost;
         return { ...none, landed: isKeyUnlockedBoost(boost) || boost?.state === 'USED' };
     }
-    if (action.type === 'fillExposure') {
+    if (spend === 'fillExposure') {
         return { ...none, landed: Number(challenge.member?.ranking?.exposure?.exposure_factor) >= 100 };
     }
-    // Only a swap is left, whose replacement is known only when the step names it.
+    // Only a swap is left, whose replacement is known only when the step names it (the normal automation's pick is not).
+    if (action.type !== 'swap') return none;
     const photo = rememberedPhoto(action.with, state);
     if (typeof photo !== 'string' || !entriesOf(challenge).some((entry) => String(entry.id) === photo)) return none;
     return { landed: true, remember: action.rememberAdded ? { [action.rememberAdded]: photo } : {} };
@@ -256,15 +412,17 @@ const spendLanded = async (
 /**
  * The retry of a step whose spend got no answer. It never spends: it passes over the step when the live challenge
  * shows the spend landed, and otherwise ends the rule, since the step cannot be repeated and the steps after it
- * were meant to follow a spend that did happen.
+ * were meant to follow a spend that did happen. The step keeps its original request identity: nothing it was resolved
+ * from (a binding, a patch, a selector) is read again to aim another request.
  *
  * A re-read that cannot be trusted (a marked challenge, or a prune-unsafe read that dropped elements) is neither:
  * like the spend itself, it gave no answer — the same outcome keeps the spend in flight, counted, and the next
  * pass settles it again, never spending it.
  */
 const settleUnclearSpend = async (
-    action: ScenarioAction & { type: SpendAction },
-    ctx: RunnerContext,
+    spend: SpendAction,
+    action: ScenarioAction,
+    ctx: ActiveContext,
     state: ScenarioState,
     from: Retry,
 ): Promise<ActionOutcome> => {
@@ -273,14 +431,34 @@ const settleUnclearSpend = async (
         // A spend that got no answer was counted when it was marked; one recovered from its pending marker is
         // counted now, and its type stays `lost` so the card can tell that origin.
         return {
-            ...noAnswer(action.type, from.count),
+            ...noAnswer(spend, from.count),
             ...(from.origin === 'pending' ? { origin: 'pending' as const } : {}),
         };
     }
-    const { landed, remember } = blocked ? { landed: false, remember: {} } : await spendLanded(action, ctx, state);
+    const { landed, remember } = blocked
+        ? { landed: false, remember: {} }
+        : await spendLanded(spend, action, ctx, state);
     // A spend that got no answer was counted when it was marked; one recovered from its pending marker is counted now.
-    if (landed) return done({ remember, ...(from.count ? { spent: limitOf(action.type) } : {}) });
-    return unclearHalted(action.type, from);
+    if (landed) return done({ remember, ...(from.count ? { spent: limitOf(spend) } : {}) });
+    return unclearHalted(spend, from);
 };
 
-export { ACTIONS, settleUnclearSpend };
+/**
+ * What a step's submits and swaps did to the photos of the phase's pool, as the effects its reducer applies: only photos the
+ * pool lists. The step runs with the progress write held back (collectPoolEvents), so the runner's own write is not refused
+ * as changed behind it. Both outcomes carry them: a submit that got no answer ends the step as a failure with its photo reserved.
+ */
+const withPoolReport = async (
+    ctx: RunnerContext,
+    state: ScenarioState,
+    run: () => Promise<ActionOutcome>,
+): Promise<ActionOutcome> => {
+    const { result, events } = await collectPoolEvents(ctx.challengeId, run);
+    const pool = ctx.scenario.phases[state.phase]?.photoPool;
+    const listed = pool ? (settings.getPhotoPools()[pool.name] ?? []) : [];
+    const consume = events.consume.filter((id) => listed.includes(id));
+    const reserve = events.reserve.filter((id) => listed.includes(id));
+    return consume.length > 0 || reserve.length > 0 ? { ...result, pool: { consume, reserve } } : result;
+};
+
+export { ACTIONS, settleUnclearSpend, withPoolReport };

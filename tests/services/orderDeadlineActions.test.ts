@@ -14,6 +14,8 @@
 
 import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
+import { answerInstallationReadFromSaved } from '../helpers/savedInstallationRead';
+answerInstallationReadFromSaved(settings);
 import VotingLogic = require('../../src/ts/core/services/VotingLogic');
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import type { Challenge } from '../../src/ts/core/types/gurushots';
@@ -174,5 +176,67 @@ describe('orderDeadlineActions', () => {
             { action: 'boost', thresholdSec: 900 },
             { action: 'emergencySubmit', thresholdSec: 300 },
         ]);
+    });
+});
+
+describe('orderDeadlineActions — a zone the installation cannot read', () => {
+    test('opens no clock window and sets no clock deadline; the relative schedule still orders the submission', () => {
+        const now = Date.UTC(2026, 0, 15, 12, 30) / 1000;
+        mockSettings({
+            autoSubmit: true,
+            autoSubmitTime: ['12:00'],
+            autoSubmitWindowMinutes: 60,
+            autoSubmitSchedule: [{ count: 2, seconds: 600 }],
+            turboTime: 7200,
+        });
+        settings.captureInstallationSettings = invalid(
+            jest.fn(() => ({ ok: false, key: 'timezone', reason: 'the published settings have expired' })),
+        );
+        try {
+            const actions = VotingLogic.orderDeadlineActions(
+                buildChallenge({ closeTime: now + 10_000, boost: { state: 'AVAILABLE_KEY' } }),
+                now,
+            );
+            // The clock window is not active, so the submission keeps its own (relative) place and runs by its schedule.
+            expect(actions[0]).toEqual({ action: 'turbo', thresholdSec: 7200 });
+            expect(actions).toContainEqual({ action: 'autoSubmit', thresholdSec: 600 });
+        } finally {
+            answerInstallationReadFromSaved(settings);
+        }
+    });
+});
+
+describe('orderDeadlineActions — a scenario phase’s dynamic submit schedule', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    const read = (value: unknown) =>
+        settings.getPhaseSchedules.mockReturnValue(invalid<ReturnType<typeof settingsModule.getPhaseSchedules>>(value));
+    const submitRows = [{ count: 2, state: 'known', at: 1_000_000 - 900 }];
+
+    test('its known row sorts like a literal one: the deadline measured back from close', () => {
+        mockSettings({ autoSubmitSchedule: [], turboTime: 720, emergencySubmit: 300 });
+        read({ kind: 'resolved', schedules: { submit: { alignment: 'end', rows: submitRows } } });
+        expect(order(buildChallenge())).toEqual(['autoSubmit', 'turbo', 'emergencySubmit', 'boost']);
+    });
+
+    test('an unknown row supplies no deadline, so the fill is not ordered ahead of anything', () => {
+        mockSettings({ autoSubmitSchedule: DEFAULT_SCHEDULE, turboTime: 720, emergencySubmit: 300 });
+        read({
+            kind: 'resolved',
+            schedules: { submit: { alignment: 'end', rows: [{ count: 2, state: 'unknown', reason: 'r' }] } },
+        });
+        expect(order(buildChallenge()).indexOf('autoSubmit')).toBeGreaterThan(order(buildChallenge()).indexOf('turbo'));
+    });
+
+    test('published settings that cannot be read give the fill no deadline, not the literal one', () => {
+        mockSettings({ autoSubmitSchedule: [{ count: 2, seconds: 900 }], turboTime: 720, emergencySubmit: 300 });
+        read({ kind: 'unavailable', reason: 'expired' });
+        expect(order(buildChallenge())[0]).not.toBe('autoSubmit');
+    });
+
+    test('a phase with no submit schedule of its own keeps the literal one', () => {
+        mockSettings({ autoSubmitSchedule: [{ count: 2, seconds: 900 }], turboTime: 720, emergencySubmit: 300 });
+        read({ kind: 'resolved', schedules: {} });
+        expect(order(buildChallenge())[0]).toBe('autoSubmit');
     });
 });

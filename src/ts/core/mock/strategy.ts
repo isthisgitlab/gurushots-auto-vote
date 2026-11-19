@@ -27,26 +27,50 @@ import { platform } from '../platform/port';
 import { pickEndpoints } from '../pickEndpoints';
 import { mockSwapBackLedger } from '../swapBackStore';
 import { createMemoryAutoSpendLedger } from '../currencyAutoStore';
+import { clockMs } from '../simulationScope';
 import { createMemoryEntryAgeLedger } from '../entryAgeStore';
 import { mockScenarioStateLedger } from '../scenarioStateStore';
+import { createLifecycle, runArmedCycle } from '../services/scenarioRunner/lifecycle';
+import type { Lifecycle } from '../services/scenarioRunner/lifecycle';
 import { mockMethod } from './simulate';
 
 import type { MissionNeeds } from '../services/missions';
 import type { JoinDeps } from '../services/joinChallenges';
-import type { VotingPassDeps } from '../types/votingPass';
+import type { CycleMode, VotingPassDeps } from '../types/votingPass';
 import { CURRENCY_ENDPOINTS } from '../services/currencyAuto';
 import type { MockEndpoints } from './apiClient';
 import type * as realModule from '../strategies/real';
 import { errorMessage } from '../errorMessage';
 
-// Module-level so snapshots survive across mock cycles within a run — a per-call
-// tracker would look like "first sight" every cycle and never detect anything.
-const mockEntryTracker = createMemoryEntryTracker();
+/**
+ * The in-memory stores a mock cycle keeps its state in, and its pacing. The mock surface uses the process-lifetime ones below;
+ * a simulation (services/scenarioRunner/simulation.ts) brings fresh ones of its own, so the one composition runs over either.
+ */
+type MockStores = {
+    /** Snapshots that survive across cycles — a per-cycle tracker would look like "first sight" every cycle. */
+    entryTracker: ReturnType<typeof createMemoryEntryTracker>;
+    /** The automatic-fill counter. */
+    autoSpendLedger: ReturnType<typeof createMemoryAutoSpendLedger>;
+    swapLedger: typeof mockSwapBackLedger;
+    /** When each entry entered its challenge. */
+    entryAges: ReturnType<typeof createMemoryEntryAgeLedger>;
+    /** Where each subject is in its scenario. */
+    scenarioLedger: typeof mockScenarioStateLedger;
+    /** ms to wait between challenges: short and fixed in mock cycles. */
+    interChallengeDelayMs: number;
+};
 
-// In-memory automatic-fill counter for the mock pass (process lifetime).
-const mockAutoSpendLedger = createMemoryAutoSpendLedger();
 // Shared with the mock endpoints (mock/apiClient.ts), so a fetch sees what the pass and a manual submit recorded.
 const mockEntryAgeLedger = createMemoryEntryAgeLedger();
+
+const processStores: MockStores = {
+    entryTracker: createMemoryEntryTracker(),
+    autoSpendLedger: createMemoryAutoSpendLedger(),
+    swapLedger: mockSwapBackLedger,
+    entryAges: mockEntryAgeLedger,
+    scenarioLedger: mockScenarioStateLedger,
+    interChallengeDelayMs: 500,
+};
 
 /**
  * Join deps over the mock endpoints. joinStateStore is null — mock mode must
@@ -64,16 +88,24 @@ const mockJoinDeps = (client: MockEndpoints): JoinDeps => ({
  * The auto-join and hourly prize-claim pre-steps, mirroring the real strategy.
  * Neither aborts voting.
  */
-const runPreSteps = async (client: MockEndpoints, token: string, missions: MissionNeeds | null) => {
+const runPreSteps = async (
+    client: MockEndpoints,
+    token: string,
+    missions: MissionNeeds | null,
+    lifecycle: Lifecycle,
+) => {
     // Auto-join pre-step (gated by the default-off autoJoin setting).
     try {
-        await runJoinPass(token, Date.now(), mockJoinDeps(client), missions);
+        await runJoinPass(token, clockMs(), { ...mockJoinDeps(client), preJoin: lifecycle.preJoin }, missions);
     } catch (error) {
         logger.withCategory('join').warning(`Mock join pass errored: ${errorMessage(error) || error}`, null);
     }
     // Hourly prize-claim pre-step (default-off autoClaimPrizes), as in real.
     try {
-        await runClaimPass(token, Date.now(), pickEndpoints(client, CLAIM_ENDPOINTS));
+        await runClaimPass(token, clockMs(), {
+            ...pickEndpoints(client, CLAIM_ENDPOINTS),
+            operations: lifecycle.operations,
+        });
     } catch (error) {
         logger.withCategory('claim').warning(`Mock claim pass errored: ${errorMessage(error) || error}`, null);
     }
@@ -87,32 +119,39 @@ const runPreSteps = async (client: MockEndpoints, token: string, missions: Missi
  * ones — running cleanup here would purge the user's real voting
  * metadata.
  */
-const mockVotingPassDeps = (client: MockEndpoints, token: string, missions: MissionNeeds | null): VotingPassDeps => ({
+const mockVotingPassDeps = (
+    client: MockEndpoints,
+    token: string,
+    missions: MissionNeeds | null,
+    lifecycle: Lifecycle,
+    stores: MockStores,
+): VotingPassDeps => ({
     api: pickEndpoints(client, VOTING_PASS_ENDPOINTS),
+    operations: lifecycle.operations,
     cleanupStaleMetadata: null,
     // In-memory for the same reason cleanupStaleMetadata is null: the
     // metadata store is shared and un-namespaced, and mock challenge ids
     // never match real ones, so persisting mock entry snapshots would
     // accumulate junk in the user's real metadata.json that nothing prunes.
-    entryTracker: mockEntryTracker,
+    entryTracker: stores.entryTracker,
     // In-memory: mock mode must never touch the real entryAges file.
-    entryAges: mockEntryAgeLedger,
+    entryAges: stores.entryAges,
     // Short fixed spacing — mock cycles should stay fast.
-    interChallengeDelay: () => 500,
+    interChallengeDelay: () => stores.interChallengeDelayMs,
     // Mock spends over the mock endpoints, with in-memory ledgers — mock
     // mode must never touch the real swap-back / auto-spend files.
     currency: {
         strategy: pickEndpoints(client, CURRENCY_ENDPOINTS),
-        swapLedger: mockSwapBackLedger,
-        spendLedger: mockAutoSpendLedger,
+        swapLedger: stores.swapLedger,
+        spendLedger: stores.autoSpendLedger,
     },
     // In-memory scenario state — mock mode never touches scenarioState.json.
     // The Android background service does nothing in mock mode, so the
     // in-app loop always runs mock scenarios.
-    scenarios: { ledger: mockScenarioStateLedger },
+    scenarios: { ledger: stores.scenarioLedger },
     missions,
     refreshMissionNeeds: platform().capabilities.refreshMissionNeeds
-        ? () => loadMissionNeeds(token, Date.now(), { getMyMissions: client.getMyMissions })
+        ? () => loadMissionNeeds(token, clockMs(), { getMyMissions: client.getMyMissions })
         : null,
 });
 
@@ -133,7 +172,7 @@ const createMockForget = (client: MockEndpoints): typeof realModule.forgetUnconf
 /**
  * @param client - the assembled mock endpoints
  */
-const createMockStrategy = (client: MockEndpoints) => {
+const createMockStrategy = (client: MockEndpoints, stores: MockStores = processStores) => {
     /**
      * Simulate a manual single join, running the SAME service the real strategy
      * runs (services/joinChallenges.ts) over the mock endpoints, with a null
@@ -164,7 +203,11 @@ const createMockStrategy = (client: MockEndpoints) => {
      * turbo-earn, timer-ordered deadline actions, and the shared
      * cancellation/logging path instead of a hand-maintained fork.
      */
-    const fetchChallengesAndVote = async (token: string, challengeIdFilter: string | number | null = null) => {
+    const fetchChallengesAndVote = async (
+        token: string,
+        challengeIdFilter: string | number | null = null,
+        mode: CycleMode = 'full',
+    ) => {
         logger.withCategory('voting').api('Mock fetchChallengesAndVote', null);
         logger.withCategory('api').debug(`Token provided: ${!!token}`, null);
         if (!token) {
@@ -173,13 +216,34 @@ const createMockStrategy = (client: MockEndpoints) => {
             // completes empty. Log the condition but keep the same contract.
             logger.withCategory('authentication').error('No token provided, voting pass will find no challenges', null);
         }
+        // The coordinator of this cycle's scenario work, as in real (over the in-memory ledger, with no cross-process lock):
+        // the installation stage first, its settings published by its owner and its account rules run.
+        const lifecycle = createLifecycle({
+            token,
+            ledger: stores.scenarioLedger,
+            reads: {
+                getBankroll: client.getBankroll,
+                getMyMissions: client.getMyMissions,
+                getMyCompletedChallenges: client.getMyCompletedChallenges,
+            },
+            claims: pickEndpoints(client, CLAIM_ENDPOINTS),
+        });
+        // Armed: the installation stage only, as in real.
+        if (mode === 'armed') return runArmedCycle(lifecycle, challengeIdFilter);
+        await lifecycle.installation({ rules: challengeIdFilter === null });
         // Mission read (only while a mission setting is on), as in real.
-        const missions = await loadMissionNeeds(token, Date.now(), { getMyMissions: client.getMyMissions });
+        const missions = await loadMissionNeeds(token, clockMs(), { getMyMissions: client.getMyMissions });
         const unregisterMissionNeeds = registerMissionNeeds(token, missions);
         try {
             // Skipped for a single-challenge run.
-            if (challengeIdFilter === null) await runPreSteps(client, token, missions);
-            return await runVotingPass(token, challengeIdFilter, mockVotingPassDeps(client, token, missions));
+            if (challengeIdFilter === null) await runPreSteps(client, token, missions, lifecycle);
+            const result = await runVotingPass(
+                token,
+                challengeIdFilter,
+                mockVotingPassDeps(client, token, missions, lifecycle, stores),
+            );
+            if (challengeIdFilter === null) await lifecycle.postClose();
+            return result;
         } finally {
             unregisterMissionNeeds?.();
         }
@@ -194,7 +258,7 @@ const createMockStrategy = (client: MockEndpoints) => {
         runSuspendBoosts(
             challenges,
             token,
-            { api: pickEndpoints(client, VOTING_PASS_ENDPOINTS), entryAges: mockEntryAgeLedger },
+            { api: pickEndpoints(client, VOTING_PASS_ENDPOINTS), entryAges: stores.entryAges },
             now,
         );
 
@@ -207,3 +271,4 @@ const createMockStrategy = (client: MockEndpoints) => {
 };
 
 export { createMockStrategy, mockEntryAgeLedger };
+export type { MockStores };

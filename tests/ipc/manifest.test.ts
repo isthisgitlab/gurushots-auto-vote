@@ -128,16 +128,29 @@ describe('ipc channel manifest', () => {
         }
     });
 
-    test('the Logs window subset is exactly the log feed and the language and theme reads, all registered', () => {
+    test('the Logs window subset is exactly the log feed, the language and theme reads and the presentation projection, all registered', () => {
         expect([...logsWindowInvokeChannels].sort()).toEqual(
-            ['get-log-backlog', 'get-setting', 'log-error', 'start-log-stream', 'stop-log-stream'].sort(),
+            [
+                'get-effective-presentation',
+                'get-log-backlog',
+                'get-setting',
+                'log-error',
+                'start-log-stream',
+                'stop-log-stream',
+            ].sort(),
         );
         const handlerSet = new Set(collectHandlerChannels());
         for (const channel of logsWindowInvokeChannels) expect(handlerSet.has(channel)).toBe(true);
         expect(logsWindowEventMethods).toEqual({
             onLogMessage: eventMethods.onLogMessage,
             onSettingsChanged: eventMethods.onSettingsChanged,
+            onEffectivePresentationChanged: eventMethods.onEffectivePresentationChanged,
         });
+        expect(eventMethods.onEffectivePresentationChanged).toBe('effective-presentation-changed');
+        expect(eventMethods.onEffectiveSettingsChanged).toBe('effective-settings-changed');
+        // The complete projection is never the Logs window's: only the presentation one is.
+        expect(Object.values(logsWindowEventMethods)).not.toContain('effective-settings-changed');
+        expect([...logsWindowInvokeChannels]).not.toContain('get-effective-installation-settings');
         expect([...logsWindowSettingKeys]).toEqual(['language', 'theme']);
     });
 });

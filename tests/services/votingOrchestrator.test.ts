@@ -13,6 +13,8 @@
  */
 
 jest.mock('../../src/ts/core/settings', () => ({
+    scenarioSubjectAvailable: jest.fn(() => true),
+    scenarioSubjectReason: jest.fn(() => null),
     getEffectiveSetting: jest.fn(() => false),
     getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
     consumeChosenPhotos: jest.fn(() => false),
@@ -67,7 +69,9 @@ import type { TurboGameOptions } from '../../src/ts/core/strategies/real/snapGam
 import type { CategoryLogger } from '../../src/ts/core/logger';
 import logger = require('../../src/ts/core/logger');
 import type { VotingPassDeps } from '../../src/ts/core/types/votingPass';
-import { __resetSnapModelHintForTests } from '../../src/ts/core/services/votingOrchestrator/turbo';
+import { __resetSnapModelHintForTests, playAutoTurbo } from '../../src/ts/core/services/votingOrchestrator/turbo';
+import { createOperationRecord } from '../../src/ts/core/scenarios/runtime';
+import type { PassContext } from '../../src/ts/core/services/votingOrchestrator/context';
 import { claimTurboRun, releaseTurboRun } from '../../src/ts/core/services/turboRunLock';
 import { recordManualTurboWin } from '../../src/ts/core/services/missions';
 import { invalid } from '../helpers/invalid';
@@ -240,6 +244,104 @@ describe('mock-parity behaviors on the shared path', () => {
         votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
         await runVotingPass('tok', null, deps(api));
         expect(api.runTurboGame).toHaveBeenCalledTimes(1);
+    });
+
+    describe('what a try at the Turbo game came to, and the record of it', () => {
+        const passFor = (api: ReturnType<typeof makeApi>, over: Record<string, unknown> = {}) =>
+            invalid<PassContext>({
+                token: 'tok',
+                api,
+                missions: null,
+                refreshMissionNeeds: null,
+                turboSnapshot: 0,
+                snapGames: { played: 0 },
+                ...over,
+            });
+
+        test('a game that is played answers whether it won, and is recorded for the challenge', async () => {
+            const operations = createOperationRecord();
+            votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+            const challenge = makeChallenge();
+            await expect(playAutoTurbo(challenge, NOW, passFor(makeApi([]), { operations }))).resolves.toEqual({
+                kind: 'played',
+                won: true,
+            });
+            expect(operations.has('earn', '101')).toBe(true);
+            // (a pass that keeps no record plays the same)
+            await expect(playAutoTurbo(challenge, NOW, passFor(makeApi([])))).resolves.toEqual({
+                kind: 'played',
+                won: true,
+            });
+        });
+
+        test('the normal automation asks for the Auto-Play Turbo switch; a direct game does not, and keeps every other rule', async () => {
+            votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+            await playAutoTurbo(makeChallenge(), NOW, passFor(makeApi([])));
+            expect(votingLogic.shouldPlayAutoTurbo).toHaveBeenLastCalledWith(expect.anything(), NOW, {});
+            await playAutoTurbo(makeChallenge(), NOW, passFor(makeApi([])), { direct: true });
+            expect(votingLogic.shouldPlayAutoTurbo).toHaveBeenLastCalledWith(expect.anything(), NOW, { direct: true });
+
+            // a direct Snap game still needs the vision model, and is still one per pass
+            const snap = makeChallenge({ member: { turbo: { state: 'FREE', mode: 'snap' } } });
+            vision.hasBundledModel.mockResolvedValueOnce(false);
+            await expect(playAutoTurbo(snap, NOW, passFor(makeApi([])), { direct: true })).resolves.toEqual({
+                kind: 'refused',
+                reason: 'a Snap turbo needs the vision model',
+            });
+            await expect(
+                playAutoTurbo(snap, NOW, passFor(makeApi([]), { snapGames: { played: 1 } }), { direct: true }),
+            ).resolves.toEqual({ kind: 'refused', reason: 'a Snap turbo is played once a pass' });
+        });
+
+        test('a game that is lost is played all the same', async () => {
+            votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+            const api = makeApi([]);
+            api.runTurboGame.mockResolvedValueOnce({
+                kind: 'classic',
+                played: 1,
+                correct: 0,
+                flipped: 0,
+                doubleFailed: 1,
+                won: false,
+            });
+            await expect(playAutoTurbo(makeChallenge(), NOW, passFor(api))).resolves.toEqual({
+                kind: 'played',
+                won: false,
+            });
+        });
+
+        test('a game that throws is a failed one, and is not recorded', async () => {
+            const operations = createOperationRecord();
+            votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+            const api = makeApi([]);
+            api.runTurboGame.mockRejectedValueOnce(new Error('network'));
+            await expect(playAutoTurbo(makeChallenge(), NOW, passFor(api, { operations }))).resolves.toEqual({
+                kind: 'failed',
+            });
+            expect(operations.has('earn', '101')).toBe(false);
+        });
+
+        test('a game the rules do not call for is refused, with the reason', async () => {
+            const api = makeApi([]);
+            await expect(playAutoTurbo(makeChallenge(), NOW, passFor(api))).resolves.toEqual({
+                kind: 'refused',
+                reason: 'the turbo cannot be played now',
+            });
+            expect(api.runTurboGame).not.toHaveBeenCalled();
+        });
+
+        test('a game another run holds is refused too', async () => {
+            votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+            expect(claimTurboRun(101)).toBe(true);
+            try {
+                await expect(playAutoTurbo(makeChallenge(), NOW, passFor(makeApi([])))).resolves.toEqual({
+                    kind: 'refused',
+                    reason: 'a turbo game is already running for this challenge',
+                });
+            } finally {
+                releaseTurboRun(101, 'automatic');
+            }
+        });
     });
 
     describe('Snap games', () => {
@@ -880,6 +982,42 @@ describe('mock-parity behaviors on the shared path', () => {
         );
     });
 
+    test('a boost and a turbo the pass applies are recorded for the challenge, and the pass records nothing it did not do', async () => {
+        const operations = createOperationRecord();
+        const challenge = makeChallenge({
+            member: {
+                boost: { state: 'AVAILABLE_KEY', timeout: NOW + 600 },
+                ranking: { entries: [{ id: 'e1', votes: 1 }], exposure: { exposure_factor: 100 } },
+            },
+        });
+        const api = makeApi([challenge]);
+        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'boost' }, { action: 'turbo' }]));
+        votingLogic.shouldApplyBoost.mockReturnValue(true);
+        votingLogic.resolveBoostFillNewMode.mockReturnValue('always');
+        votingLogic.shouldApplyTurbo.mockReturnValue(invalid({ apply: true, fillNew: false, imageId: 'e1' }));
+        autoFill.submitNewEntryForAction.mockResolvedValue(invalid({ ok: true, imageId: 'n1' }));
+        try {
+            await runVotingPass('tok', null, deps(api, { operations }));
+            expect(api.applyBoostToEntry).toHaveBeenCalledTimes(1);
+            expect(api.applyTurbo).toHaveBeenCalledTimes(1);
+            expect(operations.has('boost', '101')).toBe(true);
+            expect(operations.has('turbo', '101')).toBe(true);
+            expect(operations.has('submit', '101')).toBe(false);
+
+            // done for the challenge already (by a scenario action): the pass applies neither again
+            api.applyBoostToEntry.mockClear();
+            api.applyTurbo.mockClear();
+            await runVotingPass('tok', null, deps(api, { operations }));
+            expect(api.applyBoostToEntry).not.toHaveBeenCalled();
+            expect(api.applyTurbo).not.toHaveBeenCalled();
+        } finally {
+            votingLogic.shouldApplyBoost.mockReturnValue(false);
+            votingLogic.resolveBoostFillNewMode.mockReturnValue('no');
+            votingLogic.shouldApplyTurbo.mockReturnValue(invalid({ apply: false }));
+            autoFill.submitNewEntryForAction.mockResolvedValue(invalid({ ok: false, reason: 'none' }));
+        }
+    });
+
     // When the live re-check says the challenge left the active list, the
     // fill-new callers must NOT fire the fallback apply — it is a known-doomed
     // call that would only add a second failure log.
@@ -1501,6 +1639,30 @@ describe('per-challenge error isolation', () => {
 
         expect(votingLogic.evaluateVotingDecision).toHaveBeenCalledTimes(2);
         expect(result.success).toBe(true);
+    });
+
+    // A phase with bindings or a profile is read through the settings its runner published: with none valid, nothing
+    // below the scenario step may run on inherited values — for that challenge alone.
+    test('a challenge whose scenario settings are unavailable is skipped with a reason, and the rest of the pass runs', async () => {
+        const api = makeApi([makeChallenge({ id: 1 }), makeChallenge({ id: 2 })]);
+        settingsMock.scenarioSubjectAvailable.mockImplementation((id) => String(id) !== '1');
+        settingsMock.scenarioSubjectReason.mockReturnValue('nothing is published for this phase yet');
+
+        const result = await runVotingPass('tok', null, deps(api));
+
+        expect(result.success).toBe(true);
+        // only the second challenge was decided
+        expect(votingLogic.evaluateVotingDecision).toHaveBeenCalledTimes(1);
+        expect(votingLogic.evaluateVotingDecision.mock.calls[0][0]).toMatchObject({ id: 2 });
+        const warnings = jest
+            .mocked(logger.withCategory)
+            .mock.results.flatMap((r) =>
+                jest.mocked(r.value as CategoryLogger).warning.mock.calls.map((call) => String(call[0])),
+            );
+        expect(warnings).toContain(
+            '[Challenge 1: Orchestrated] scenario settings unavailable — skipped this pass (nothing is published for this phase yet)',
+        );
+        settingsMock.scenarioSubjectAvailable.mockReset().mockReturnValue(true);
     });
 
     // The cancellation checkpoints inside that body use `return`, which a try/catch does not

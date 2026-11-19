@@ -20,10 +20,11 @@ export const ANDROID_PAIRING_KEY_PREF = 'gs_remote_access';
 const PAIRING_KEY_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
 /**
- * The current remote page's canonical path. What comes before is the site's own base path (the
+ * The current remote page's canonical path (`v<LINK_VERSION>`; kept literal because this module stays
+ * dependency-free, and tests/remote/pairingKey.test.ts ties it to LINK_VERSION). What comes before is the site's own base path (the
  * Pages site lives under `/gurushots-auto-vote/`; a dev-local origin has none).
  */
-const CURRENT_REMOTE_PAGE_PATH_PATTERN = /\/remote\/v2\/(?:index\.html)?$/;
+const CURRENT_REMOTE_PAGE_PATH_PATTERN = /\/remote\/v3\/(?:index\.html)?$/;
 
 /** Whether `value` reads as a pairing key (base64url, the desktop key's exact length). */
 export const isPairingKey = (value: string): boolean => PAIRING_KEY_PATTERN.test(value);

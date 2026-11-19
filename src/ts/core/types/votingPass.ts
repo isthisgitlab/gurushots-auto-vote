@@ -10,6 +10,13 @@
  */
 
 import type { Challenge } from './gurushots';
+
+/**
+ * What one cycle of the voting loop runs. `full`: everything (the installation stage, the mission read, the join and claim
+ * pre-steps, the voting pass, the post-close stage). `armed`: only the installation stage (its publication and account rules),
+ * for a controller armed with the voting stages paused: no join, claim sweep, vote, power, submission or currency spend.
+ */
+export type CycleMode = 'full' | 'armed';
 import type { getActiveChallenges as GetActiveChallenges } from '../strategies/real/activeChallenges';
 import type { applyBoost as ApplyBoost } from '../strategies/real/applyBoost';
 import type { runTurboGame as RunTurboGame } from '../strategies/real';
@@ -26,11 +33,16 @@ import type {
     getCurrentMemberProfile as GetCurrentMemberProfile,
     searchTagAutocomplete as SearchTagAutocomplete,
 } from '../api/tags';
+import type {
+    getMyCompletedChallenges as GetMyCompletedChallenges,
+    getMyMissions as GetMyMissions,
+} from '../api/rewards';
 import type { CurrencyPassDeps } from '../services/currencyAuto';
 import type { createStateLedger as CreateScenarioStateLedger } from '../scenarioStateStore';
 import type { EntryTracker } from '../services/newEntryTracker';
 import type { EntryAgeLedger } from './stores';
 import type { MissionNeeds } from '../services/missions';
+import type { OperationRecord } from '../scenarios/runtime';
 
 /** The endpoint set runVotingPass reads off `deps.api`. */
 export interface VotingPassApi {
@@ -51,6 +63,14 @@ export interface VotingPassApi {
         ...args: Parameters<typeof GetCurrentMemberProfile>
     ): ReturnType<typeof GetCurrentMemberProfile>;
     searchTagAutocomplete?(...args: Parameters<typeof SearchTagAutocomplete>): ReturnType<typeof SearchTagAutocomplete>;
+    /**
+     * Optional: the read-only list reads the scenario facts use (null when the read failed, a list, possibly empty,
+     * when it was made). Without one, the facts that need it are unreadable.
+     */
+    getMyCompletedChallenges?(
+        ...args: Parameters<typeof GetMyCompletedChallenges>
+    ): ReturnType<typeof GetMyCompletedChallenges>;
+    getMyMissions?(...args: Parameters<typeof GetMyMissions>): ReturnType<typeof GetMyMissions>;
 }
 
 export type ScenarioStateLedger = ReturnType<typeof CreateScenarioStateLedger>;
@@ -82,6 +102,8 @@ export interface VotingPassDeps {
     scenarios?: ScenarioDeps | null;
     /** What the active missions still need (services/missions.ts); counted down as the pass lands them. */
     missions?: MissionNeeds | null;
+    /** The cycle's record of what scenario actions and the normal automation already did, kept across the pre-steps and the pass. */
+    operations?: OperationRecord;
     /** Headless Android refreshes server progress before spending a saved Turbo. */
     refreshMissionNeeds?: (() => Promise<MissionNeeds | null>) | null;
 }

@@ -21,6 +21,7 @@ import {
 } from './storage';
 import type { QueuedWriteOutcome, SaveDroppedCause } from './storage';
 import { errorMessage } from '../errorMessage';
+import { simulationScope } from '../simulationScope';
 import { getDefaultSettings } from './defaults';
 import { isAuthKey, isPrototypeKey } from './loadValidation';
 import { retryLegacyImport, startFreshConfig } from './legacyImport';
@@ -55,6 +56,12 @@ type SettingsSaveDropped = { code: 'settings-save-dropped'; path: string; cause:
  * Load the configuration from the userData directory (on the first load without one, importing `settings.json`).
  */
 const loadSettings = (): ConfigV2 => {
+    const stored = loadStoredSettings();
+    // Inside a simulation scope: the same configuration with the simulated scenario and assignment applied in memory.
+    return simulationScope()?.patchSettings(stored) ?? stored;
+};
+
+const loadStoredSettings = (): ConfigV2 => {
     let settingsData: string | null;
     try {
         // Read via the storage adapter so the Capacitor cache path is exercised
@@ -135,10 +142,12 @@ const _persist = (config: ConfigV2): Persisted => {
  * it, so what another writer saved between two reads is not written back over. A key that names an Object.prototype
  * member, or a value its schema entry or range rejects, refuses the whole save.
  */
-const _saveChangeDetailed = (change: (current: ConfigV2) => Partial<ConfigV2>): Persisted => {
+const _saveChangeDetailed = (change: (current: ConfigV2) => Partial<ConfigV2> | null): Persisted => {
     try {
         const current = loadSettings();
         const changed = change(current);
+        // A change that finds nothing to write (it was refused on what is stored now) writes nothing.
+        if (changed === null) return { ok: true };
         const refused = _refusedKey(changed);
         if (refused !== undefined) {
             logger.withCategory('settings').error(`Invalid setting not saved: ${oneLine(refused)}`, null);
@@ -158,13 +167,21 @@ const _saveChangeDetailed = (change: (current: ConfigV2) => Partial<ConfigV2>): 
     }
 };
 
-const _saveChange = (change: (current: ConfigV2) => Partial<ConfigV2>): boolean => _saveChangeDetailed(change).ok;
+const _saveChange = (change: (current: ConfigV2) => Partial<ConfigV2> | null): boolean =>
+    _saveChangeDetailed(change).ok;
 
 /**
  * Save the configuration: the containers given replace the stored ones whole, the others stay. Callers load, change
  * what they mean to and save the loaded configuration back.
  */
 const saveSettings = (settings: Partial<ConfigV2>): boolean => _saveChange(() => settings);
+
+/**
+ * Make `change` on the configuration as it is stored now, in the one step that writes it: what `change` reads is what its
+ * result is written over, so a decision it makes (a name that is taken) holds for the write. `null` is a change refused on
+ * what is stored: nothing is written.
+ */
+const updateSettings = (change: (current: ConfigV2) => Partial<ConfigV2> | null): boolean => _saveChange(change);
 
 /**
  * Set several `app` keys at once on the configuration as it is stored now (the settings form's payload).
@@ -320,6 +337,7 @@ export {
     isPrototypeKey,
     loadSettings,
     saveSettings,
+    updateSettings,
     saveAppSettings,
     getSetting,
     setSetting,

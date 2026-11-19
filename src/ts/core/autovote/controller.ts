@@ -16,11 +16,13 @@
 
 import type { TimerHandle } from '../scheduling/cadenceChain';
 import type { AutovoteController, AutovoteHost, SessionFlags, SessionFlagWriters } from './types';
+import type { ExecutionMode } from './state';
 import { createAutovoteStore } from './store';
 import { createPersistence } from './persistence';
 import { createCycleRunner } from './cycle';
 import { createControllerChain } from './chain';
 import { createResumeHold } from './resume';
+import { createRunGate } from './runGate';
 import { cancelCycleTimer, createLifecycle } from './lifecycle';
 
 export type { AutovoteController, AutovoteHost, BackgroundHost, CallOrNull, CycleNotifier } from './types';
@@ -33,10 +35,10 @@ export type { AutovoteController, AutovoteHost, BackgroundHost, CallOrNull, Cycl
 export const createAutovoteController = (host: AutovoteHost): AutovoteController => {
     const store = createAutovoteStore();
 
-    // Live running flag the chain's isRunning reads. Set synchronously inside
+    // What the controller is doing, read by the chain's isRunning. Set synchronously inside
     // start/stop (the dispatched state follows, but React-free consumers read
-    // this one).
-    let running = false;
+    // this one). `armed` keeps the chain alive with the voting stages paused.
+    let mode: ExecutionMode = 'stopped';
     // Set by start() and stop(): the user (or the hold itself) has acted, so a
     // mount-time resume still waiting on its awaits must not arm the hold.
     let userActed = false;
@@ -44,13 +46,14 @@ export const createAutovoteController = (host: AutovoteHost): AutovoteController
     // mount went away.
     let disposed = false;
     const flags: SessionFlags = {
-        running: () => running,
+        running: () => mode !== 'stopped',
+        mode: () => mode,
         userActed: () => userActed,
         disposed: () => disposed,
     };
     const writers: SessionFlagWriters = {
-        setRunning: (value) => {
-            running = value;
+        setMode: (value) => {
+            mode = value;
         },
         setUserActed: () => {
             userActed = true;
@@ -63,15 +66,39 @@ export const createAutovoteController = (host: AutovoteHost): AutovoteController
     // interval or boundary-switch timer to keep in sync.
     const cycleTimer: { current: TimerHandle | null } = { current: null };
 
-    const { runCycle } = createCycleRunner({ host, apply: store.apply, flags });
-    const { scheduleNext } = createControllerChain({ host, apply: store.apply, flags, runCycle, cycleTimer });
+    // The Stop fence: the one decision whether a request to arm or continue may still do so.
+    const gate = createRunGate(host.stopFence);
+
+    // The cycle runner reads the host live; only its cycle call depends on the mode: an armed controller runs the
+    // installation-only cycle, and no voting stage runs.
+    const cycleHost: AutovoteHost = Object.assign(Object.create(host) as AutovoteHost, {
+        runVotingCycle: (...args: Parameters<AutovoteHost['runVotingCycle']>) =>
+            mode === 'armed' && host.runArmedCycle ? host.runArmedCycle(...args) : host.runVotingCycle(...args),
+    });
+    const { runCycle } = createCycleRunner({ host: cycleHost, apply: store.apply, flags });
+    const { scheduleNext } = createControllerChain({
+        host,
+        apply: store.apply,
+        flags,
+        gate,
+        onObsolete: () => void lifecycle.endObsoleteRun(),
+        runCycle,
+        cycleTimer,
+    });
     const persist = createPersistence(host);
-    const resume = createResumeHold({ host, apply: store.apply, flags, start: () => lifecycle.start() });
+    const resume = createResumeHold({
+        host,
+        apply: store.apply,
+        flags,
+        gate,
+        start: (request) => lifecycle.startAs('startup', request),
+    });
     const lifecycle = createLifecycle({
         host,
         apply: store.apply,
         flags,
         writers,
+        gate,
         cycleTimer,
         resume,
         persist,
@@ -98,6 +125,9 @@ export const createAutovoteController = (host: AutovoteHost): AutovoteController
         start: lifecycle.start,
         stop: lifecycle.stop,
         rearmSchedule: lifecycle.rearmSchedule,
+        arm: lifecycle.arm,
+        requestVotingStages: lifecycle.requestVotingStages,
+        captureRequest: gate.capture,
         maybeResume: resume.maybeResume,
         dispose,
         getState: store.getState,

@@ -23,6 +23,8 @@ import { createHeadlessPaths } from './paths';
 import { createHeadlessStorage } from './store';
 import { createHeadlessWipe } from './wipe';
 
+import { unsupportedScenarioHostStatus } from '../../core/platform/port';
+
 import type { Platform, PlatformWindows } from '../../core/platform/port';
 
 type HeadlessHttpModule = typeof import('./http');
@@ -30,12 +32,13 @@ type HeadlessHttpModule = typeof import('./http');
 const headlessHttp = (): HeadlessHttpModule => require('./http') as HeadlessHttpModule;
 
 const createHeadlessCapabilities = (): Platform['capabilities'] => ({
-    // The headless cycle has no pass-scoped fetch, so the pass builds the
+    // This family is the Android background service. The headless cycle has no pass-scoped fetch, so the pass builds the
     // mission-needs refresh resolver; Snap is skipped here (the cycle is
     // capped, and Snap plays from the app); recovery names the store to
     // clear; and the log context and the hourly cleanup are the logger's
     // WebView answers (logger/context answers CLI without Electron;
     // logger/files arms the interval only for Electron or a CLI start).
+    executor: 'android-service',
     refreshMissionNeeds: true,
     snapAllowed: false,
     // The service runs no scenarios of the app's: the native side it drives is
@@ -63,7 +66,13 @@ const createHeadlessPlatform = (windows: PlatformWindows): Platform => ({
     paths: createHeadlessPaths(),
     assets: createHeadlessAssets(),
     wipe: createHeadlessWipe(),
-    native: { autovote: null, foregroundService: null, apkInstaller: null },
+    native: {
+        autovote: null,
+        foregroundService: null,
+        apkInstaller: null,
+        // The service has no remote-access pairing to observe.
+        readScenarioHostStatus: unsupportedScenarioHostStatus,
+    },
     windows,
     capabilities: createHeadlessCapabilities(),
 });

@@ -7,6 +7,7 @@
  */
 
 import { isPlainObject } from '../plainObject';
+import { POOL_REPLACED_KEYS } from './builderSpec';
 
 import type { ScenarioDraft, ScenarioDraftRule } from '../types/scenarioBuilder';
 
@@ -124,19 +125,36 @@ const isEditableDraft = (value: unknown): value is ScenarioDraft => {
     if (!isPlainObject(value)) return false;
     const { phases } = value;
     if (!isPlainObject(phases)) return false;
+    const plainOrUndefined = (field: unknown) => field === undefined || isPlainObject(field);
     return Object.values(phases).every(
         (phase) =>
             isPlainObject(phase) &&
-            (phase.settings === undefined || isPlainObject(phase.settings)) &&
+            ['settings', 'bindings', 'schedules', 'pins', 'photoPool'].every((field) =>
+                plainOrUndefined((phase as Record<string, unknown>)[field]),
+            ) &&
+            (phase.profile === undefined || typeof phase.profile === 'string') &&
             (phase.rules === undefined ||
                 (Array.isArray(phase.rules) &&
                     phase.rules.every(
                         (rule: unknown) =>
                             isPlainObject(rule) &&
                             Array.isArray(rule.do) &&
-                            (rule.if === undefined || Array.isArray(rule.if)),
+                            (rule.if === undefined || Array.isArray(rule.if)) &&
+                            (rule.stages === undefined || Array.isArray(rule.stages)),
                     ))),
     );
 };
 
-export { setIn, moveItem, newScenario, addPhase, renamePhase, removePhase, newRule, isEditableDraft };
+/**
+ * The draft with `phase` bound to the photo pool `pool` — only that, on the draft as it is now: the phase's other fields and every
+ * other phase are untouched. A phase that is gone, or that holds a setting the pool replaces, is left as it is (the same draft comes back).
+ */
+const bindPhotoPool = (doc: ScenarioDraft, phase: string, pool: string): ScenarioDraft => {
+    const current = Object.hasOwn(doc.phases, phase) ? doc.phases[phase] : undefined;
+    if (current === undefined) return doc;
+    const held = [...Object.keys(current.settings ?? {}), ...Object.keys(current.bindings ?? {})];
+    if (POOL_REPLACED_KEYS.some((key) => held.includes(key))) return doc;
+    return setIn(doc, ['phases', phase, 'photoPool'], { name: pool });
+};
+
+export { setIn, moveItem, bindPhotoPool, newScenario, addPhase, renamePhase, removePhase, newRule, isEditableDraft };

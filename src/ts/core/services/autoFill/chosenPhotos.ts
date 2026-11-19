@@ -11,10 +11,12 @@
  */
 
 import { getEntries } from './challengeState';
+import { oneLine } from '../../format/logSafe';
 import { evictOldest, forgetWalkMemo, memoShowsLibraryMissing } from './chosenWalkMemo';
 
 import type { Challenge } from '../../types/gurushots';
 import type { FillLogger } from '../../types/autoFill';
+import type { PhotoPoolBlock } from '../../types/stores';
 
 /** The settings the Chosen Photos feature reads. */
 type ChosenKey = 'chosenPhotos' | 'chosenPhotosOnly' | 'chosenPhotosInOrder';
@@ -27,6 +29,11 @@ interface ChosenSettings {
     only: boolean;
     /** Use the photos in the order they were picked, not ranked. */
     inOrder: boolean;
+    /**
+     * Set when the challenge's phase draws from a photo pool that has nothing to give while Submit Only applies (the pool is
+     * not saved on this account, or every photo of it is given out): nothing may be picked, and never anything else instead.
+     */
+    blocked?: PhotoPoolBlock;
 }
 
 const NO_CHOSEN: ChosenSettings = { ids: [], only: false, inOrder: false };
@@ -40,8 +47,17 @@ const NO_CHOSEN: ChosenSettings = { ids: [], only: false, inOrder: false };
  * @param read - reads one setting for this challenge (the caller owns how a
  *   per-challenge value resolves: by cached id for a joined challenge, by rule
  *   and per-id override for an un-joined one)
+ * @param blocked - the block of the challenge's photo pool, when it has one that leaves nothing to pick
  */
-const resolveChosenPhotos = ({ read }: { read: (key: ChosenKey) => unknown }): ChosenSettings => {
+const resolveChosenPhotos = ({
+    read,
+    blocked = null,
+}: {
+    read: (key: ChosenKey) => unknown;
+    /** What the challenge's photo pool says (settings getChosenPoolView): a block makes Submit Only on, with nothing to pick. */
+    blocked?: PhotoPoolBlock | null;
+}): ChosenSettings => {
+    if (blocked !== null) return { ids: [], only: true, inOrder: false, blocked };
     const list = read('chosenPhotos');
     const ids = Array.isArray(list) ? list.map(String) : [];
     if (ids.length === 0) return NO_CHOSEN;
@@ -95,9 +111,44 @@ const logChosenSkipOnce = (logger: FillLogger, challenge: Challenge, label: stri
     log.warning(formatChosenSkipMessage(label, tag, reason, missingFromLibrary), null);
 };
 
-/** The challenge is no longer being skipped: forget the line so a later skip is explained again. */
+/**
+ * The one wording for the line a photo pool that has nothing to give writes: which pool, and why (not saved on this account,
+ * or every photo of it given out in this phase). The pool's name is the user's text, shown on one line.
+ */
+const formatPoolBlockMessage = (label: string, tag: string, block: PhotoPoolBlock, poolName: string): string => {
+    const name = oneLine(poolName);
+    return block === 'pool-exhausted'
+        ? `${label}: skipped ${tag} — photo pool ${name} has no photos left for this phase`
+        : `${label}: skipped ${tag} — photo pool ${name} is not saved on this account`;
+};
+
+// The pool lines have a key of their own in the same table, so they neither hide nor are hidden by a chosen-photo skip line.
+const poolKey = (challenge: Challenge): string => `pool:${String(challenge.id)}`;
+
+/**
+ * Writes the line for a pick a photo pool blocked, once per challenge and reason while it stays blocked (a skip repeats
+ * every cycle); the line is written again after the pool stops blocking and blocks again, or when the reason changes.
+ */
+const logPoolBlockOnce = (
+    logger: FillLogger,
+    challenge: Challenge,
+    label: string,
+    block: PhotoPoolBlock,
+    poolName: string,
+): void => {
+    const key = poolKey(challenge);
+    if (loggedSkips.get(key) === block) return;
+    if (!loggedSkips.has(key) && loggedSkips.size >= MAX_LOGGED_SKIPS) evictOldest(loggedSkips);
+    loggedSkips.set(key, block);
+    logger
+        .withCategory(label === 'join' ? 'join' : 'autoSubmit')
+        .warning(formatPoolBlockMessage(label, logger.challengeTag(challenge), block, poolName), null);
+};
+
+/** The challenge is no longer being skipped: forget the lines so a later skip is explained again. */
 const clearChosenSkip = (challenge: Challenge): void => {
     loggedSkips.delete(String(challenge.id));
+    loggedSkips.delete(poolKey(challenge));
 };
 
 /**
@@ -116,6 +167,7 @@ export {
     enteredIds,
     formatChosenSkipMessage,
     logChosenSkipOnce,
+    logPoolBlockOnce,
     clearChosenSkip,
     forgetChosenPhotosMemory,
 };

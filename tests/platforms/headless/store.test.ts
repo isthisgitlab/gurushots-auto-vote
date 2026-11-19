@@ -109,6 +109,44 @@ describe('the jsonStore transport', () => {
     });
 });
 
+// The native side takes the priority Stop fence up to 1024 bytes and the control inbox up to twice the scenario import
+// size (524288), by compare-and-write only (AutoVoteService.kt SideStores): a value past its bound is not saved.
+describe('the priority Stop fence and the control inbox keys', () => {
+    const KEYS = [
+        { key: 'gs_scenario_stop_fence', bound: 1024 },
+        { key: 'gs_scenario_controls', bound: 524_288 },
+    ];
+    const bridge = (bound: number) => {
+        const compareAndWriteKey = jest.fn(
+            (_key: string, _expected: string, data: string) => new TextEncoder().encode(data).length <= bound,
+        );
+        g.AndroidHeadlessStore = { read: () => null, write: () => true, readKey: () => null, compareAndWriteKey };
+        return compareAndWriteKey;
+    };
+    const ofSize = (bytes: number) => `{"k":"${'x'.repeat(bytes - 8)}"}`;
+
+    test.each(KEYS)(
+        '$key is saved at its bound by the shared compare-and-write, and not above it',
+        async ({ key, bound }) => {
+            const compareAndWriteKey = bridge(bound);
+            const store = createHeadlessStorage().jsonStore(ref(key), { strict: true, shared: true });
+            await expect(store.updateThrough(() => ofSize(bound))).resolves.toBe('saved');
+            expect(compareAndWriteKey).toHaveBeenLastCalledWith(key, '', ofSize(bound));
+            // The bridge refuses the value, and what it holds is unchanged: the change failed, loudly.
+            await expect(store.updateThrough(() => ofSize(bound + 1))).resolves.toBe('failed');
+            expect(error).toHaveBeenCalled();
+        },
+    );
+
+    test.each(KEYS)(
+        '$key is changed through the bridge only: a store without one reports the change failed',
+        async ({ key }) => {
+            const store = createHeadlessStorage().jsonStore(ref(key), { strict: true, shared: true });
+            await expect(store.updateThrough(() => '{}')).resolves.toBe('failed');
+        },
+    );
+});
+
 describe('the settingsFile transport', () => {
     test('readRaw reads through the dedicated bridge, and the write persists as a change of it', () => {
         let stored: string | null = '{"cfg":1}';

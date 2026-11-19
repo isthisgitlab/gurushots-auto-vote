@@ -432,7 +432,7 @@ describe('createRemoteHost', () => {
             'p1',
         );
         for (const command of ['start', 'stop', 'rearm'] as const) {
-            transport.receiveFromPeer({ t: 'autovote-command', command }, 'p1');
+            transport.receiveFromPeer({ t: 'autovote-command', command, requestId: `req-${command}` }, 'p1');
         }
         await flush();
         expect(deps.commands).toEqual(['start', 'stop', 'rearm']);
@@ -1028,7 +1028,7 @@ describe('createRemoteHost (failures answer the phone)', () => {
             logInfo: (message) => logs.push(message),
         });
         const transport = await connectPhone(harness);
-        transport.receiveFromPeer({ t: 'autovote-command', command: 'start' }, 'p1');
+        transport.receiveFromPeer({ t: 'autovote-command', command: 'start', requestId: 'req-start' }, 'p1');
         await flush();
         expect(logs).toContain('Remote auto-vote command failed: start');
     });
@@ -1087,6 +1087,276 @@ describe('createRemoteHost (failures answer the phone)', () => {
     });
 });
 
+describe('createRemoteHost (commands, identities and the priority Stop)', () => {
+    const connectPhone = async (harness: Harness, peer = 'p1'): Promise<TransportStub> => {
+        await harness.host.start('k');
+        const transport = harness.deps.transports[0];
+        transport.emitJoin(peer);
+        transport.receiveFromPeer(
+            {
+                t: 'hello',
+                version: HOST_VERSION,
+                protocolVersion: PROTOCOL_VERSION,
+                linkVersion: LINK_VERSION,
+                host: false,
+            },
+            peer,
+        );
+        await flush();
+        transport.sent.length = 0;
+        harness.deps.invokeLog.length = 0;
+        return transport;
+    };
+    const stateMessages = (transport: TransportStub) =>
+        transport.sent
+            .map(({ message }) => message as { t: string; ack?: unknown; state?: AutovoteState; n?: number })
+            .filter((message) => message.t === 'autovote-state');
+    const send = async (transport: TransportStub, message: object, peer = 'p1') => {
+        transport.receiveFromPeer({ t: 'autovote-command', ...message }, peer);
+        await flush();
+    };
+    const stoppedAt = (stopEpoch: number | null): AutovoteState => ({ ...initialState, stopEpoch });
+
+    test("a command is answered to the phone that sent it with the controller's state stamped as its acknowledgment", async () => {
+        const harness = makeHarness();
+        const transport = await connectPhone(harness);
+        await send(transport, { command: 'start', requestId: 'a1' });
+        const answers = stateMessages(transport);
+        expect(answers).toHaveLength(1);
+        expect(answers[0].ack).toEqual({ requestId: 'a1', command: 'start', outcome: 'ran' });
+        expect(answers[0].state).toEqual(initialState);
+        expect(transport.sent[0].target).toBe('p1');
+    });
+
+    test('a Start repeated by identity runs once and is acknowledged as a duplicate', async () => {
+        const harness = makeHarness();
+        const transport = await connectPhone(harness);
+        await send(transport, { command: 'start', requestId: 'a1' });
+        await send(transport, { command: 'start', requestId: 'a1' });
+        await send(transport, { command: 'rearm', requestId: 'a1' });
+        expect(harness.deps.commands).toEqual(['start']);
+        expect(stateMessages(transport).map((message) => message.ack)).toEqual([
+            { requestId: 'a1', command: 'start', outcome: 'ran' },
+            { requestId: 'a1', command: 'start', outcome: 'duplicate' },
+            { requestId: 'a1', command: 'rearm', outcome: 'duplicate' },
+        ]);
+    });
+
+    test("a Start that a Stop has overtaken is refused: the epoch the phone saw is not the controller's", async () => {
+        const harness = makeHarness({ getAutovoteState: () => stoppedAt(5) });
+        const transport = await connectPhone(harness);
+        await send(transport, { command: 'start', requestId: 'old', expectedStopEpoch: 4 });
+        await send(transport, { command: 'rearm', requestId: 'old2', expectedStopEpoch: 6 });
+        expect(harness.deps.commands).toEqual([]);
+        expect(stateMessages(transport).map((message) => message.ack)).toEqual([
+            { requestId: 'old', command: 'start', outcome: 'stop-epoch-moved' },
+            { requestId: 'old2', command: 'rearm', outcome: 'stop-epoch-moved' },
+        ]);
+        await send(transport, { command: 'start', requestId: 'fresh', expectedStopEpoch: 5 });
+        expect(harness.deps.commands).toEqual(['start']);
+    });
+
+    test.each([
+        ['the phone knew no epoch', undefined, 5],
+        ['the controller knows none', 4, null],
+    ])('a Start where %s is not refused for its epoch', async (_label, expectedStopEpoch, known) => {
+        const harness = makeHarness({ getAutovoteState: () => stoppedAt(known) });
+        const transport = await connectPhone(harness);
+        await send(transport, {
+            command: 'start',
+            requestId: 'r',
+            ...(expectedStopEpoch === undefined ? {} : { expectedStopEpoch }),
+        });
+        expect(harness.deps.commands).toEqual(['start']);
+    });
+
+    test('a command that fails is acknowledged as failed, and the failure is logged', async () => {
+        const logs: string[] = [];
+        const harness = makeHarness({
+            runAutovoteCommand: () => Promise.reject(new Error('timer broke')),
+            logInfo: (message) => logs.push(message),
+        });
+        const transport = await connectPhone(harness);
+        await send(transport, { command: 'stop', requestId: 's1' });
+        expect(stateMessages(transport)[0].ack).toEqual({ requestId: 's1', command: 'stop', outcome: 'failed' });
+        expect(logs).toContain('Remote auto-vote command failed: stop');
+    });
+
+    test('the room remembers the last 64 identities: older ones are forgotten', async () => {
+        const harness = makeHarness();
+        const transport = await connectPhone(harness);
+        for (let index = 0; index < 65; index++) await send(transport, { command: 'start', requestId: `id-${index}` });
+        expect(harness.deps.commands).toHaveLength(65);
+        await send(transport, { command: 'start', requestId: 'id-64' });
+        expect(harness.deps.commands).toHaveLength(65);
+        await send(transport, { command: 'start', requestId: 'id-0' });
+        expect(harness.deps.commands).toHaveLength(66);
+    });
+
+    describe('a Stop is a priority operation', () => {
+        const inboxStates = [
+            ['busy', { success: false, error: 'busy' }],
+            ['full', { success: false, error: 'full' }],
+            ['unreadable', { success: false, error: 'unreadable' }],
+        ] as const;
+
+        test.each(inboxStates)(
+            'with the ordinary inbox %s it still reaches the controller at once, and the inbox is never asked',
+            async (_label, answer) => {
+                const harness = makeHarness({
+                    invoke: async (channel) => {
+                        harness.deps.invokeLog.push({ channel, args: [] });
+                        return answer;
+                    },
+                });
+                const transport = await connectPhone(harness);
+                harness.deps.invokeLog.length = 0;
+                await send(transport, { command: 'stop', requestId: 's1' });
+                expect(harness.deps.commands).toEqual(['stop']);
+                expect(harness.deps.invokeLog).toEqual([]);
+                expect(stateMessages(transport)[0].ack).toEqual({ requestId: 's1', command: 'stop', outcome: 'ran' });
+            },
+        );
+
+        test('a Stop is run every time it arrives, whatever its identity: repeating it only reduces authority', async () => {
+            const harness = makeHarness();
+            const transport = await connectPhone(harness);
+            await send(transport, { command: 'stop', requestId: 's1' });
+            await send(transport, { command: 'stop', requestId: 's1' });
+            await send(transport, { command: 'stop', requestId: 's2', expectedStopEpoch: 99 });
+            expect(harness.deps.commands).toEqual(['stop', 'stop', 'stop']);
+        });
+
+        test('a Stop does not wait for a scenario change in flight', async () => {
+            let release: () => void = () => undefined;
+            const harness = makeHarness({
+                invoke: async (channel) => {
+                    if (channel === 'begin-scenario-request') {
+                        await new Promise<void>((resolve) => {
+                            release = resolve;
+                        });
+                        return { success: true, outcome: 'accepted', revision: 0 };
+                    }
+                    return { success: true };
+                },
+            });
+            const transport = await connectPhone(harness);
+            transport.receiveFromPeer(
+                { t: 'invoke', id: 1, channel: 'pause-scenario', args: ['7'], requestId: 'c1' },
+                'p1',
+            );
+            await flush();
+            await send(transport, { command: 'stop', requestId: 's1' });
+            expect(harness.deps.commands).toEqual(['stop']);
+            release();
+            await flush();
+        });
+    });
+
+    describe('a scenario change', () => {
+        const control = (harness: Harness, over: Record<string, unknown> = {}) => {
+            harness.deps.invoke = async (channel, args) => {
+                harness.deps.invokeLog.push({ channel, args });
+                if (channel === 'begin-scenario-request')
+                    return { success: true, outcome: 'accepted', revision: 2, ...over };
+                if (channel === 'finish-scenario-request') return { success: true, status: 'applied', revision: 3 };
+                return { success: true, paused: true };
+            };
+        };
+        const resultOf = (transport: TransportStub, id: number) =>
+            transport.sent
+                .map(({ message }) => message as Record<string, unknown>)
+                .find((m) => m.t === 'result' && m.id === id);
+
+        test("carries its identity and expected revision to the inbox, and the answer carries the target's revision", async () => {
+            const harness = makeHarness();
+            control(harness);
+            const transport = await connectPhone(harness);
+            transport.receiveFromPeer(
+                { t: 'invoke', id: 1, channel: 'pause-scenario', args: ['7'], requestId: 'c1', expectedRevision: 2 },
+                'p1',
+            );
+            await flush();
+            expect(harness.deps.invokeLog.map(({ channel }) => channel)).toEqual([
+                'begin-scenario-request',
+                'pause-scenario',
+                'finish-scenario-request',
+            ]);
+            expect(harness.deps.invokeLog[0].args).toEqual([
+                { requestId: 'c1', operation: 'pause-scenario', target: '7', args: '["7"]', expectedRevision: 2 },
+            ]);
+            expect(resultOf(transport, 1)).toEqual({
+                t: 'result',
+                id: 1,
+                ok: true,
+                result: { success: true, paused: true },
+                control: { requestId: 'c1', target: '7', revision: 3 },
+            });
+        });
+
+        test('without an identity is refused and reaches nothing', async () => {
+            const harness = makeHarness();
+            control(harness);
+            const transport = await connectPhone(harness);
+            transport.receiveFromPeer({ t: 'invoke', id: 2, channel: 'set-setting', args: ['scenario', 'Plan'] }, 'p1');
+            await flush();
+            expect(resultOf(transport, 2)).toMatchObject({
+                ok: false,
+                error: 'Refused remotely: a scenario change needs a request identity.',
+            });
+            expect(harness.deps.invokeLog).toEqual([]);
+        });
+
+        test("a peer cannot call the inbox's host routes or send a host event", async () => {
+            const harness = makeHarness();
+            control(harness);
+            const transport = await connectPhone(harness);
+            transport.receiveFromPeer({ t: 'invoke', id: 3, channel: 'begin-scenario-request', args: [{}] }, 'p1');
+            transport.receiveFromPeer({ t: 'invoke', id: 4, channel: 'effective-settings-changed', args: [] }, 'p1');
+            transport.receiveFromPeer(
+                { t: 'event', channel: 'effective-presentation-changed', payload: { revision: 1 } },
+                'p1',
+            );
+            await flush();
+            expect(resultOf(transport, 3)).toMatchObject({ ok: false });
+            expect(resultOf(transport, 4)).toMatchObject({
+                ok: false,
+                error: 'Refused remotely: Events flow from the computer to the phone only.',
+            });
+            expect(harness.deps.invokeLog).toEqual([]);
+        });
+    });
+
+    test('the two effective projections are forwarded to every connected phone, and only to those', async () => {
+        const handlers = new Map<string, (payload: unknown) => void>();
+        const harness = makeHarness({
+            onForwardedEvent: (channel, handler) => {
+                handlers.set(channel, handler);
+                return () => undefined;
+            },
+        });
+        const transport = await connectPhone(harness);
+        handlers.get('effective-settings-changed')?.({
+            revision: 1,
+            subject: 'installation',
+            generation: 0,
+            values: {},
+        });
+        handlers.get('effective-presentation-changed')?.({
+            revision: 1,
+            available: true,
+            theme: 'dark',
+            language: 'en',
+            reason: null,
+        });
+        await flush();
+        expect(transport.sent.map(({ message }) => (message as { channel: string }).channel)).toEqual([
+            'effective-settings-changed',
+            'effective-presentation-changed',
+        ]);
+    });
+});
+
 describe('createRemoteHost (activity is logged at INFO, never with a key or arguments)', () => {
     test('peer connect, invoke, refusal, command, refusal for a full house and leave each leave a line', async () => {
         const logs: string[] = [];
@@ -1106,7 +1376,7 @@ describe('createRemoteHost (activity is logged at INFO, never with a key or argu
         );
         transport.receiveFromPeer({ t: 'invoke', id: 1, channel: 'get-settings', args: [{ secret: 'arg' }] }, 'p1');
         transport.receiveFromPeer({ t: 'invoke', id: 2, channel: 'wipe-local-data', args: [] }, 'p1');
-        transport.receiveFromPeer({ t: 'autovote-command', command: 'start' }, 'p1');
+        transport.receiveFromPeer({ t: 'autovote-command', command: 'start', requestId: 'req-start' }, 'p1');
         for (let i = 2; i < MAX_REMOTE_PEERS + 2; i++) {
             transport.receiveFromPeer(
                 {
@@ -1239,7 +1509,7 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
         await flush();
         expect(remoteConnectionCount()).toBe(1);
 
-        mine()[0].receiveFromPeer({ t: 'autovote-command', command: 'start' }, 'p1');
+        mine()[0].receiveFromPeer({ t: 'autovote-command', command: 'start', requestId: 'req-start' }, 'p1');
         await flush();
         expect(controller.start).toHaveBeenCalled();
 
@@ -1327,7 +1597,7 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
         );
         await flush();
         for (const command of ['start', 'stop', 'rearm'] as const) {
-            transport.receiveFromPeer({ t: 'autovote-command', command }, 'p1');
+            transport.receiveFromPeer({ t: 'autovote-command', command, requestId: `req-${command}` }, 'p1');
             await flush();
         }
         expect(controller.stop).toHaveBeenCalled();
@@ -1456,7 +1726,7 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
         const transport = deps.transports[0];
         // A leave and a command for peers the host never validated.
         transport.emitLeave('ghost');
-        transport.receiveFromPeer({ t: 'autovote-command', command: 'stop' }, 'ghost');
+        transport.receiveFromPeer({ t: 'autovote-command', command: 'stop', requestId: 'req-stop' }, 'ghost');
         await flush();
         expect(deps.commands).toEqual([]);
         expect(host.connectedCount()).toBe(0);
@@ -1518,7 +1788,7 @@ describe('useDesktopRemoteHost (the provider hook) and the badge store', () => {
         expect(deps.invokeLog.filter(({ channel }) => channel === 'stop-log-stream')).toHaveLength(0);
 
         for (const command of ['start', 'stop', 'rearm'] as const) {
-            transport.receiveFromPeer({ t: 'autovote-command', command }, 'p1');
+            transport.receiveFromPeer({ t: 'autovote-command', command, requestId: `req-${command}` }, 'p1');
             await flush();
         }
         expect(deps.commands).toEqual(['start', 'stop', 'rearm']);

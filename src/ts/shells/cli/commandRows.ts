@@ -1,5 +1,5 @@
 import { handleLogin, handleLogout } from './commands/auth';
-import { startContinuousVoting } from './commands/voting';
+import { startContinuousVoting, stopAllAutomation } from './commands/voting';
 import { parseSwapFlags, SWAP_BACK_USAGE, SWAP_USAGE, swapCmd } from './commands/actions';
 import { fillExposureCmd, unlockBoostCmd } from './commands/spend';
 import { showStatus } from './commands/status';
@@ -175,6 +175,15 @@ const COMMAND_ROWS: readonly CommandRow[] = [
             return undefined;
         },
         ['  start    - Start continuous voting on a schedule (runs until stopped with Ctrl+C)'],
+    ),
+    row(
+        'stop',
+        stopAllAutomation,
+        [
+            '  stop     - Stop all automation on this computer (the running app or CLI sees the recorded Stop at its next',
+            '             check; never a pause of the voting stages only). Exits 1 when the Stop could not be saved.',
+        ],
+        { usage: 'Usage: stop' },
     ),
     row('status', exitsZero(showStatus), [
         '  status   - Show current status and settings, including the Auto-claim and Auto-join lines and, when signed in,',

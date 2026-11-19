@@ -41,10 +41,16 @@ import { maybeAutoFillChallenge, resolveAutoSubmitDue, createFinalEligibility } 
 import { evaluateEmergencyFill, maybeEmergencyFillChallenge } from './autoFill/emergencyFill';
 import { fillChallengeNow, submitPickedPhotos } from './autoFill/manualFill';
 import { submitNewEntryForAction, submitPinnedEntry } from './autoFill/fillNew';
-import { rankCandidatesForChallenge, suggestFillPhotos } from './autoFill/pipeline';
+import { rankCandidatesForChallenge, scanFillCandidates, suggestFillPhotos } from './autoFill/pipeline';
 import { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge } from './autoFill/candidates';
 import { resolveMemberId, __resetMemberIdCache } from './autoFill/memberIdentity';
-import { resolveChosenPhotos, logChosenSkipOnce, clearChosenSkip, enteredIds } from './autoFill/chosenPhotos';
+import {
+    resolveChosenPhotos,
+    logChosenSkipOnce,
+    logPoolBlockOnce,
+    clearChosenSkip,
+    enteredIds,
+} from './autoFill/chosenPhotos';
 import { resolveMissingChosen, chosenWalkOutcome } from './autoFill/chosenWalkMemo';
 import { describeSubmitFailure } from './autoFill/fillLogging';
 import { getSlotsRemaining, reflectNewEntry, reflectEntryFlag, refreshChallengeState } from './autoFill/challengeState';
@@ -75,6 +81,8 @@ export {
     fetchCandidatesForChallenge,
     rankCandidatesForChallenge,
     suggestFillPhotos,
+    // The read-only scan of the photos a submission would consider (the scenario facts read it).
+    scanFillCandidates,
     resolveMemberId,
     __resetMemberIdCache,
     resolveSemanticScores,
@@ -83,6 +91,7 @@ export {
     resolveChosenPhotos,
     resolveMissingChosen,
     logChosenSkipOnce,
+    logPoolBlockOnce,
     clearChosenSkip,
     enteredIds,
     describeSubmitFailure,

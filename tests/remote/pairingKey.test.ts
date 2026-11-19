@@ -1,6 +1,7 @@
-/** Current-v2 pairing URLs and direct-entry fragments accept one exact key only. */
+/** Current-version pairing URLs and direct-entry fragments accept one exact key only. */
 
 import { isPairingKey, parsePairingLink, takePairingKey } from '../../src/ts/core/remote/pairingKey';
+import { LINK_VERSION } from '../../src/ts/core/remote/protocol';
 import {
     remoteConnectionState,
     setRemoteConnectionState,
@@ -38,23 +39,24 @@ describe('the pairing link a phone pastes', () => {
     });
 
     test.each([
-        `https://example.test/remote/v2/#k=${KEY}`,
-        `https://example.test/remote/v2/index.html#k=${KEY}`,
-        `  http://192.168.1.5:8080/remote/v2/#k=${KEY}\n`,
-    ])('accepts a canonical current-v2 pairing URL', (link) => {
+        `https://example.test/remote/v${LINK_VERSION}/#k=${KEY}`,
+        `https://example.test/remote/v${LINK_VERSION}/index.html#k=${KEY}`,
+        `  http://192.168.1.5:8080/remote/v${LINK_VERSION}/#k=${KEY}\n`,
+    ])('accepts a canonical current-version pairing URL', (link) => {
         expect(parsePairingLink(link)).toBe(KEY);
     });
 
     test.each([
         'not a URL',
-        `file:///remote/v2/#k=${KEY}`,
+        `file:///remote/v${LINK_VERSION}/#k=${KEY}`,
         `https://example.test/remote/#k=${KEY}`,
         `https://example.test/remote/v1/#k=${KEY}`,
-        `https://example.test/remote/v3/#k=${KEY}`,
-        `https://example.test/remote/v2#k=${KEY}`,
-        `https://example.test/remote/v2/#k=bad`,
-        `https://example.test/remote/v2/#k=${KEY}&k=${KEY}`,
-        `https://example.test/remote/v2/#k=${KEY}&v=2`,
+        `https://example.test/remote/v${LINK_VERSION - 1}/#k=${KEY}`,
+        `https://example.test/remote/v${LINK_VERSION + 1}/#k=${KEY}`,
+        `https://example.test/remote/v${LINK_VERSION}#k=${KEY}`,
+        `https://example.test/remote/v${LINK_VERSION}/#k=bad`,
+        `https://example.test/remote/v${LINK_VERSION}/#k=${KEY}&k=${KEY}`,
+        `https://example.test/remote/v${LINK_VERSION}/#k=${KEY}&v=${LINK_VERSION}`,
     ])('refuses a non-current or malformed pairing URL', (link) => {
         expect(parsePairingLink(link)).toBeNull();
     });

@@ -29,6 +29,7 @@ import { isIdArg } from './isIdArg';
 import { refuseInvalidArgs } from './actions/shared';
 import { wipeLocalData } from '../settings/localData';
 import { loadThirdPartyNotices } from '../thirdPartyNotices';
+import { announceEffectiveChange } from '../services/effectiveEvents';
 
 import type { SettingsSchemaEntry } from '../settings/schema';
 import type { ConfigApp } from '../types/config';
@@ -379,11 +380,17 @@ const buildHandlers = () => {
     // The shell's windows, through the platform its entry installed: where a
     // write is announced, and what runs once a wipe has succeeded.
     const { broadcastSettingsChanged, afterWipe } = platform().windows;
-    const actions: WindowActions = { broadcastSettingsChange: broadcastSettingsChanged, afterWipe };
+    // A saved setting can change what applies to the installation (the saved value under a published phase, or the
+    // value no phase sets): the effective projections are worked out again and told when they differ.
+    const broadcastAndAnnounce: BroadcastSettingsChange = (newSettings) => {
+        broadcastSettingsChanged(newSettings);
+        announceEffectiveChange();
+    };
+    const actions: WindowActions = { broadcastSettingsChange: broadcastAndAnnounce, afterWipe };
     // A save the window gave up (and the next one that lands) changes what get-settings-recovery answers, so the
     // window re-reads on the same signal a settings change sends. So does a block a read clears: a state that had
     // to wait came through, and the notice for it changes.
-    const tell = () => broadcastSettingsChanged(toRendererSettings(settings.loadSettings()));
+    const tell = () => broadcastAndAnnounce(toRendererSettings(settings.loadSettings()));
     settings.onSettingsSaveDroppedChange(tell);
     settings.onSettingsRecoveryChange(tell);
     const handlers = {

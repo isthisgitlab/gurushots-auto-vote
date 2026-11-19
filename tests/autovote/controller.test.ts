@@ -106,9 +106,13 @@ const makeHost = (overrides: Partial<AutovoteHost> = {}) => {
     jest.mocked(host.getSetting).mockResolvedValue(null);
     jest.mocked(host.setSetting).mockResolvedValue(invalid(undefined));
     jest.mocked(host.getActiveChallenges).mockResolvedValue({ challenges: far });
-    jest.mocked(host.getEffectiveSetting).mockImplementation((key) =>
-        Promise.resolve(key === 'autoSubmitSchedule' ? [] : key === 'lastMinuteCheckFrequency' ? 1 : 10),
-    );
+    // The cadence settings are the installation's effective values; with no scenario they are the saved ones.
+    jest.mocked(host.getEffectiveSetting).mockImplementation(async (key) => {
+        if (key === 'checkFrequencyMin' || key === 'checkFrequencyMax' || key === 'timezone') {
+            return (await host.getSettings()).app[key];
+        }
+        return key === 'autoSubmitSchedule' ? [] : key === 'lastMinuteCheckFrequency' ? 1 : 10;
+    });
     jest.mocked(host.runVotingCycle).mockResolvedValue(invalid({ success: true, challenges: far }));
     jest.mocked(host.background.start).mockResolvedValue(undefined);
     jest.mocked(host.background.stop).mockResolvedValue(undefined);
@@ -884,6 +888,52 @@ describe('createAutovoteController', () => {
             expect(host.getActiveChallenges).toHaveBeenCalledWith();
             await expect(deps.resolveLastMinuteCheckMinutes()).resolves.toBe(1);
             expect(host.getEffectiveSetting).toHaveBeenCalledWith('lastMinuteCheckFrequency', 'global');
+        });
+
+        it('captures the cadence settings as the installation effective values over the saved app block', async () => {
+            setup();
+            jest.mocked(host.getEffectiveSetting).mockImplementation(async (key) => {
+                if (key === 'timezone') return 'Europe/Riga';
+                if (key === 'checkFrequencyMin') return 7;
+                return key === 'checkFrequencyMax' ? 9 : 1;
+            });
+            await expect(captured.chainDeps!.loadSettings()).resolves.toMatchObject({
+                timezone: 'Europe/Riga',
+                checkFrequencyMin: 7,
+                checkFrequencyMax: 9,
+            });
+            expect(host.getEffectiveSetting).toHaveBeenCalledWith('timezone', 'global');
+            expect(host.getEffectiveSetting).toHaveBeenCalledWith('checkFrequencyMin', 'global');
+            expect(host.getEffectiveSetting).toHaveBeenCalledWith('checkFrequencyMax', 'global');
+        });
+
+        it('a cadence setting that cannot be read rejects the capture: the saved value never takes its place', async () => {
+            setup();
+            jest.mocked(host.getEffectiveSetting).mockImplementation(async (key) => {
+                if (key === 'checkFrequencyMin') throw new Error('checkFrequencyMin is unavailable');
+                return 5;
+            });
+            await expect(captured.chainDeps!.loadSettings()).rejects.toThrow('checkFrequencyMin is unavailable');
+        });
+
+        it('an obsolete-run notice that arrives after the run ended does nothing', async () => {
+            setup();
+            await controller!.start();
+            await controller!.stop();
+            const calls = jest.mocked(host.setCancelVoting).mock.calls.length;
+            captured.chainDeps!.onObsolete!();
+            await advance(0);
+            expect(jest.mocked(host.setCancelVoting).mock.calls.length).toBe(calls);
+            expect(controller!.getState().executionMode).toBe('stopped');
+        });
+
+        it('hands the chain the account boundary, the armed test and the Stop fence hooks', async () => {
+            setup();
+            const deps = captured.chainDeps!;
+            await expect(deps.resolveAccountWake!()).resolves.toBeNull();
+            expect(deps.isArmed!()).toBe(false);
+            expect(deps.gate).toBeTruthy();
+            expect(typeof deps.onObsolete).toBe('function');
         });
 
         it('logs non-normal cadence lines only', () => {

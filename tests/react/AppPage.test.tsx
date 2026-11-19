@@ -13,11 +13,14 @@ import { invalid } from '../helpers/invalid';
 import { resetPlatformKind } from '../helpers/platformKind';
 import { markPlatformKind } from '../../src/ts/core/platform/kind';
 import { CURRENT_NOTICE_VERSION } from '../../src/ts/core/noticeVersion';
+import { flag, gone, installEffectiveBus, settingsOf, text } from './helpers/effective';
 
 import type { ComponentChildren } from 'preact';
 import type { Challenge } from '../../src/ts/core/types/gurushots';
 import type { RendererGlobals } from '../../src/ts/core/types/capacitor';
 import type { WindowApi } from '../../src/ts/core/types/ipc';
+import type { ExecutionMode } from '../../src/ts/core/autovote/state';
+import type { StopResult } from '../../src/ts/core/autovote/runGate';
 import type * as AppModule from '@/pages/App';
 import type { ChallengesContextValue, ChallengesProvider } from '@/contexts/ChallengesContext';
 import type { AutovoteProvider } from '@/contexts/AutovoteContext';
@@ -57,6 +60,9 @@ const mockChallenges: { challenges: Challenge[]; refetch: jest.MockedFunction<Ch
 const mockBankroll = { bankroll: { coins: 5 }, refetch: jest.fn() };
 const mockAutovote = {
     running: false,
+    executionMode: 'stopped' as ExecutionMode,
+    lastStop: null as StopResult | null,
+    startPending: false,
     status: 'idle',
     statusClass: 'x',
     error: null as string | null,
@@ -66,7 +72,6 @@ const mockAutovote = {
     pendingStartAt: null as number | null,
     start: jest.fn(),
     stop: jest.fn(),
-    toggle: jest.fn(),
 };
 
 const mockStub =
@@ -122,6 +127,9 @@ describe('App page', () => {
         for (const k of Object.keys(mockProps)) delete (mockProps as Record<string, unknown>)[k];
         mockChallenges.challenges = [];
         mockAutovote.running = false;
+        mockAutovote.executionMode = 'stopped';
+        mockAutovote.lastStop = null;
+        mockAutovote.startPending = false;
         mockAutovote.pendingStartAt = null;
         mockAutovote.cycles = 0;
         originals = Object.fromEntries(API_METHODS.map((m) => [m, window.api[m]]));
@@ -189,7 +197,7 @@ describe('App page', () => {
             challenges: mockChallenges.challenges,
             running: false,
         });
-        expect(mockProps.AutoVoteControls).toMatchObject({ autoJoinActive: true, running: false });
+        expect(mockProps.AutoVoteControls).toMatchObject({ autoJoinActive: true, executionMode: 'stopped' });
         expect(mockProps.DiscoverSection.isLoggedIn).toBe(true);
         expect(mockProps.WelcomeModal.isOpen).toBe(false);
         expect(mockProps.AutovoteProvider.onChallengesRefresh).toBe(mockChallenges.refetch);
@@ -391,6 +399,7 @@ describe('App page', () => {
 
     test('a logout the settings refused, after auto-vote was stopped, says so; it points at the settings only for that cause', async () => {
         mockAutovote.running = true;
+        mockAutovote.executionMode = 'voting';
         await renderReady();
         jest.mocked(window.api.logout).mockRejectedValueOnce(new Error('logout-not-saved'));
 
@@ -403,6 +412,7 @@ describe('App page', () => {
 
     test('a logout that failed for another reason does not blame the settings, and still says auto-vote was stopped', async () => {
         mockAutovote.running = true;
+        mockAutovote.executionMode = 'voting';
         await renderReady();
         jest.mocked(window.api.logout).mockRejectedValueOnce(new Error('boom'));
 
@@ -416,6 +426,7 @@ describe('App page', () => {
 
     test('a logout that failed before auto-vote could be stopped does not say it was', async () => {
         mockAutovote.running = true;
+        mockAutovote.executionMode = 'voting';
         mockAutovote.stop.mockRejectedValueOnce(new Error('stop failed'));
         await renderReady();
 
@@ -428,6 +439,7 @@ describe('App page', () => {
 
     test('logout while autovote runs stops it first', async () => {
         mockAutovote.running = true;
+        mockAutovote.executionMode = 'voting';
         await renderReady();
         fireEvent.click(screen.getByTitle('app.logout'));
         await waitFor(() => expect(window.api.logout).toHaveBeenCalledTimes(1));
@@ -435,6 +447,22 @@ describe('App page', () => {
         expect(mockAutovote.stop.mock.invocationCallOrder[0]).toBeLessThan(
             jest.mocked(window.api.logout).mock.invocationCallOrder[0],
         );
+    });
+
+    test('logout while armed (a scenario active, voting paused) stops it first: only the mode says whether anything runs', async () => {
+        mockAutovote.running = false;
+        mockAutovote.executionMode = 'armed';
+        await renderReady();
+        fireEvent.click(screen.getByTitle('app.logout'));
+        await waitFor(() => expect(window.api.logout).toHaveBeenCalledTimes(1));
+        expect(mockAutovote.stop).toHaveBeenCalledTimes(1);
+    });
+
+    test('logout while stopped does not send a Stop', async () => {
+        await renderReady();
+        fireEvent.click(screen.getByTitle('app.logout'));
+        await waitFor(() => expect(window.api.logout).toHaveBeenCalledTimes(1));
+        expect(mockAutovote.stop).not.toHaveBeenCalled();
     });
 
     test('logout while a resume is held stops it first', async () => {
@@ -501,13 +529,27 @@ describe('App page', () => {
         expect(mockProps.ChallengeSettingsModal).toMatchObject({ isOpen: false, challengeId: null });
     });
 
-    test('autovote toggle and discover joins delegate to the hooks', async () => {
+    test('the autovote controls get the mode and the Stop result, never the running flag, and delegate Start and Stop', async () => {
+        mockAutovote.executionMode = 'armed';
+        mockAutovote.lastStop = { outcome: 'requested', durable: false };
+        mockAutovote.startPending = true;
         await renderReady();
-        expect(mockProps.AutoVoteControls).toMatchObject({ running: false, status: 'idle', statusClass: 'x' });
-        await act(async () => {
-            await mockProps.AutoVoteControls.onToggle();
+        expect(mockProps.AutoVoteControls).toMatchObject({
+            executionMode: 'armed',
+            lastStop: { outcome: 'requested', durable: false },
+            startPending: true,
+            status: 'idle',
+            statusClass: 'x',
         });
-        expect(mockAutovote.toggle).toHaveBeenCalledTimes(1);
+        expect(mockProps.AutoVoteControls).not.toHaveProperty('running');
+        await act(async () => {
+            await mockProps.AutoVoteControls.onStart();
+        });
+        expect(mockAutovote.start).toHaveBeenCalledTimes(1);
+        await act(async () => {
+            await mockProps.AutoVoteControls.onStop();
+        });
+        expect(mockAutovote.stop).toHaveBeenCalledTimes(1);
 
         act(() => mockProps.DiscoverSection.onJoined());
         expect(mockBankroll.refetch).toHaveBeenCalledTimes(1);
@@ -515,13 +557,13 @@ describe('App page', () => {
     });
 
     test.each([
-        [new Error('bridge down'), 'Autovote toggle failed: bridge down'],
-        [null, 'Autovote toggle failed: null'],
-    ])('a toggle that rejects (%p) is logged, not left unhandled', async (thrown, logged) => {
+        [new Error('bridge down'), 'Autovote start failed: bridge down'],
+        [null, 'Autovote start failed: null'],
+    ])('a Start that rejects (%p) is logged, not left unhandled', async (thrown, logged) => {
         await renderReady();
-        mockAutovote.toggle.mockRejectedValueOnce(thrown);
+        mockAutovote.start.mockRejectedValueOnce(thrown);
         await act(async () => {
-            await mockProps.AutoVoteControls.onToggle();
+            await mockProps.AutoVoteControls.onStart();
         });
         expect(window.api.logError).toHaveBeenCalledWith(logged);
     });
@@ -543,7 +585,7 @@ describe('App page', () => {
 
     test.each([
         ['start', 'Start now', 'Autovote start failed: down'],
-        ['stop', "Don't resume", 'Autovote resume cancel failed: down'],
+        ['stop', "Don't resume", 'Autovote stop failed: down'],
     ] as const)('a rejected %s from %s is logged, not left unhandled', async (method, _label, logged) => {
         await renderReady();
         mockAutovote[method].mockRejectedValueOnce(new Error('down'));
@@ -619,5 +661,101 @@ describe('App page', () => {
         expect(root.textContent).toBe('common.loading');
         // The auto-mount passes the no-op background host to the provider.
         expect(mockProps.AutovoteProvider.backgroundHost).toBe(mockNoopHost);
+    });
+
+    describe('the effective presentation', () => {
+        let bus: ReturnType<typeof installEffectiveBus>;
+        const savedTheme = (theme: string) =>
+            jest.mocked(window.api.getSettings).mockResolvedValue(
+                invalid({
+                    app: { theme, onboardingCompleted: true, noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION },
+                }),
+            );
+        const projection = (revision: number, values: Record<string, ReturnType<typeof text>>) => ({
+            success: true,
+            ...settingsOf(revision, values),
+        });
+
+        beforeEach(() => {
+            bus = installEffectiveBus();
+            window.api.setGlobalDefault = jest.fn().mockResolvedValue(true);
+        });
+
+        test("paints a running scenario's theme over the saved one, and the saved one again on withdrawal, writing nothing", async () => {
+            savedTheme('light');
+            bus.answer({ settings: projection(5, { theme: text('dark', 'scenario') }) });
+            await renderReady();
+            await waitFor(() => expect(document.documentElement.getAttribute('data-theme')).toBe('dark'));
+
+            act(() => bus.fireSettings(settingsOf(6, { theme: text('light') })));
+            expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+            expect(window.api.setSetting).not.toHaveBeenCalled();
+            expect(window.api.setGlobalDefault).not.toHaveBeenCalled();
+        });
+
+        test('ignores a stale event', async () => {
+            savedTheme('light');
+            bus.answer({ settings: projection(5, { theme: text('dark', 'scenario') }) });
+            await renderReady();
+            await waitFor(() => expect(document.documentElement.getAttribute('data-theme')).toBe('dark'));
+            act(() => bus.fireSettings(settingsOf(5, { theme: text('light') })));
+            act(() => bus.fireSettings(settingsOf(2, { theme: text('light') })));
+            expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+        });
+
+        test('restores the theme on focus after a missed withdrawal (no event arrived)', async () => {
+            savedTheme('light');
+            bus.answer({ settings: projection(5, { theme: text('dark', 'scenario') }) });
+            await renderReady();
+            await waitFor(() => expect(document.documentElement.getAttribute('data-theme')).toBe('dark'));
+            bus.answer({ settings: projection(6, { theme: text('light') }) });
+            await act(async () => {
+                window.dispatchEvent(new Event('focus'));
+            });
+            await waitFor(() => expect(document.documentElement.getAttribute('data-theme')).toBe('light'));
+        });
+
+        test('paints the saved theme until the host has published one', async () => {
+            savedTheme('cupcake');
+            await renderReady();
+            expect(document.documentElement.getAttribute('data-theme')).toBe('cupcake');
+        });
+
+        test('keeps the last painted theme and shows an inline warning with the reason when one cannot be read', async () => {
+            savedTheme('light');
+            bus.answer({ settings: projection(5, { theme: text('dark', 'scenario') }) });
+            await renderReady();
+            await waitFor(() => expect(document.documentElement.getAttribute('data-theme')).toBe('dark'));
+            expect(screen.queryByText('app.effectiveUnavailableTitle')).toBeNull();
+
+            act(() => bus.fireSettings(settingsOf(6, { theme: gone('publication-expired') })));
+
+            expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+            const warning = screen.getByText('app.effectiveUnavailableTitle').closest('.alert') as HTMLElement;
+            expect(warning.className).toContain('alert-warning');
+            expect(warning.textContent).toContain('app.effectiveUnavailableReason');
+
+            act(() => bus.fireSettings(settingsOf(7, { theme: text('light') })));
+            expect(screen.queryByText('app.effectiveUnavailableTitle')).toBeNull();
+        });
+
+        test('hands the cards the effective density with its revision', async () => {
+            bus.answer({
+                settings: projection(5, { compactCards: flag(true, 'scenario'), compactCardActions: flag(false) }),
+            });
+            await renderReady();
+            await waitFor(() =>
+                expect(mockProps.ChallengesSection.effectiveDensity).toEqual({
+                    compactCards: true,
+                    compactCardActions: false,
+                    revision: 5,
+                }),
+            );
+        });
+
+        test('hands the cards nothing before the host has published a projection', async () => {
+            await renderReady();
+            expect(mockProps.ChallengesSection.effectiveDensity).toBeNull();
+        });
     });
 });

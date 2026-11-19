@@ -23,11 +23,14 @@ describe('the scripts platform module', () => {
     test('the module installs the platform, and the windows are the explicit no-ops', () => {
         expect(installed).toBeDefined();
         expect(() => installed.windows.broadcastSettingsChanged({})).not.toThrow();
+        expect(() => installed.windows.broadcastEvent('effective-settings-changed', {})).not.toThrow();
         expect(() => installed.windows.afterWipe()).not.toThrow();
     });
 
     test('the capabilities answer the script values', () => {
         const capabilities = installed.capabilities;
+        // A script run is a plain Node process, like the CLI.
+        expect(capabilities.executor).toBe('cli');
         expect(capabilities.refreshMissionNeeds).toBe(false);
         expect(capabilities.snapAllowed).toBe(true);
         expect(capabilities.backgroundServiceOwnsScenarios()).toBe(false);

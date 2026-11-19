@@ -17,6 +17,10 @@ jest.mock('../../src/ts/core/services/joinChallenges', () => ({
     joinChallengeSingle: jest.fn(async () => ({ status: 'joined' })),
     forgetUnconfirmedPayment: jest.fn(async () => ({ status: 'nothing-to-forget', challengeId: 1 })),
 }));
+jest.mock('../../src/ts/core/services/scenarioRunner/installation', () => ({
+    publishInstallationOverlay: jest.fn(async () => 'none'),
+    runInstallationStage: jest.fn(async () => 'none'),
+}));
 jest.mock('../../src/ts/core/services/missions', () => ({
     loadMissionNeeds: jest.fn(async () => null),
     registerMissionNeeds: jest.fn((_token: string, needs: missionsModule.MissionNeeds | null) =>
@@ -38,6 +42,8 @@ import settingsModule = require('../../src/ts/core/settings');
 import type * as votingOrchestratorModule from '../../src/ts/core/services/votingOrchestrator';
 import type * as joinChallengesModule from '../../src/ts/core/services/joinChallenges';
 import type * as missionsModule from '../../src/ts/core/services/missions';
+import type * as installationModule from '../../src/ts/core/services/scenarioRunner/installation';
+import { mockScenarioStateLedger } from '../../src/ts/core/scenarioStateStore';
 import type * as indexModule from '../../src/ts/core/mock/index';
 import type * as photoLibraryModule from '../../src/ts/core/mock/photoLibrary';
 import type * as sessionCacheModule from '../../src/ts/core/mock/sessionCache';
@@ -58,6 +64,9 @@ const { runJoinPass, joinChallengeSingle, forgetUnconfirmedPayment } = jest.mock
 );
 const { loadMissionNeeds, registerMissionNeeds } = jest.mocked(
     require('../../src/ts/core/services/missions') as typeof missionsModule,
+);
+const { publishInstallationOverlay, runInstallationStage } = jest.mocked(
+    require('../../src/ts/core/services/scenarioRunner/installation') as typeof installationModule,
 );
 const { mockApiClient, clearSessionCache } = require('../../src/ts/core/mock/index') as typeof indexModule;
 const { getSessionCache } = require('../../src/ts/core/mock/sessionCache') as typeof sessionCacheModule;
@@ -327,6 +336,59 @@ describe('getEligiblePhotos', () => {
         expect(absent.map((p) => p.id)).toEqual(votesDesc);
         const def = await settle(mockApiClient.getEligiblePhotos(1, 'tok', { order: 'default' }));
         expect(def.map((p) => p.id)).toEqual(built.map((p) => p.id));
+    });
+});
+
+describe('photos already entered in the challenge', () => {
+    /** A session challenge holding the given entry ids; its member block is as the live read shapes it. */
+    const withEntries = (id: number, entryIds: string[] | undefined) => {
+        const cache = getSessionCache();
+        cache.challenges = invalid<NonNullable<typeof cache.challenges>>({
+            challenges: [
+                {
+                    id,
+                    title: 'Entered',
+                    url: 'entered',
+                    member: { ranking: { entries: entryIds?.map((e) => ({ id: e })) } },
+                },
+                {
+                    id: id + 1,
+                    title: 'Other',
+                    url: 'other',
+                    member: { ranking: { entries: [{ id: 'photo_old_008' }] } },
+                },
+            ],
+        });
+    };
+
+    test('getEligiblePhotos leaves out the photos entered in that challenge, as the live endpoint does', async () => {
+        withEntries(9100, ['photo_pink_flower_001', 'photo_old_008']);
+        const items = await settle(mockApiClient.getEligiblePhotos(9100, 'tok'));
+        expect(items).toHaveLength(10);
+        expect(items.map((p) => p.id)).not.toContain('photo_pink_flower_001');
+        expect(items.map((p) => p.id)).not.toContain('photo_old_008');
+        // A search reads the same filtered library, and the ids match as text.
+        const searched = await settle(mockApiClient.getEligiblePhotos('9100', 'tok', { search: 'Flower' }));
+        expect(searched.map((p) => p.id)).toEqual(['photo_blocked_007']);
+    });
+
+    test("another challenge's entries leave the library whole", async () => {
+        withEntries(9100, ['photo_pink_flower_001']);
+        expect(await settle(mockApiClient.getEligiblePhotos(9101, 'tok'))).toHaveLength(11);
+        expect(await settle(mockApiClient.getEligiblePhotos(777, 'tok'))).toHaveLength(12);
+    });
+
+    test('a challenge with no readable entries leaves the library whole', async () => {
+        withEntries(9100, undefined);
+        expect(await settle(mockApiClient.getEligiblePhotos(9100, 'tok'))).toHaveLength(12);
+    });
+
+    test('the library walk leaves them out too, and its offset counts what is left', async () => {
+        withEntries(9100, ['photo_pink_flower_001', 'photo_old_008']);
+        const walk = await settle(mockApiClient.getEligiblePhotosWalk(9100, 'tok'));
+        expect(walk.items).toHaveLength(10);
+        expect(walk.items.map((p) => p.id)).not.toContain('photo_old_008');
+        expect(walk.nextStart).toBe(10);
     });
 });
 
@@ -821,6 +883,37 @@ describe('fetchChallengesAndVote — join pre-step', () => {
         runJoinPass.mockRejectedValueOnce(new Error('boom'));
         await mockApiClient.fetchChallengesAndVote('tok');
         expect(cat.warning).toHaveBeenCalledWith('Mock join pass errored: boom', null);
+    });
+
+    test('the installation stage runs first, over the in-memory ledger only and the mock endpoints', async () => {
+        await mockApiClient.fetchChallengesAndVote('tok');
+
+        expect(runInstallationStage).toHaveBeenCalledTimes(1);
+        // the mock ledger and no cross-process lock: a mock run never touches the real progress file; a full pass also
+        // runs the installation's account rules
+        expect(runInstallationStage).toHaveBeenCalledWith(
+            expect.objectContaining({
+                token: 'tok',
+                ledger: mockScenarioStateLedger,
+                reads: {
+                    getBankroll: mockApiClient.getBankroll,
+                    getMyMissions: mockApiClient.getMyMissions,
+                    getMyCompletedChallenges: mockApiClient.getMyCompletedChallenges,
+                },
+                operations: expect.any(Object),
+            }),
+            { rules: true },
+        );
+        expect(runInstallationStage.mock.calls[0][0]).not.toHaveProperty('lock');
+        const published = runInstallationStage.mock.invocationCallOrder[0]!;
+        expect(published).toBeLessThan(loadMissionNeeds.mock.invocationCallOrder[0]!);
+        expect(published).toBeLessThan(runJoinPass.mock.invocationCallOrder[0]!);
+    });
+
+    test('a single-challenge run only publishes: it runs no account rule', async () => {
+        await mockApiClient.fetchChallengesAndVote('tok', 9);
+        expect(publishInstallationOverlay).toHaveBeenCalledTimes(1);
+        expect(runInstallationStage).not.toHaveBeenCalled();
     });
 
     test('reads the missions over the mock endpoint and hands the same needs to the join pass and the vote', async () => {

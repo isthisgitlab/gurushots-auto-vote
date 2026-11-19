@@ -7,7 +7,8 @@
 jest.mock('node:child_process', () => ({ execFile: jest.fn() }));
 jest.mock('../../src/ts/core/settings', () => ({
     getSetting: jest.fn(() => 'en'),
-    getGlobalDefault: jest.fn(),
+    captureInstallationSettings: jest.fn(),
+    scenarioSubjectAvailable: jest.fn(() => true),
     loadSettings: jest.fn(() => ({})),
     getEffectiveSetting: jest.fn(),
 }));
@@ -113,8 +114,12 @@ describe('createNodeDeadlineNotifier (default wiring)', () => {
 
     beforeEach(() => {
         settings.getSetting.mockImplementation((key) => invalid(store[key]));
-        // The toggles live in the global defaults (where the settings modal saves them).
-        settings.getGlobalDefault.mockImplementation((key) => invalid(store[key]));
+        // The toggles are the installation's effective values: the saved ones with no installation scenario.
+        settings.captureInstallationSettings.mockImplementation((keys) => ({
+            ok: true,
+            values: Object.fromEntries(keys.map((key) => [key, invalid(store[key])])),
+        }));
+        settings.scenarioSubjectAvailable.mockReturnValue(true);
         setPlatform('linux');
     });
 
@@ -138,6 +143,75 @@ describe('createNodeDeadlineNotifier (default wiring)', () => {
         expect(args[2]).not.toContain('{');
         expect(args[2]).toContain('Sunset');
         expect(args[2]).toContain('~2 min');
+    });
+
+    test('a challenge whose scenario settings are unavailable produces no deadline; the others still do', async () => {
+        settings.scenarioSubjectAvailable.mockImplementation((id) => id !== 'gone');
+        const describeDeadlineActions = jest.fn(() => ({ actions: [{ action: 'boost', dueAt: NOW + 120 }] }));
+        const deliver = jest.fn();
+        const notify = createNodeDeadlineNotifier({ describeDeadlineActions, deliver, translate: (k) => k });
+
+        await notify(
+            invalid([
+                { id: 'gone', title: 'Hidden' },
+                { id: 'here', title: 'Shown' },
+            ]),
+            NOW,
+        );
+
+        expect(describeDeadlineActions).toHaveBeenCalledTimes(1);
+        expect(describeDeadlineActions).toHaveBeenCalledWith({ id: 'here', title: 'Shown' }, NOW, null);
+        expect(deliver).toHaveBeenCalledTimes(1);
+    });
+
+    test('a switch the installation cannot read sends nothing, said once while it lasts, never on the saved switch', async () => {
+        const debug = jest.fn();
+        const warning = jest.fn();
+        jest.mocked(logger.withCategory).mockReturnValue(invalid({ debug, warning }));
+        settings.captureInstallationSettings.mockReturnValue({
+            ok: false,
+            key: 'notifyOnBoost',
+            reason: 'the published settings of this phase have expired',
+        });
+        const describeDeadlineActions = jest.fn();
+        const deliver = jest.fn();
+        const notify = createNodeDeadlineNotifier({ describeDeadlineActions, deliver, translate: (k) => k });
+
+        await notify(invalid([{ id: 'c1' }]), NOW);
+        await notify(invalid([{ id: 'c1' }]), NOW);
+
+        expect(describeDeadlineActions).not.toHaveBeenCalled();
+        expect(deliver).not.toHaveBeenCalled();
+        // every key of the config is unavailable, and it is said once, not per key or per cycle
+        expect(warning).toHaveBeenCalledTimes(1);
+        expect(warning).toHaveBeenCalledWith(
+            'notifications are off while notifyOnBoost is unavailable (the published settings of this phase have expired)',
+            null,
+        );
+    });
+
+    test('the switch is read again immediately before delivery: a notice turned off meanwhile is not sent, nor used up', async () => {
+        let boost = true;
+        settings.captureInstallationSettings.mockImplementation((keys) => ({
+            ok: true,
+            values: Object.fromEntries(keys.map((key) => [key, key === 'notifyOnBoost' ? boost : 10])),
+        }));
+        const describeDeadlineActions = jest.fn(() => {
+            // the user (or the installation phase) turns the notice off while the cycle is being worked out
+            boost = false;
+            return { actions: [{ action: 'boost', dueAt: NOW + 120 }] };
+        });
+        const deliver = jest.fn();
+        const notify = createNodeDeadlineNotifier({ describeDeadlineActions, deliver, translate: (k) => k });
+
+        await notify(invalid([{ id: 'c1', title: 'Sunset' }]), NOW);
+        expect(deliver).not.toHaveBeenCalled();
+
+        // turned on again: the notice that was not sent is still due, so it goes out now
+        boost = true;
+        describeDeadlineActions.mockImplementation(() => ({ actions: [{ action: 'boost', dueAt: NOW + 120 }] }));
+        await notify(invalid([{ id: 'c1', title: 'Sunset' }]), NOW);
+        expect(deliver).toHaveBeenCalledTimes(1);
     });
 
     test('tolerates a non-array challenge list, missing describe results and non-array actions', async () => {

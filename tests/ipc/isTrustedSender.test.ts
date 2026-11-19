@@ -19,8 +19,11 @@
 import type * as registerHandlersModule from '../../src/ts/shells/electron/registerHandlers';
 import type * as loggerModule from '../../src/ts/core/logger';
 import type { IpcMainInvokeEvent } from 'electron';
+import type * as manifestModule from '../../src/ts/core/ipc/manifest';
 import { invalid } from '../helpers/invalid';
 
+const { allInvokeChannels, logsWindowInvokeChannels } =
+    require('../../src/ts/core/ipc/manifest') as typeof manifestModule;
 const { isTrustedSender, isChannelAllowedForSender, registerHandlers, restrictToLogsChannels } =
     require('../../src/ts/shells/electron/registerHandlers') as typeof registerHandlersModule;
 
@@ -247,6 +250,50 @@ describe('registerHandlers holds the Logs window to the Logs channel set', () =>
             message: 'a log line',
             token: 'kept: not a settings event',
         });
+    });
+
+    test('the Logs window may call the presentation projection and no other scenario or settings channel', async () => {
+        const logsSender = invalid<IpcMainInvokeEvent['sender']>({});
+        const channels = new Map<string, ChannelImpl>();
+        const impls = Object.fromEntries(allInvokeChannels().map((channel) => [channel, jest.fn(async () => 'ran')]));
+        registerHandlers(invalid({ handle: (channel: string, fn: ChannelImpl) => channels.set(channel, fn) }), impls);
+        restrictToLogsChannels(invalid(logsSender));
+
+        expect(await channels.get('get-effective-presentation')!(eventFrom(logsSender))).toBe('ran');
+        // Every other channel the manifest has, the effective settings projection and the controller routes included.
+        for (const channel of allInvokeChannels()) {
+            if ((logsWindowInvokeChannels as readonly string[]).includes(channel)) continue;
+            expect(await channels.get(channel)!(eventFrom(logsSender))).toEqual({
+                success: false,
+                error: 'Refused: channel not available to this window',
+            });
+            expect(impls[channel]).not.toHaveBeenCalled();
+        }
+        expect(isChannelAllowedForSender(eventFrom(logsSender), 'get-effective-installation-settings')).toBe(false);
+        expect(isChannelAllowedForSender(eventFrom(logsSender), 'arm-autovote')).toBe(false);
+        expect(isChannelAllowedForSender(eventFrom(logsSender), 'get-effective-presentation')).toBe(true);
+    });
+
+    test('the Logs window is sent the presentation event as it is, and never the complete effective settings', () => {
+        const send = jest.fn<void, [string, ...unknown[]]>();
+        const sender = invalid<IpcMainInvokeEvent['sender']>({ send });
+        restrictToLogsChannels(invalid(sender));
+        const presentation = { revision: 3, available: true, theme: 'dark', language: 'en', reason: null };
+
+        sender.send('effective-presentation-changed', presentation);
+        sender.send('effective-settings-changed', { revision: 3, values: { apiTimeout: { available: true } } });
+
+        expect(send).toHaveBeenCalledTimes(1);
+        expect(send).toHaveBeenCalledWith('effective-presentation-changed', presentation);
+    });
+
+    test('another window is sent the complete effective settings too', () => {
+        const send = jest.fn<void, [string, ...unknown[]]>();
+        const sender = invalid<IpcMainInvokeEvent['sender']>({ send });
+
+        sender.send('effective-settings-changed', { revision: 3 });
+
+        expect(send).toHaveBeenCalledWith('effective-settings-changed', { revision: 3 });
     });
 
     test('a window sending settings-changed is not touched until it is restricted', () => {

@@ -56,6 +56,8 @@ jest.mock('../../src/ts/core/services/autoFill', () => ({
     maybeEmergencyFillChallenge: jest.fn(() => 'disabled'),
 }));
 jest.mock('../../src/ts/core/settings', () => ({
+    scenarioSubjectAvailable: jest.fn(() => true),
+    scenarioSubjectReason: jest.fn(() => null),
     getEffectiveSetting: jest.fn(() => undefined),
     getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
 }));

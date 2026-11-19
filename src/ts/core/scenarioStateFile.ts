@@ -9,6 +9,7 @@ import { platform } from './platform/port';
 import { isPlainObject } from './plainObject';
 import { acquireWithin } from './lockWait';
 import { throughStore } from './settings/storage';
+import { SCENARIO_CAPS, isPhotoId } from './scenarios/vocabulary';
 
 /** A cross-process lock, as joinStateStore's acquireUnlockLock gives one. */
 type StateLock = { ok: boolean; release: () => void; unavailable?: true; held?: () => boolean };
@@ -44,6 +45,12 @@ const FILE_LOCK_ID = 'scenariostate';
 const FILE_LOCK_WAIT_MS = 500;
 // The file's count of resets of every challenge (a challenge id is never a key like it).
 const ALL_KEY = '@all';
+// The one subject that is not a challenge: the installation scenario's own record (its progress and, once the
+// configuration forgets the assignment, the count of its generations). Every other `@` key is reserved.
+const INSTALLATION_KEY = '@installation';
+
+/** Whether `key` is a key no scenario subject may have: `@all`, and any other `@` key but the installation's. */
+const isReservedSubject = (key: string): boolean => key.startsWith('@') && key !== INSTALLATION_KEY;
 
 const SPEND_ACTIONS: ReadonlySet<unknown> = new Set<SpendAction>(['swap', 'unlockBoost', 'fillExposure']);
 
@@ -78,6 +85,85 @@ const isNotice = (value: unknown): boolean =>
     Number.isFinite(value.at) &&
     typeof value.message === 'string';
 
+// An object with exactly these keys (the lifecycle fields are strict: no other key, nothing missing).
+const hasExactKeys = (value: Record<string, unknown>, keys: readonly string[]): boolean =>
+    Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
+
+const isPaused = (value: unknown): boolean =>
+    value === null ||
+    (isPlainObject(value) &&
+        hasExactKeys(value, ['at', 'reason']) &&
+        Number.isFinite(value.at) &&
+        typeof value.reason === 'string');
+
+const isWithdrawn = (value: unknown): boolean =>
+    value === null ||
+    (isPlainObject(value) && hasExactKeys(value, ['at', 'epoch']) && Number.isFinite(value.at) && isCount(value.epoch));
+
+const isHandoff = (value: unknown): boolean =>
+    value === null ||
+    (isPlainObject(value) &&
+        hasExactKeys(value, ['from', 'to', 'generation', 'at']) &&
+        typeof value.from === 'string' &&
+        (value.to === null || typeof value.to === 'string') &&
+        isCount(value.generation) &&
+        Number.isFinite(value.at));
+
+const isLastRequest = (value: unknown): boolean =>
+    value === null ||
+    (isPlainObject(value) &&
+        hasExactKeys(value, ['id', 'result', 'at']) &&
+        typeof value.id === 'string' &&
+        typeof value.result === 'string' &&
+        Number.isFinite(value.at));
+
+// What a runtime phase patch (types/stores.ts phasePatch) may hold: at most this many settings, each a flag, a number, a
+// short text or a short list of them — the literal forms a setting is stored in.
+const PATCH_MAX_KEYS = 20;
+const PATCH_MAX_TEXT = 200;
+const PATCH_MAX_LIST = 50;
+const PROFILE_NAME_MAX = 60;
+
+const isPatchText = (value: unknown): boolean => typeof value === 'string' && value.length <= PATCH_MAX_TEXT;
+
+const isPatchValue = (value: unknown): boolean =>
+    typeof value === 'boolean' ||
+    (typeof value === 'number' && Number.isFinite(value)) ||
+    isPatchText(value) ||
+    (Array.isArray(value) && value.length <= PATCH_MAX_LIST && value.every(isPatchText));
+
+const isPhasePatch = (value: unknown): boolean =>
+    isPlainObject(value) &&
+    Object.keys(value).length <= PATCH_MAX_KEYS &&
+    Object.entries(value).every(([key, item]) => key !== '' && key.length <= PATCH_MAX_TEXT && isPatchValue(item));
+
+const isPhaseProfile = (value: unknown): boolean =>
+    value === null || (typeof value === 'string' && value !== '' && value.length <= PROFILE_NAME_MAX);
+
+const isPhasePins = (value: unknown): boolean =>
+    isPlainObject(value) &&
+    Object.keys(value).every((key) => key === 'boost' || key === 'turbo') &&
+    Object.values(value).every((pin) => pin === null || isPhotoId(pin));
+
+// A list of photo ids with no id twice, at most `max` long.
+const isPhotoIdList = (value: unknown, max: number): value is string[] =>
+    Array.isArray(value) && value.length <= max && value.every(isPhotoId) && new Set(value).size === value.length;
+
+// What a phase's pool progress may hold (types/stores.ts poolProgress): a photo is consumed or reserved, never both.
+const isPoolProgressOf = (value: unknown): boolean =>
+    isPlainObject(value) &&
+    hasExactKeys(value, ['consumed', 'reserved']) &&
+    isPhotoIdList(value.consumed, SCENARIO_CAPS.poolConsumed) &&
+    isPhotoIdList(value.reserved, SCENARIO_CAPS.poolPhotos) &&
+    !value.reserved.some((id) => (value.consumed as string[]).includes(id));
+
+const isPoolProgress = (value: unknown): boolean =>
+    isPlainObject(value) &&
+    Object.keys(value).length <= SCENARIO_CAPS.phases &&
+    Object.entries(value).every(
+        ([phase, progress]) => phase !== '' && phase.length <= PATCH_MAX_TEXT && isPoolProgressOf(progress),
+    );
+
 const isInFlight = (value: unknown): boolean =>
     isPlainObject(value) &&
     typeof value.ruleId === 'string' &&
@@ -86,6 +172,89 @@ const isInFlight = (value: unknown): boolean =>
     (value.pending === undefined || isSpendAction(value.pending)) &&
     (value.lost === undefined || (Array.isArray(value.lost) && value.lost.every(isSpendAction))) &&
     (value.unclearAt === undefined || Number.isFinite(value.unclearAt));
+
+/** The most rows one published schedule holds (a window schedule's cap; a submit schedule holds at most 4). */
+const SCHEDULE_ROWS_MAX = 6;
+
+/**
+ * One published schedule row: known (the fields of its instant or window) or absent/unknown (with the reason), and no other field.
+ */
+const isScheduleRow = (value: unknown, known: readonly string[], extra: readonly string[]): boolean => {
+    if (!isPlainObject(value)) return false;
+    if (value.state === 'known') {
+        return hasExactKeys(value, ['state', ...extra, ...known]) && known.every((key) => Number.isFinite(value[key]));
+    }
+    return (
+        (value.state === 'absent' || value.state === 'unknown') &&
+        hasExactKeys(value, ['state', 'reason', ...extra]) &&
+        typeof value.reason === 'string' &&
+        value.reason.length <= PATCH_MAX_TEXT
+    );
+};
+
+const isRowList = (rows: unknown, max: number, check: (row: unknown) => boolean): boolean =>
+    Array.isArray(rows) && rows.length >= 1 && rows.length <= max && rows.every(check);
+
+/** The dynamic schedules a publication holds (types/autoFill.ts ResolvedSchedules): each kind strict, no other kind. */
+const isPublishedSchedules = (value: unknown): boolean => {
+    if (!isPlainObject(value)) return false;
+    const { submit, vote, pause } = value;
+    const windows = (schedule: unknown) =>
+        isPlainObject(schedule) &&
+        hasExactKeys(schedule, ['rows']) &&
+        isRowList(schedule.rows, SCHEDULE_ROWS_MAX, (row) => isScheduleRow(row, ['start', 'end'], []));
+    return (
+        Object.keys(value).every((key) => key === 'submit' || key === 'vote' || key === 'pause') &&
+        (submit === undefined ||
+            (isPlainObject(submit) &&
+                hasExactKeys(submit, ['alignment', 'rows']) &&
+                (submit.alignment === 'end' || submit.alignment === 'absolute') &&
+                isRowList(
+                    submit.rows,
+                    4,
+                    (row) =>
+                        isScheduleRow(row, ['at'], ['count']) &&
+                        Number.isInteger((row as { count: unknown }).count) &&
+                        Number((row as { count: number }).count) >= 1 &&
+                        Number((row as { count: number }).count) <= 4,
+                ))) &&
+        (vote === undefined || windows(vote)) &&
+        (pause === undefined || windows(pause))
+    );
+};
+
+const PUBLICATION_KEYS: ReadonlySet<string> = new Set([
+    'revision',
+    'documentFingerprint',
+    'phase',
+    'phaseEnteredAt',
+    'observedAt',
+    'validUntil',
+    'bindings',
+    'profile',
+    'schedules',
+    'generation',
+]);
+
+/**
+ * The overlay a runner published (types/stores.ts ScenarioPublication). Strict: every field, no other. A malformed one
+ * is not read as a publication, but it does not make the record unreadable: it is derived data, and the next step
+ * publishes it again.
+ */
+const isPublication = (value: unknown): value is NonNullable<ScenarioState['published']> =>
+    isPlainObject(value) &&
+    Object.keys(value).every((key) => PUBLICATION_KEYS.has(key)) &&
+    isCount(value.revision) &&
+    typeof value.documentFingerprint === 'string' &&
+    value.documentFingerprint !== '' &&
+    typeof value.phase === 'string' &&
+    Number.isFinite(value.phaseEnteredAt) &&
+    Number.isFinite(value.observedAt) &&
+    (value.validUntil === null || Number.isFinite(value.validUntil)) &&
+    isPlainObject(value.bindings) &&
+    (value.profile === null || typeof value.profile === 'string') &&
+    (value.schedules === undefined || isPublishedSchedules(value.schedules)) &&
+    (value.generation === undefined || isCount(value.generation));
 
 /**
  * @param r - an untrusted parsed-JSON value
@@ -103,7 +272,16 @@ const isRecord = (r: unknown): r is ScenarioState =>
     (r.history === undefined || isHistory(r.history)) &&
     (r.outbox === undefined || (Array.isArray(r.outbox) && r.outbox.every(isNotice))) &&
     (r.inFlight === null || isInFlight(r.inFlight)) &&
-    (r.gen === undefined || isCount(r.gen));
+    (r.gen === undefined || isCount(r.gen)) &&
+    (r.generation === undefined || isCount(r.generation)) &&
+    (r.paused === undefined || isPaused(r.paused)) &&
+    (r.withdrawn === undefined || isWithdrawn(r.withdrawn)) &&
+    (r.handoff === undefined || isHandoff(r.handoff)) &&
+    (r.phasePatch === undefined || isPhasePatch(r.phasePatch)) &&
+    (r.phaseProfile === undefined || isPhaseProfile(r.phaseProfile)) &&
+    (r.phasePins === undefined || isPhasePins(r.phasePins)) &&
+    (r.poolProgress === undefined || isPoolProgress(r.poolProgress)) &&
+    (r.lastRequest === undefined || isLastRequest(r.lastRequest));
 
 // What a reset of one challenge leaves in its place: the record is gone, its count of resets is not.
 const isTombstone = (r: unknown): boolean => isPlainObject(r) && r.tombstone === true && isCount(r.gen);
@@ -185,7 +363,7 @@ const withRequests = (map: Record<string, unknown>, asked: ResetRequests): Recor
  * touched it: such a record is small, and an unattended stop is for the user to look at, not for a clock to forget.
  */
 const holdsStop = (record: ScenarioState): boolean =>
-    Boolean(record.inFlight?.unclear?.length || record.inFlight?.pending) ||
+    Boolean(record.inFlight?.unclear?.length || record.inFlight?.pending || record.handoff) ||
     Object.values(record.fired).some((fired) => fired.unclearHalt !== undefined);
 
 /**
@@ -197,6 +375,8 @@ const pruned = (map: Record<string, unknown>): Record<string, unknown> => {
     const cutoff = Date.now() - MAX_AGE_MS;
     const keep = (key: string, entry: unknown): boolean =>
         key === ALL_KEY ||
+        // The installation's record holds the count that fences a former owner: it is never aged out.
+        key === INSTALLATION_KEY ||
         !(isRecord(entry) || isTombstone(entry)) ||
         (isRecord(entry) && holdsStop(entry)) ||
         (isPlainObject(entry) && typeof entry.updatedAt === 'number' && entry.updatedAt > cutoff);
@@ -422,5 +602,15 @@ const createStateFile = (
     return { read, mutate, ...createResets({ store, acquireLock, read, asRequests, write }) };
 };
 
-export { ALL_KEY, createStateFile, epochOf, isRecord, isTombstone };
+export {
+    ALL_KEY,
+    INSTALLATION_KEY,
+    createStateFile,
+    epochOf,
+    isCount,
+    isPublication,
+    isRecord,
+    isReservedSubject,
+    isTombstone,
+};
 export type { Mutation, ResetResult, StateLock };

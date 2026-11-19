@@ -2,6 +2,7 @@
  * Pure draft edits for the scenario builder.
  */
 
+import { invalid } from '../helpers/invalid';
 import model = require('../../src/ts/core/scenarios/builderModel');
 
 describe('setIn', () => {
@@ -92,6 +93,20 @@ describe('phases', () => {
 test('isEditableDraft accepts the shapes the forms can render', () => {
     expect(model.isEditableDraft(model.newScenario('Plan'))).toBe(true);
     expect(model.isEditableDraft({ phases: { a: { settings: {}, rules: [{ do: [], if: [] }] } } })).toBe(true);
+    expect(
+        model.isEditableDraft({
+            phases: {
+                a: {
+                    bindings: { exposure: 1 },
+                    schedules: { submit: {} },
+                    profile: 'P',
+                    pins: { boost: 'p1' },
+                    photoPool: { name: 'K' },
+                    rules: [{ do: [], stages: ['active'] }],
+                },
+            },
+        }),
+    ).toBe(true);
     for (const bad of [
         null,
         [],
@@ -103,7 +118,53 @@ test('isEditableDraft accepts the shapes the forms can render', () => {
         { phases: { a: { rules: [null] } } },
         { phases: { a: { rules: [{ do: {} }] } } },
         { phases: { a: { rules: [{ do: [], if: {} }] } } },
+        { phases: { a: { rules: [{ do: [], stages: 'always' }] } } },
+        { phases: { a: { bindings: [] } } },
+        { phases: { a: { schedules: 'soon' } } },
+        { phases: { a: { pins: 1 } } },
+        { phases: { a: { photoPool: false } } },
+        { phases: { a: { profile: 7 } } },
     ]) {
         expect(model.isEditableDraft(bad)).toBe(false);
     }
+});
+
+describe('bindPhotoPool', () => {
+    const draft = (phases: Record<string, unknown>) =>
+        invalid<Parameters<typeof model.bindPhotoPool>[0]>({
+            name: 'Plan',
+            start: 'main',
+            phases,
+            description: 'Mine',
+        });
+
+    test('binds the pool to the phase and changes nothing else on the draft as it is now', () => {
+        const before = draft({ main: { settings: { exposure: 10 } }, later: {} });
+        const after = model.bindPhotoPool(before, 'main', 'Beach');
+        expect(after.phases.main).toEqual({ settings: { exposure: 10 }, photoPool: { name: 'Beach' } });
+        expect(after.phases.later).toEqual({});
+        expect(after.description).toBe('Mine');
+        // The draft that came in is not changed.
+        expect(before.phases.main).toEqual({ settings: { exposure: 10 } });
+    });
+
+    test('replaces the pool the phase had, flags and all', () => {
+        const after = model.bindPhotoPool(draft({ main: { photoPool: { name: 'Old', only: true } } }), 'main', 'New');
+        expect(after.phases.main.photoPool).toEqual({ name: 'New' });
+    });
+
+    test('a phase that is gone leaves the draft as it is', () => {
+        const before = draft({ main: {} });
+        expect(model.bindPhotoPool(before, 'gone', 'Beach')).toBe(before);
+        // A name that only the prototype has is no phase.
+        expect(model.bindPhotoPool(before, 'constructor', 'Beach')).toBe(before);
+    });
+
+    test.each([
+        ['a setting', { settings: { chosenPhotosOnly: true } }],
+        ['a live value', { bindings: { chosenPhotos: { kind: 'literal', value: [] } } }],
+    ])('a phase that holds Chosen Photos as %s is not bound over them', (_label, phase) => {
+        const before = draft({ main: phase });
+        expect(model.bindPhotoPool(before, 'main', 'Beach')).toBe(before);
+    });
 });

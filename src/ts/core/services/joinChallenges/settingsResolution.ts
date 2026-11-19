@@ -151,7 +151,7 @@ const hasTitleOptIn = (challenge: Challenge) => settings.hasRuleJoinOptIn?.(chal
 /**
  * Per-candidate scope/coin/timing config, resolved by rule (inline → profile → global).
  */
-const resolveCandidateConfig = (challenge: Challenge) => {
+const resolveCandidateConfig = (challenge: Challenge, shortChallengesImmediately: boolean) => {
     // The timing keys go through the one-group read: the first source that sets
     // any of them supplies all three, a key its source does not set counts as 0,
     // and the global read is NOT consulted for it. Null (no source sets any
@@ -165,7 +165,7 @@ const resolveCandidateConfig = (challenge: Challenge) => {
     const runtime = closeTime - startTime;
     return {
         joinImmediately:
-            settings.getEffectiveSetting('autoJoinShortChallengesImmediately', null) === true &&
+            shortChallengesImmediately &&
             Number.isFinite(startTime) &&
             Number.isFinite(closeTime) &&
             startTime > 0 &&
@@ -218,8 +218,18 @@ const warnMissingCloseTime = (challenge: Challenge, reason: string) => {
     );
 };
 
+/**
+ * Whether the candidate's scenario settings cannot be read (its phase has bindings or a profile and none is published).
+ * Optional-chained like the other per-challenge reads here: a partial settings facade degrades to "readable".
+ */
+const isScenarioUnavailable = (challenge: Partial<Challenge>): boolean =>
+    challenge?.id !== undefined &&
+    challenge?.id !== null &&
+    settings.scenarioSubjectAvailable?.(challenge.id) === false;
+
 export {
     PER_ID_JOIN_KEYS,
+    isScenarioUnavailable,
     resolveJoinSetting,
     anyTitleRuleEnablesAutoJoin,
     isAutoJoinActive,
