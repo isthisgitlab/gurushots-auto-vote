@@ -38,6 +38,7 @@ jest.mock('../../src/ts/core/ipc/scenarios.handlers', () => {
             'clear-scenario-assignment',
             'get-photo-pools',
             'set-photo-pool',
+            'create-photo-pool',
             'delete-photo-pool',
             'rename-photo-pool',
             'get-scenario-snapshot',
@@ -1130,6 +1131,18 @@ describe('the installation scenario and lifecycle commands', () => {
             expect(text('success')).toContain('Renamed the pool "a" to "b".');
         });
 
+        test('create makes a pool that does not exist yet, and a name that is taken exits 1 with its reason', async () => {
+            h['create-photo-pool'].mockResolvedValue(invalid({ success: true }));
+            await expect(cmd.photoPoolCommand(['create', 'a', '1', '2'])).resolves.toBe(0);
+            expect(h['create-photo-pool']).toHaveBeenCalledWith(null, 'a', ['1', '2']);
+            expect(text('success')).toContain('Created the pool "a" (2 photo(s)).');
+            // Create never replaces: it does not go through the upsert.
+            expect(h['set-photo-pool']).not.toHaveBeenCalled();
+            h['create-photo-pool'].mockResolvedValue(invalid({ success: false, error: 'exists' }));
+            await expect(cmd.photoPoolCommand(['create', 'a', '1'])).resolves.toBe(1);
+            expect(text('error')).toContain('Could not create the pool: a pool with that name exists');
+        });
+
         test('a refusal exits 1 with its reason', async () => {
             h['set-photo-pool'].mockResolvedValue(invalid({ success: false, error: 'cap' }));
             await expect(cmd.photoPoolCommand(['save', 'a', '1'])).resolves.toBe(1);
@@ -1148,6 +1161,8 @@ describe('the installation scenario and lifecycle commands', () => {
                 ['list', 'x'],
                 ['save'],
                 ['save', 'a'],
+                ['create'],
+                ['create', 'a'],
                 ['delete'],
                 ['delete', 'a', 'b'],
                 ['rename', 'a'],

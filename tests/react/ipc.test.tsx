@@ -114,6 +114,7 @@ describe.each([
     ['logRendererError', 'logError'],
     ['logRendererWarning', 'logWarning'],
     ['logRendererDebug', 'logDebug'],
+    ['logRemoteInfo', 'logRemoteInfo'],
 ])('%s', (helper, method) => {
     test(`hands the message to ${method} synchronously and resolves`, async () => {
         const pending = invalid<IpcByName>(ipc)[helper]('hello');

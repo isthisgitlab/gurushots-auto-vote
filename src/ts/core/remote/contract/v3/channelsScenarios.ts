@@ -209,6 +209,7 @@ export type ScenariosChannelsV3 = {
                   ownerAcknowledged: boolean | null;
               };
     };
+    'get-phase-profiles': { args: []; result: LifecycleFailureV3 | { success: true; profiles: string[] } };
     'get-photo-pools': { args: []; result: LifecycleFailureV3 | { success: true; pools: { [key: string]: string[] } } };
     'get-effective-entry-pins': {
         args: [challengeId: string | number];
@@ -254,6 +255,10 @@ export type ScenariosChannelsV3 = {
         result: LifecycleFailureV3 | QueuedForServiceV3 | { success: true; generation: number };
     };
     'set-photo-pool': {
+        args: [name: string, ids: string[]];
+        result: LifecycleFailureV3 | { success: true };
+    };
+    'create-photo-pool': {
         args: [name: string, ids: string[]];
         result: LifecycleFailureV3 | { success: true };
     };

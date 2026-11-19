@@ -14,6 +14,8 @@ jest.mock('../../src/ts/core/settings', () => ({
     setScenarioPaused: jest.fn(),
     getPhotoPools: jest.fn(),
     setPhotoPool: jest.fn(),
+    createPhotoPool: jest.fn(),
+    listPhaseProfiles: jest.fn(),
     deletePhotoPool: jest.fn(),
     renamePhotoPool: jest.fn(),
     getEntryPins: jest.fn(),
@@ -387,7 +389,7 @@ describe('installation effects', () => {
             installation,
             generation: 4,
         });
-        expect(settings.setInstallationScenario).toHaveBeenCalledWith('Plan', 'cli', 3);
+        expect(settings.setInstallationScenario).toHaveBeenCalledWith('Plan', 'cli', 3, undefined);
         expect(events.announceEffectiveChange).toHaveBeenCalledTimes(1);
     });
 
@@ -571,6 +573,8 @@ describe('while the Android service owns scenarios', () => {
 
     test.each([
         ['set-installation-scenario', ['Plan', 'android-service', 3], '@installation'],
+        // The owner-keeping option travels with the queued request, so the service applies it under the same rule.
+        ['set-installation-scenario', ['Plan', 'android-service', 3, { keepExecutor: true }], '@installation'],
         ['pause-scenario', [12, 'later'], '12'],
         ['pause-scenario', ['@installation'], '@installation'],
         ['resume-scenario', [12], '12'],
@@ -700,7 +704,7 @@ describe('photo pools', () => {
         settings.setPhotoPool.mockReturnValue('ok');
         await expect(handlers['set-photo-pool'](null, 'a', ['1', '2'])).resolves.toEqual({ success: true });
         expect(settings.setPhotoPool).toHaveBeenCalledWith('a', ['1', '2']);
-        for (const outcome of ['invalid', 'cap', 'write-failed'] as const) {
+        for (const outcome of ['invalid', 'cap', 'exists', 'write-failed'] as const) {
             settings.setPhotoPool.mockReturnValue(outcome);
             await expect(handlers['set-photo-pool'](null, 'a', [])).resolves.toEqual({
                 success: false,
@@ -711,6 +715,30 @@ describe('photo pools', () => {
         await expect(handlers['set-photo-pool'](null, invalid<string>(3), [])).resolves.toEqual(bad);
         await expect(handlers['set-photo-pool'](null, 'a', invalid<string[]>('x'))).resolves.toEqual(bad);
         await expect(handlers['set-photo-pool'](null, 'a', invalid<string[]>(['1', 2]))).resolves.toEqual(bad);
+    });
+
+    test('create-photo-pool creates, answers a name that is taken as exists, and maps each refusal', async () => {
+        settings.createPhotoPool.mockReturnValue('ok');
+        await expect(handlers['create-photo-pool'](null, 'a', ['1', '2'])).resolves.toEqual({ success: true });
+        expect(settings.createPhotoPool).toHaveBeenCalledWith('a', ['1', '2']);
+        for (const outcome of ['invalid', 'cap', 'exists', 'write-failed'] as const) {
+            settings.createPhotoPool.mockReturnValue(outcome);
+            await expect(handlers['create-photo-pool'](null, 'a', ['1'])).resolves.toEqual({
+                success: false,
+                error: outcome,
+            });
+        }
+        const bad = { success: false, error: 'invalid-args' };
+        await expect(handlers['create-photo-pool'](null, invalid<string>(3), [])).resolves.toEqual(bad);
+        await expect(handlers['create-photo-pool'](null, 'a', invalid<string[]>('x'))).resolves.toEqual(bad);
+        await expect(handlers['create-photo-pool'](null, 'a', invalid<string[]>(['1', 2]))).resolves.toEqual(bad);
+    });
+
+    test('set-photo-pool takes a name and a list and nothing else: it is the upsert, never a create', async () => {
+        settings.setPhotoPool.mockClear();
+        settings.setPhotoPool.mockReturnValue('ok');
+        await handlers['set-photo-pool'](null, 'a', ['1']);
+        expect(settings.setPhotoPool).toHaveBeenCalledWith('a', ['1']);
     });
 
     test('delete and rename answer the facade result', async () => {
@@ -1072,5 +1100,63 @@ describe('the control inbox routes', () => {
             });
             expect(settings.finishControlRequest).not.toHaveBeenCalled();
         });
+    });
+});
+
+describe('set-installation-scenario owner-keeping option', () => {
+    test('is passed to the settings change, which judges it with the generation', async () => {
+        settings.setInstallationScenario.mockReturnValue({ ok: false, reason: 'owner-policy', generation: 3 });
+        await expect(
+            handlers['set-installation-scenario'](null, 'Plan', 'cli', 3, { keepExecutor: true }),
+        ).resolves.toEqual({ success: false, error: 'owner-policy', generation: 3 });
+        expect(settings.setInstallationScenario).toHaveBeenLastCalledWith('Plan', 'cli', 3, { keepExecutor: true });
+    });
+
+    test.each([
+        ['null', null],
+        ['text', 'keepExecutor'],
+        ['a list', [true]],
+        ['an empty object', {}],
+        ['keepExecutor false', { keepExecutor: false }],
+        ['keepExecutor that is no boolean', { keepExecutor: 'yes' }],
+        ['an extra key', { keepExecutor: true, also: 1 }],
+    ])('refuses an option that is %s, and nothing is changed', async (_label, options) => {
+        settings.setInstallationScenario.mockClear();
+        await expect(
+            handlers['set-installation-scenario'](null, 'Plan', 'cli', 3, invalid<{ keepExecutor: true }>(options)),
+        ).resolves.toEqual({ success: false, error: 'invalid-args' });
+        expect(settings.setInstallationScenario).not.toHaveBeenCalled();
+    });
+});
+
+describe('begin-scenario-request on a stale revision', () => {
+    test('answers where the target stands now', async () => {
+        settings.readStopFence.mockReturnValue({ state: 'missing' });
+        settings.beginControlRequest.mockResolvedValue({ ok: false, reason: 'stale', revision: 9 });
+        await expect(
+            handlers['begin-scenario-request'](null, {
+                requestId: 'r1',
+                operation: 'pause-scenario',
+                target: '7',
+                args: '["7"]',
+            }),
+        ).resolves.toEqual({ success: false, error: 'stale', revision: 9 });
+    });
+});
+
+describe('get-phase-profiles', () => {
+    test('answers the saved profiles a phase may apply, as the host’s own check names them', async () => {
+        settings.listPhaseProfiles.mockReturnValue(['Evening', 'Night']);
+        await expect(handlers['get-phase-profiles']()).resolves.toEqual({
+            success: true,
+            profiles: ['Evening', 'Night'],
+        });
+    });
+
+    test('a read that throws is a failure the caller can show, never a throw', async () => {
+        settings.listPhaseProfiles.mockImplementation(() => {
+            throw new Error('unreadable');
+        });
+        await expect(handlers['get-phase-profiles']()).resolves.toMatchObject({ success: false });
     });
 });

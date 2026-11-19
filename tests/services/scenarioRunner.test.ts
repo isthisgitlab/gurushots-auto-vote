@@ -75,6 +75,8 @@ import type * as ruleModule from '../../src/ts/core/services/scenarioRunner/rule
 import type * as supportModule from '../../src/ts/core/services/scenarioRunner/support';
 import type * as scenarioStateStoreModule from '../../src/ts/core/scenarioStateStore';
 import { createOperationRecord } from '../../src/ts/core/scenarios/runtime';
+import { runInSimulationScope } from '../../src/ts/core/simulationScope';
+import type { SimulationScope } from '../../src/ts/core/simulationScope';
 import type { Challenge, ChallengeMember, MemberRanking, RankingEntry } from '../../src/ts/core/types/gurushots';
 import type { ScenarioDocument } from '../../src/ts/core/settings/scenarioSchema';
 import type { CategoryLogger } from '../../src/ts/core/logger';
@@ -2103,6 +2105,25 @@ describe('rule execution', () => {
         expect(state().outbox).toEqual([expect.objectContaining({ message: expect.stringContaining('Halted:') })]);
         await run();
         expect(state().lastError).toEqual(first);
+    });
+
+    test('a halt is told to an open simulation by the runner itself, once for each time it is recorded', async () => {
+        setup(plan({ main: {} }));
+        ledger.set(7, initialState('Plan', 'removed', NOW));
+        const scope = invalid<SimulationScope>({
+            nowMs: () => NOW * 1000,
+            ledger,
+            patchSettings: (config: unknown) => config,
+            breach: null,
+            halts: [],
+        });
+        const outcome = await runInSimulationScope(scope, () => run());
+        expect(outcome.ok).toBe(true);
+        expect(scope.halts).toHaveLength(1);
+        expect(scope.halts[0]).toMatchObject({ subject: '7', reason: expect.stringContaining('no longer exists') });
+        // Outside a simulation the signal goes nowhere.
+        await run();
+        expect(scope.halts).toHaveLength(1);
     });
 
     test('a scenario that compares balances reads the bankroll', async () => {

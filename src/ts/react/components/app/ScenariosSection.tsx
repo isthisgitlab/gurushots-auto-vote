@@ -3,12 +3,21 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { SETTINGS_SECTION_TITLES } from '@/contexts/SettingsNavContext';
 import { ToneNote } from '@/components/ui/ToneNote';
 import { useScenarios } from '@/api/useScenarios';
+import {
+    useInstallationScenario,
+    useSetInstallationScenario,
+    useTransferInstallationOwner,
+} from '@/api/useInstallationScenario';
+import { EffectOutcomeNotice } from '@/components/ui/EffectOutcomeNotice';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import * as ipc from '@/api/ipc';
-import { ScenarioError, issuesOf } from './ScenarioError';
+import { ScenarioError, issuesOf, failureIssuesOf } from './ScenarioError';
+import { scenarioRefusalText } from '@/utils/scenarioIssueText';
+import { ipcErrorText } from '@/api/ipcErrorText';
 import { ScenarioBuilder } from './scenarioBuilder/ScenarioBuilder';
 import { SettingsSectionPanel } from './SettingsSectionPanel';
 import { newScenario } from '../../../core/scenarios/builderModel';
+import { platformKind } from '../../../core/platform/kind';
 
 import type { WindowApi } from '../../../core/types/ipc';
 import type { ScenarioDraft } from '../../../core/types/scenarioBuilder';
@@ -118,7 +127,7 @@ function ImportPanel({
         else
             setError({
                 what: 'app.scenarioImportFailed',
-                issues: issuesOf(result),
+                issues: failureIssuesOf(result),
             });
     };
 
@@ -252,7 +261,7 @@ function ScenarioRow({
         } else {
             onError({
                 what: 'app.scenarioRenameFailed',
-                issues: issuesOf(result),
+                issues: failureIssuesOf(result),
             });
         }
     };
@@ -265,7 +274,7 @@ function ScenarioRow({
         setArmed(false);
         const result = await ipc.callOrNull(() => ipc.deleteScenario(name));
         if (result?.success) onChanged();
-        else onError({ what: 'app.scenarioDeleteFailed' });
+        else onError({ what: 'app.scenarioDeleteFailed', issues: failureIssuesOf(result) });
     };
 
     return (
@@ -338,6 +347,159 @@ const freeName = (base: string, taken: string[]) => {
     return name;
 };
 
+/** The runtimes that may own the installation scenario, in the order the picker shows them. */
+const OWNERS = ['electron', 'cli', 'web', 'android-service', 'android-app'] as const;
+
+/**
+ * The installation scenario and its owner (who runs it): the stored installation-scope scenarios to pick from, the
+ * owner of this host, and the generation a change states it was made under. Changing the scenario saves the whole
+ * assignment; changing only the owner hands it over — a local operation a paired phone cannot make. An answer that
+ * is not final keeps its request identity (the shared notice), and a refusal says its reason in plain words.
+ */
+function InstallationScenarioPanel() {
+    const { t } = useTranslation();
+    const { scenarios } = useScenarios();
+    const { installation, generation, refetch } = useInstallationScenario();
+    const [name, setName] = useState<string | null>(null);
+    const [owner, setOwner] = useState<string | null>(null);
+    // The generation is read again after a confirmed change; until that read is back no change may be sent under the old one.
+    const [reading, setReading] = useState(false);
+    const reread = () => {
+        setReading(true);
+        void refetch().finally(() => setReading(false));
+    };
+    // A change that was applied (its first reply or a later check says so) is what the form stood for: the picks go, so the
+    // form shows what is stored now and a later Save cannot send the old picks again.
+    const resetPicks = () => {
+        setName(null);
+        setOwner(null);
+    };
+    const apply = useSetInstallationScenario({ onApplied: resetPicks });
+    const transfer = useTransferInstallationOwner({ onApplied: resetPicks });
+    const names = Object.keys(scenarios).filter(
+        (name) => (scenarios[name] as { scope?: string } | undefined)?.scope === 'installation',
+    );
+    // What the form shows: the stored assignment, or the user's unsaved pick.
+    const currentName = installation === null ? '' : installation.scenario;
+    const shownName = name ?? currentName;
+    const shownOwner = owner ?? installation?.executor ?? OWNERS[0];
+    // A paired phone chooses a scenario on its computer; it never changes who runs it.
+    const phone = platformKind() === 'remote';
+    const ownerOnlyChange =
+        !phone && installation !== null && shownName === currentName && shownOwner !== installation.executor;
+    // One change at a time: while either request has no final answer (or the generation is being read again) the form is frozen as
+    // it was submitted and nothing more is sent; Save also waits for a generation that was read.
+    const open = apply.outcome !== null || transfer.outcome !== null;
+    const busy = apply.loading || transfer.loading || open || reading;
+    const unowned = phone && installation === null;
+
+    const save = async () => {
+        if (generation === null || busy || unowned) return;
+        const owner = phone && installation !== null ? installation.executor : (shownOwner as (typeof OWNERS)[number]);
+        const result = ownerOnlyChange
+            ? await transfer.run(owner, generation)
+            : await apply.run(shownName === '' ? null : shownName, owner, generation);
+        // A queued or unconfirmed change keeps the form as it is; the generation is read again once it is confirmed.
+        if (result?.success && ipc.effectOutcomeOf(result) === null) {
+            resetPicks();
+            reread();
+        }
+    };
+    // The notice's own request: its check and its dismissal act on that request's hook, whatever the form says now.
+    const checked = (check: () => Promise<boolean>) => async () => {
+        const settled = await check();
+        if (settled) reread();
+        return settled;
+    };
+    const failure = apply.error ?? transfer.error;
+
+    return (
+        <section className="border border-base-300 rounded p-2 space-y-2">
+            <h6 className="text-sm font-medium">{t('app.installationTitle')}</h6>
+            <p className="text-xs text-base-content/70">{t('app.installationDesc')}</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+                <label className="flex flex-col text-xs gap-1">
+                    <span className="opacity-70">{t('app.installationScenario')}</span>
+                    <select
+                        className="select select-sm"
+                        value={shownName}
+                        disabled={busy}
+                        onChange={(e) => setName(e.currentTarget.value)}
+                    >
+                        <option value="">{t('app.scenarioNone')}</option>
+                        {names.map((scenarioName) => (
+                            <option key={scenarioName} value={scenarioName}>
+                                {scenarioName}
+                            </option>
+                        ))}
+                        {installation !== null && !names.includes(currentName) && (
+                            <option value={currentName}>{t('app.scenarioMissingOption', { name: currentName })}</option>
+                        )}
+                    </select>
+                </label>
+                {phone ? (
+                    <div className="flex flex-col text-xs gap-1">
+                        <span className="opacity-70">{t('app.installationOwner')}</span>
+                        <span className="text-sm">
+                            {installation === null
+                                ? t('app.installationOwnerOnComputer')
+                                : t(`app.installationOwner_${installation.executor}`)}
+                        </span>
+                    </div>
+                ) : (
+                    <label className="flex flex-col text-xs gap-1">
+                        <span className="opacity-70">{t('app.installationOwner')}</span>
+                        <select
+                            className="select select-sm"
+                            value={shownOwner}
+                            disabled={busy}
+                            onChange={(e) => setOwner(e.currentTarget.value)}
+                        >
+                            {OWNERS.map((executor) => (
+                                <option key={executor} value={executor}>
+                                    {t(`app.installationOwner_${executor}`)}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+                <button
+                    type="button"
+                    className="btn btn-sm btn-neutral max-sm:min-h-10"
+                    disabled={busy || generation === null || unowned}
+                    onClick={() => void save()}
+                >
+                    {t('app.installationSave')}
+                </button>
+                {generation !== null && (
+                    <span className="text-xs text-base-content/70">
+                        {t('app.installationGeneration', { n: generation })}
+                    </span>
+                )}
+            </div>
+            {failure !== null && (
+                <div className="alert alert-error py-2 text-sm" role="alert">
+                    <span>
+                        {t('app.installationFailed')} {scenarioRefusalText(failure, t) ?? ipcErrorText(failure, t)}
+                    </span>
+                </div>
+            )}
+            <EffectOutcomeNotice
+                outcome={apply.outcome}
+                onCheck={checked(apply.checkStatus)}
+                onDismiss={apply.dismissOutcome}
+            />
+            <EffectOutcomeNotice
+                outcome={transfer.outcome}
+                onCheck={checked(transfer.checkStatus)}
+                onDismiss={transfer.dismissOutcome}
+            />
+        </section>
+    );
+}
+
 /**
  * The Scenarios section of the settings modal: the stored scenarios with
  * export / rename / delete, a copy from an example template, and import of a
@@ -345,13 +507,16 @@ const freeName = (base: string, taken: string[]) => {
  * like the scenario files they are.
  *
  * @param props.onDirtyChange - told whether the builder holds a draft that was not saved (false once it closes)
+ * @param props.onBusyChange - told whether the builder's save is running (false once it closes): the modal must not close meanwhile
  */
 export function ScenariosSection({
     isOpen,
     onDirtyChange,
+    onBusyChange,
 }: {
     isOpen: boolean;
     onDirtyChange: (dirty: boolean) => void;
+    onBusyChange?: (busy: boolean) => void;
 }) {
     const { t } = useTranslation();
     const { scenarios, templates, revision, loading, error: loadError, refetch } = useScenarios(isOpen);
@@ -377,7 +542,7 @@ export function ScenariosSection({
         else
             setError({
                 what: 'app.scenarioTemplateFailed',
-                issues: issuesOf(result),
+                issues: failureIssuesOf(result),
             });
     };
 
@@ -385,13 +550,7 @@ export function ScenariosSection({
     return (
         <SettingsSectionPanel id="scenarios" title={t(SETTINGS_SECTION_TITLES.scenarios)}>
             <p className="text-xs text-base-content/70 mb-3">{t('app.scenariosDesc')}</p>
-            {loading ? (
-                <InlineLoader text={t('common.loading')} />
-            ) : loadError ? (
-                <div className="alert alert-error py-2 text-sm" role="alert">
-                    <span>{t('app.scenariosLoadError')}</span>
-                </div>
-            ) : editing ? (
+            {editing ? (
                 <ScenarioBuilder
                     initial={editing.initial}
                     originalName={editing.originalName}
@@ -400,12 +559,21 @@ export function ScenariosSection({
                         setEditing(null);
                         changed();
                     }}
+                    onRenamed={() => void refetch()}
                     onCancel={() => setEditing(null)}
                     onDirtyChange={onDirtyChange}
+                    onBusyChange={onBusyChange}
                 />
+            ) : loading ? (
+                <InlineLoader text={t('common.loading')} />
+            ) : loadError ? (
+                <div className="alert alert-error py-2 text-sm" role="alert">
+                    <span>{t('app.scenariosLoadError')}</span>
+                </div>
             ) : (
                 <div className="space-y-3">
                     <ScenarioError error={error} />
+                    <InstallationScenarioPanel />
                     {names.length === 0 ? (
                         <p className="text-sm text-base-content/70">{t('app.scenariosEmpty')}</p>
                     ) : (

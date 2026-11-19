@@ -26,6 +26,7 @@ import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessSt
 import { buildChallenge } from '../helpers/challengeFixtures';
 import { invalid } from '../helpers/invalid';
 import settings = require('../../src/ts/core/settings');
+import { noteSimulatedHalt } from '../../src/ts/core/simulationScope';
 import type * as simulationModule from '../../src/ts/core/services/scenarioRunner/simulation';
 import type * as mockStrategyModule from '../../src/ts/core/mock/strategy';
 import type * as scenarioStateStoreModule from '../../src/ts/core/scenarioStateStore';
@@ -495,8 +496,10 @@ describe('how a run ends', () => {
         });
     });
 
-    test('a scenario that halts stops the run with its reason', async () => {
+    test('a scenario that halts stops the run with its reason, from the runner’s own signal', async () => {
         fakeStrategy(async () => {
+            // The runner records a halt like this: the state, its notice, and the signal to an open simulation.
+            noteSimulatedHalt('7', 'Phase gone');
             ledgerFor(false).set('7', {
                 ...initialState('Plan', 'main', NOW),
                 outbox: [{ id: 'n', at: NOW, message: 'Halted: Phase gone' }],
@@ -507,6 +510,36 @@ describe('how a run ends', () => {
             ok: true,
             result: { stopReason: 'halted', halted: 'Phase gone' },
         });
+    });
+
+    test.each([
+        ['the installation’s', '@installation'],
+        ['another challenge’s', '8'],
+    ])('%s halt, told while this challenge runs, is not this run’s stop reason', async (_label, subject) => {
+        fakeStrategy(async () => {
+            // A challenge run still runs the installation's stage (and any other challenge of the pass): their halts are theirs.
+            noteSimulatedHalt(subject, 'balance binding could not resolve');
+            return { success: true };
+        });
+        const run = await runSimulation(input());
+        expect(run.ok && run.result.stopReason).not.toBe('halted');
+        expect(run.ok && run.result.halted).toBeNull();
+    });
+
+    test('a notice the scenario wrote is never a halt, whatever its text says', async () => {
+        fakeStrategy(async () => {
+            ledgerFor(false).set('7', {
+                ...initialState('Plan', 'main', NOW),
+                outbox: [{ id: 'n', at: NOW, message: 'Halted: Check the light' }],
+            });
+            return { success: true };
+        });
+        const run = await runSimulation(input());
+        expect(run.ok && run.result.stopReason).not.toBe('halted');
+        expect(run.ok && run.result.halted).toBeNull();
+        expect(run.ok && run.result.events).toEqual(
+            expect.arrayContaining([expect.objectContaining({ type: 'notice', message: 'Halted: Check the light' })]),
+        );
     });
 
     test('what the run used is stated, with where each value came from; an unreadable bankroll is said to be unknown', async () => {

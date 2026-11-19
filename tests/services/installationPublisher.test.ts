@@ -21,6 +21,8 @@ jest.mock('../../src/ts/core/settings', () => ({
 import { createStateLedger, initialState } from '../../src/ts/core/scenarioStateStore';
 import { createMemoryRawJsonStore } from '../../src/ts/core/parseUntrustedJson';
 import { installTestPlatform } from '../helpers/platform';
+import { runInSimulationScope } from '../../src/ts/core/simulationScope';
+import type { SimulationScope } from '../../src/ts/core/simulationScope';
 import { invalid } from '../helpers/invalid';
 
 import type * as installationModule from '../../src/ts/core/services/scenarioRunner/installation';
@@ -274,6 +276,25 @@ describe('what it writes', () => {
             'installation scenario halted: phase tune: currencyReserveKeys: out of range',
             null,
         );
+    });
+
+    test('an installation phase that cannot be prepared tells an open simulation, with its reason', async () => {
+        settings.prepareInstallationSnapshot.mockReturnValue({
+            ok: false,
+            key: 'currencyReserveKeys',
+            reason: 'out of range',
+        });
+        const scope = invalid<SimulationScope>({
+            nowMs: () => 1000,
+            ledger: undefined,
+            patchSettings: (config: unknown) => config,
+            breach: null,
+            halts: [],
+        });
+        await runInSimulationScope(scope, () => publishInstallationOverlay(pass()));
+        expect(scope.halts).toEqual([
+            { subject: '@installation', reason: 'phase tune: currencyReserveKeys: out of range' },
+        ]);
     });
 
     test('a phase halted for no one key (a profile) is worded without a key', async () => {

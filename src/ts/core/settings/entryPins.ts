@@ -14,7 +14,7 @@ import { isUnsafeChallengeKey } from '../challengeKey';
 import { isPlainObject } from '../plainObject';
 import { applyPinToRecord } from '../voting/entryPins';
 import { SCENARIO_CAPS, isPoolIds, isPoolName } from '../scenarios/vocabulary';
-import { loadSettings, saveSettings } from './persistence';
+import { loadSettings, saveSettings, updateSettings } from './persistence';
 
 import type { ConfigV2 } from '../types/config';
 import type { EntryPinKind, EntryPinRecord, EntryPinResult, EntryPins } from '../types/settings';
@@ -115,11 +115,32 @@ const mergeEntryPins = (stored: EntryPins, phase?: PinTier, runtime?: PinTier): 
     };
 };
 
-/** What writing a photo pool came to: refused as malformed, the cap of pools reached, or the write failing. */
-type PhotoPoolResult = 'ok' | 'invalid' | 'cap' | 'write-failed';
+/** What writing a photo pool came to: refused as malformed, the cap of pools reached, a name taken (create only), or the write failing. */
+type PhotoPoolResult = 'ok' | 'invalid' | 'cap' | 'exists' | 'write-failed';
 
 /** The account's named photo pools: pool name to its photo ids, in order. A copy. */
 const getPhotoPools = (): Record<string, string[]> => structuredClone(loadSettings().photoPools ?? {});
+
+/**
+ * Changes the account's photo pools in one durable configuration change: `change` gets the pools as they are stored when
+ * the write is made (not as an earlier read saw them), and answers the pools to keep or why it refuses (nothing is then
+ * written). Every pool writer goes through here, so none writes back a pool map it loaded before another writer's change.
+ */
+const updatePhotoPools = <Refusal extends string>(
+    change: (pools: Record<string, string[]>) => { pools: Record<string, string[]> } | { refused: Refusal },
+): Refusal | 'ok' | 'write-failed' => {
+    let refusal: Refusal | null = null;
+    const saved = updateSettings((current) => {
+        const made = change({ ...current.photoPools });
+        if ('refused' in made) {
+            refusal = made.refused;
+            return null;
+        }
+        return { photoPools: made.pools };
+    });
+    if (refusal !== null) return refusal;
+    return saved ? 'ok' : 'write-failed';
+};
 
 /**
  * Saves a named photo pool (the ordered photo ids a scenario phase draws from), replacing the pool of that name. A name or
@@ -128,12 +149,27 @@ const getPhotoPools = (): Record<string, string[]> => structuredClone(loadSettin
  */
 const setPhotoPool = (name: string, ids: readonly string[]): PhotoPoolResult => {
     if (!isPoolName(name) || !isPoolIds(ids)) return 'invalid';
-    const settings = loadSettings();
-    const pools = { ...settings.photoPools };
-    if (!Object.hasOwn(pools, name) && Object.keys(pools).length >= SCENARIO_CAPS.photoPools) return 'cap';
-    pools[name] = [...ids];
-    settings.photoPools = pools;
-    return saveSettings(settings) ? 'ok' : 'write-failed';
+    return updatePhotoPools<'cap'>((pools) =>
+        !Object.hasOwn(pools, name) && Object.keys(pools).length >= SCENARIO_CAPS.photoPools
+            ? { refused: 'cap' }
+            : { pools: { ...pools, [name]: [...ids] } },
+    );
+};
+
+/**
+ * Creates a named photo pool, and never replaces one: a name another pool holds (compared without regard to case) is
+ * refused (`exists`) on the pools as they are stored when the write is made, so a pool another scenario draws from is left
+ * as it is. Binding to an existing pool is the picker's job, not this call's. Otherwise as setPhotoPool.
+ */
+const createPhotoPool = (name: string, ids: readonly string[]): PhotoPoolResult => {
+    if (!isPoolName(name) || !isPoolIds(ids)) return 'invalid';
+    return updatePhotoPools<'cap' | 'exists'>((pools) => {
+        if (Object.keys(pools).some((saved) => saved.toLowerCase() === name.toLowerCase()))
+            return { refused: 'exists' };
+        return Object.keys(pools).length >= SCENARIO_CAPS.photoPools
+            ? { refused: 'cap' }
+            : { pools: { ...pools, [name]: [...ids] } };
+    });
 };
 
 // Warn once per saturation that the cap blocked `key`.
@@ -196,4 +232,14 @@ const setEntryPin = (kind: EntryPinKind, challengeId: string | number, imageId: 
     return saveSettings(settings) ? 'ok' : 'write-failed';
 };
 
-export { getEntryPins, mergeEntryPins, setEntryPin, isPinnableImageId, getPhotoPools, setPhotoPool, MAX_ENTRY_PINS };
+export {
+    getEntryPins,
+    mergeEntryPins,
+    setEntryPin,
+    isPinnableImageId,
+    getPhotoPools,
+    setPhotoPool,
+    createPhotoPool,
+    updatePhotoPools,
+    MAX_ENTRY_PINS,
+};

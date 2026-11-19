@@ -144,6 +144,26 @@ export const dryRunScenario = forward('dryRunScenario');
 export const simulateScenario = forward('simulateScenario');
 export const getScenarioRequestStatus = forward('getScenarioRequestStatus');
 
+// The capability catalogue, the per-subject snapshot, and the lifecycle of an assignment: reads first, then the
+// effects (each answers {success, error} and, while the Android service owns scenarios, may answer pending).
+export const getScenarioCapabilities = forward('getScenarioCapabilities');
+export const getScenarioSnapshot = forward('getScenarioSnapshot');
+export const getInstallationScenario = forward('getInstallationScenario');
+export const setInstallationScenario = forward('setInstallationScenario');
+export const transferInstallationScenarioOwner = forward('transferInstallationScenarioOwner');
+export const pauseScenario = forward('pauseScenario');
+export const resumeScenario = forward('resumeScenario');
+export const handoffScenario = forward('handoffScenario');
+export const clearScenarioAssignment = forward('clearScenarioAssignment');
+export const getPhotoPools = forward('getPhotoPools');
+export const setPhotoPool = forward('setPhotoPool');
+export const createPhotoPool = forward('createPhotoPool');
+export const getPhaseProfiles = forward('getPhaseProfiles');
+export const deletePhotoPool = forward('deletePhotoPool');
+export const renamePhotoPool = forward('renamePhotoPool');
+export const getEffectiveEntryPins = forward('getEffectiveEntryPins');
+export const listSimulationSubjects = forward('listSimulationSubjects');
+
 // What applies to the installation now, for a client that mounted or missed an event (useEffectiveSettings.ts).
 export const getEffectiveInstallationSettings = forward('getEffectiveInstallationSettings');
 export const getEffectivePresentation = forward('getEffectivePresentation');

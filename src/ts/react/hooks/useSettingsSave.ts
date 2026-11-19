@@ -175,13 +175,16 @@ const useRunSave = (deps: UseSettingsSaveDeps & ReturnType<typeof useSaveFeedbac
 const useTabDraftFlags = (isOpen: boolean) => {
     const [scenarioDirty, setScenarioDirty] = useState(false);
     const [profileDirty, setProfileDirty] = useState(false);
+    // The scenario builder is saving: its answer is not final, so the modal neither closes nor saves around it.
+    const [scenarioBusy, setScenarioBusy] = useState(false);
     useEffect(() => {
         if (isOpen) {
             setScenarioDirty(false);
             setProfileDirty(false);
+            setScenarioBusy(false);
         }
     }, [isOpen]);
-    return { scenarioDirty, setScenarioDirty, profileDirty, setProfileDirty };
+    return { scenarioDirty, setScenarioDirty, profileDirty, setProfileDirty, scenarioBusy, setScenarioBusy };
 };
 
 export const useSettingsSave = (deps: UseSettingsSaveDeps) => {
@@ -203,7 +206,8 @@ export const useSettingsSave = (deps: UseSettingsSaveDeps) => {
     } = deps;
     const { saveError, setSaveError, rejectedKeys, setRejectedKeys, setFocusIds } = useSaveFeedback();
     const resetNav = nav.reset;
-    const { scenarioDirty, setScenarioDirty, profileDirty, setProfileDirty } = useTabDraftFlags(isOpen);
+    const { scenarioDirty, setScenarioDirty, profileDirty, setProfileDirty, scenarioBusy, setScenarioBusy } =
+        useTabDraftFlags(isOpen);
     // The question on screen: dismissing with unsaved edits, or saving with work Save would drop.
     const [asking, setAsking] = useState<'discard' | 'drop' | null>(null);
 
@@ -236,7 +240,12 @@ export const useSettingsSave = (deps: UseSettingsSaveDeps) => {
         (isDirty() || titleRules.isDirty() || timezoneDirty || scenarioDirty || profileDirty);
 
     // Esc, the backdrop, the close button and Cancel: edits that are not saved are not thrown away unasked.
-    const dismiss = () => (hasUnsavedEdits() ? setAsking('discard') : handleCancel());
+    const dismiss = () => {
+        // A scenario save that has no final answer cannot be left behind: its builder would go on without its window.
+        if (scenarioBusy) return;
+        if (hasUnsavedEdits()) setAsking('discard');
+        else handleCancel();
+    };
 
     // What Save does not write: it is lost when the modal closes.
     const droppedWork = [
@@ -254,7 +263,11 @@ export const useSettingsSave = (deps: UseSettingsSaveDeps) => {
     }
 
     const runSave = useRunSave({ ...deps, saveError, setSaveError, rejectedKeys, setRejectedKeys, setFocusIds });
-    const handleSave = () => (droppedWork.length > 0 ? setAsking('drop') : runSave());
+    const handleSave = () => {
+        if (scenarioBusy) return;
+        if (droppedWork.length > 0) setAsking('drop');
+        else void runSave();
+    };
 
     return {
         saveError,
@@ -264,6 +277,8 @@ export const useSettingsSave = (deps: UseSettingsSaveDeps) => {
         setScenarioDirty,
         profileDirty,
         setProfileDirty,
+        scenarioBusy,
+        setScenarioBusy,
         asking,
         setAsking,
         droppedWork,

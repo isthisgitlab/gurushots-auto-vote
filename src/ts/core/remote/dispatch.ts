@@ -96,7 +96,14 @@ const runControlled = async (
             ...(expectedRevision === undefined ? {} : { expectedRevision }),
         },
     ]);
-    if (!isPlainObject(begun) || begun.success !== true) return { kind: 'result', result: begun };
+    if (!isPlainObject(begun) || begun.success !== true) {
+        // A stale request says where the target stands now: the phone's next change expects that revision.
+        const standing =
+            isPlainObject(begun) && begun.error === 'stale' && typeof begun.revision === 'number'
+                ? { control: { requestId, target, revision: begun.revision } as ControlReport }
+                : {};
+        return { kind: 'result', result: begun, ...standing };
+    }
     if (begun.outcome === 'duplicate') {
         const revision = typeof begun.revision === 'number' ? begun.revision : 0;
         const status = begun.status;
@@ -158,7 +165,11 @@ export const dispatchRemoteInvoke = async (
         if (request.requestId === undefined) {
             return { kind: 'refused', error: `${REMOTE_REFUSAL_PREFIX}: a scenario change needs a request identity.` };
         }
-        return runControlled(channel, args, target, { ...request, requestId: request.requestId }, deps);
+        // A phone never moves the installation to another owner: its assignment goes to the host with the owner-keeping option, which
+        // the host checks with the generation in the one change that writes it (anything else the phone sent is dropped).
+        const sent =
+            channel === 'set-installation-scenario' ? [args[0], args[1], args[2], { keepExecutor: true }] : args;
+        return runControlled(channel, sent, target, { ...request, requestId: request.requestId }, deps);
     }
     const result = await deps.invoke(channel, args);
     return { kind: 'result', result: channel === 'get-environment-info' ? withoutUserDataPath(result) : result };

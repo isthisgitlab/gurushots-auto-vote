@@ -13,6 +13,7 @@
 import * as logger from '../logger';
 import { SCENARIO_CAPS, SPENDING_ACTIONS, isOneOf, isPoolName } from '../scenarios/vocabulary';
 import { loadSettings, saveSettings } from './persistence';
+import { updatePhotoPools } from './entryPins';
 import { globalChallengeValues } from './defaults';
 import { normalizeProfileName, profileNameForLog, findProfileKey } from './profileStore';
 import { validateScenario, parseScenarioJson } from './scenarioSchema';
@@ -385,14 +386,18 @@ const changePhotoPool = (name: unknown, rename: string | null): PhotoPoolChange 
     if (!isPoolName(name) || (rename !== null && !isPoolName(rename))) return { ok: false, reason: 'invalid' };
     const gated = runGated(
         (settings) => ({ names: scenariosUsingPool(settings, name) }),
-        (settings): PhotoPoolChange => {
-            const pools = { ...settings.photoPools };
-            if (!Object.hasOwn(pools, name)) return { ok: false, reason: 'not-found' };
-            if (rename !== null && Object.hasOwn(pools, rename)) return { ok: false, reason: 'exists' };
-            if (rename !== null) pools[rename] = pools[name];
-            delete pools[name];
-            settings.photoPools = pools;
-            return saveSettings(settings) ? { ok: true } : { ok: false, reason: 'not-saved' };
+        (): PhotoPoolChange => {
+            // The pools are changed as they are stored when the write is made, not as the gate's read saw them.
+            const outcome = updatePhotoPools<'not-found' | 'exists'>((pools) => {
+                if (!Object.hasOwn(pools, name)) return { refused: 'not-found' };
+                if (rename !== null && Object.hasOwn(pools, rename)) return { refused: 'exists' };
+                const next = { ...pools };
+                if (rename !== null) next[rename] = pools[name];
+                delete next[name];
+                return { pools: next };
+            });
+            if (outcome === 'ok') return { ok: true };
+            return { ok: false, reason: outcome === 'write-failed' ? 'not-saved' : outcome };
         },
     );
     return gated.ok ? gated.value : { ok: false, reason: gated.reason };

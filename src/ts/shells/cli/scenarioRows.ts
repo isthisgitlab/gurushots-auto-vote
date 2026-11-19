@@ -116,11 +116,11 @@ const scenarioRows: readonly CommandRow[] = [
         'photo-pool',
         scenarioCommands.photoPoolCommand,
         [
-            '  photo-pool list|save "<name>" <photo id>...|delete "<name>"|rename "<name>" "<new name>" - The named photo pools a',
+            '  photo-pool list|save|create "<name>" <photo id>...|delete "<name>"|rename "<name>" "<new name>" - The named photo pools a',
             '             scenario phase draws from',
         ],
         {
-            usage: 'Usage: photo-pool list  |  photo-pool save "<name>" <photo id>...  |  photo-pool delete "<name>"  |  photo-pool rename "<name>" "<new name>"',
+            usage: 'Usage: photo-pool list  |  photo-pool save "<name>" <photo id>...  |  photo-pool create "<name>" <photo id>...  |  photo-pool delete "<name>"  |  photo-pool rename "<name>" "<new name>"',
         },
     ),
     row(

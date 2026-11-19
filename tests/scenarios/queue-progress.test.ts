@@ -27,6 +27,7 @@ import type { ScenarioState } from '../../src/ts/core/types/stores';
 import { buildChallenge } from '../helpers/challengeFixtures';
 import { isRecordOf, isShape, isUnknown, parseJsonAs } from '../helpers/parseJson';
 import { isConfig } from '../helpers/storedShapes';
+import { parseJsonObject } from '../helpers/parseJson';
 import { invalid } from '../helpers/invalid';
 
 jest.mock('../../src/ts/core/logger', () => {
@@ -730,6 +731,44 @@ describe('the account’s photo pools', () => {
             throw new Error('disk full');
         });
         expect(settings.setPhotoPool('Wall', ['a'])).toBe('write-failed');
+    });
+
+    describe('creating a pool never replaces one', () => {
+        test.each(['Wall', 'wall', 'WALL'])(
+            'a name another pool holds (%s) is refused and the pool is left as it was',
+            (name) => {
+                expect(settings.setPhotoPool('Wall', ['a', 'b'])).toBe('ok');
+                expect(settings.createPhotoPool(name, ['z'])).toBe('exists');
+                expect(settings.getPhotoPools()).toEqual({ Wall: ['a', 'b'] });
+            },
+        );
+
+        test('a new name is created, and a plain save of an existing name still replaces', () => {
+            expect(settings.createPhotoPool('Wall', ['a'])).toBe('ok');
+            expect(settings.setPhotoPool('Wall', ['c'])).toBe('ok');
+            expect(settings.getPhotoPools()).toEqual({ Wall: ['c'] });
+        });
+
+        test('another writer’s pool saved after this one looked is neither replaced by a create nor erased by any pool write', () => {
+            expect(settings.setPhotoPool('Mine', ['m'])).toBe('ok');
+            settings.getPhotoPools();
+            // Another process (the CLI) saves `Beach` between this one's read and its write.
+            const other = (stored: Record<string, string[]>) => {
+                store.value = JSON.stringify({ ...parseJsonObject(store.value as string), photoPools: stored });
+            };
+            other({ Mine: ['m'], Beach: ['x'] });
+            expect(settings.createPhotoPool('beach', ['z'])).toBe('exists');
+            expect(settings.getPhotoPools()).toEqual({ Mine: ['m'], Beach: ['x'] });
+            other({ Mine: ['m'], Beach: ['x'], Late: ['l'] });
+            expect(settings.setPhotoPool('Wall', ['w'])).toBe('ok');
+            expect(settings.getPhotoPools()).toEqual({ Mine: ['m'], Beach: ['x'], Late: ['l'], Wall: ['w'] });
+        });
+
+        test('a malformed name or list is still invalid, and the cap still holds', () => {
+            expect(settings.createPhotoPool('', ['a'])).toBe('invalid');
+            for (let at = 0; at < 20; at++) expect(settings.createPhotoPool(`Pool ${at}`, ['a'])).toBe('ok');
+            expect(settings.createPhotoPool('One too many', ['a'])).toBe('cap');
+        });
     });
 
     test('a malformed pool is dropped on load, the others stay, and the drop is logged once', () => {

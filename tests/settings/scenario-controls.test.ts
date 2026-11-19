@@ -247,6 +247,8 @@ describe('revisions and compaction', () => {
         await expect(settings.beginControlRequest(request({ requestId: 'r2', expectedRevision: 0 }))).resolves.toEqual({
             ok: false,
             reason: 'stale',
+            // Where the target stands now: the caller's next change expects that revision.
+            revision: 1,
         });
         expect(raw()).toBe(before);
         await expect(
@@ -268,6 +270,7 @@ describe('revisions and compaction', () => {
         await expect(settings.beginControlRequest(request({ requestId: 'r0', expectedRevision: 0 }))).resolves.toEqual({
             ok: false,
             reason: 'stale',
+            revision: 10,
         });
     });
 

@@ -21,6 +21,11 @@ export interface IpcQueryBaseOptions<D, A extends unknown[]> {
     showLoading?: (...args: A) => boolean;
     enabled?: boolean;
     latestOnly?: boolean;
+    /**
+     * Called when a read rejects (a thrown error, as a lost connection is), after the error is stored and only for a read that
+     * is still current: the caller drops or marks what it holds that the failed read was meant to renew.
+     */
+    onRejected?: (error: unknown, tools: Pick<IpcQueryTools<D, unknown>, 'setData'>) => void;
 }
 
 /**
@@ -43,6 +48,11 @@ export interface IpcQuery<D, E, A extends unknown[]> {
     error: E | null;
     setError: Dispatch<SetStateAction<E | null>>;
     refetch: (...args: A) => Promise<void>;
+    /**
+     * Drops the outcome of every read still on its way (with `latestOnly`): data the caller has just written into the state
+     * is not replaced by an older answer.
+     */
+    supersede: () => void;
 }
 
 /**
@@ -116,6 +126,7 @@ export function useIpcQuery(
         apply,
         enabled = true,
         latestOnly = false,
+        onRejected,
     } = options;
 
     // latestOnly drops a superseded call's loading reset and leaves clearing
@@ -155,6 +166,7 @@ export function useIpcQuery(
                 if (superseded) return;
                 if (!outcome.ok) {
                     setError(outcome.err);
+                    onRejected?.(outcome.err, { setData });
                 } else if (apply) {
                     await apply(outcome.result, { setData, setError }, ...args);
                 } else {
@@ -170,7 +182,7 @@ export function useIpcQuery(
                 if (singleFlight) inFlightRef.current = false;
             }
         },
-        [queryFn, singleFlight, clearErrorOnStart, showLoading, apply, latestOnly],
+        [queryFn, singleFlight, clearErrorOnStart, showLoading, apply, latestOnly, onRejected],
     );
 
     const refetch = useCallback((...args: unknown[]) => run(false, ...args), [run]);
@@ -178,7 +190,11 @@ export function useIpcQuery(
 
     useAutoFetch(refetch, revalidate, { enabled, subscribe, latestOnly, callIdRef });
 
-    return { data, setData, loading, error, setError, refetch };
+    const supersede = useCallback(() => {
+        callIdRef.current += 1;
+    }, []);
+
+    return { data, setData, loading, error, setError, refetch, supersede };
 }
 
 /**

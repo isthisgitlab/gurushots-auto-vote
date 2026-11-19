@@ -110,6 +110,7 @@ export const scenarioSubjectReason = challengeOverrides.scenarioSubjectReason;
 export const scenarioOverlayStatus = challengeOverrides.scenarioOverlayStatus;
 export const prepareScenarioSnapshot = challengeOverrides.prepareScenarioSnapshot;
 export const checkPhaseProfile = challengeOverrides.checkPhaseProfile;
+export const listPhaseProfiles = challengeOverrides.listPhaseProfiles;
 export const ScenarioSettingUnavailableError = challengeOverrides.ScenarioSettingUnavailableError;
 // The installation scenario's settings (account policy, app and device preferences) as the code that acts on them reads them:
 // the saved value with the published phase over it, captured at the consumer's boundary. Saved values never change.
@@ -217,6 +218,7 @@ export const isPinnableImageId = entryPins.isPinnableImageId;
 // scenario ledger (getChosenPoolView). A delete or a rename of a pool a stored scenario uses goes through the lifecycle gate.
 export const getPhotoPools = entryPins.getPhotoPools;
 export const setPhotoPool = entryPins.setPhotoPool;
+export const createPhotoPool = entryPins.createPhotoPool;
 export const deletePhotoPool = scenarios.deletePhotoPool;
 export const renamePhotoPool = scenarios.renamePhotoPool;
 export const getChosenPoolView = challengeOverrides.getChosenPoolView;

@@ -645,6 +645,15 @@ const scenarioOverlayStatus = (challengeId: ChallengeIdInput): ScenarioOverlaySt
 const checkPhaseProfile = (name: string) => checkPhaseProfileIn(loadSettings(), name);
 
 /**
+ * The saved profiles a phase may apply, by their names as saved: every one the same check accepts that publication and the
+ * `useProfile` action make (it reads as a valid profile now, and sets only keys a phase may change).
+ */
+const listPhaseProfiles = (): string[] => {
+    const settings = loadSettings();
+    return Object.keys(settings.profiles).filter((name) => checkPhaseProfileIn(settings, name).ok);
+};
+
+/**
  * The photos a challenge's Boost and Turbo are pinned to now: the runtime pin of its scenario phase entry, else the phase's
  * pin, else the pin the user saved (null: none; an explicit null in a tier suppresses the lower ones). The one reader the
  * Boost and Turbo picks, the `pinned` selector, the status and the facts use. A scenario's pins are never written to the
@@ -1028,6 +1037,7 @@ export {
     scenarioOverlayStatus,
     prepareScenarioSnapshot,
     checkPhaseProfile,
+    listPhaseProfiles,
     getInstallationSetting,
     readInstallationSetting,
     captureInstallationSettings,

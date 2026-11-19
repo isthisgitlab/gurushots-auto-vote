@@ -240,8 +240,8 @@ const SCOPE_STAGES = {
     installation: ['account'],
 } as const;
 
-/** Currency caps a scenario may set on itself (`limits`). */
-const LIMIT_KEYS = ['swaps', 'keys', 'fills'] as const;
+/** Currency caps a scenario may set on itself (`limits`); `coins` caps what its joins spend. */
+const LIMIT_KEYS = ['swaps', 'keys', 'fills', 'coins'] as const;
 
 /** The requests a simulation can be told the outcome of (types/scenario.ts SimulationOperation). */
 const SIMULATION_OPERATIONS = ['submit', 'join', 'claim', 'boost', 'turbo', 'swap', 'fill', 'keyUnlock'] as const;

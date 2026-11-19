@@ -23,6 +23,7 @@ import { captureInstallationTimezone } from '../installationTimezone';
 import { announceEffectiveChange } from '../effectiveEvents';
 import { evaluateExpression } from '../../scenarios/expressions';
 import { INSTALLATION_KEY, initialState } from '../../scenarioStateStore';
+import { noteSimulatedHalt } from '../../simulationScope';
 import type { StateLock } from '../../scenarioStateStore';
 import type { ExpressionContext } from '../../scenarios/expressions';
 import type { OperationRecord } from '../../scenarios/runtime';
@@ -309,6 +310,7 @@ const write = (
         };
         if (!prepared.ok) {
             const halted = blockedText(at.phase, prepared.key, prepared.reason);
+            noteSimulatedHalt(INSTALLATION_KEY, halted);
             const cleared = withoutPublication(base);
             outcome.status = 'blocked';
             if (cleared.lastError?.message === halted) return cleared;

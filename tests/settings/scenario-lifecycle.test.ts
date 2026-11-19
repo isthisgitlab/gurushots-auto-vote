@@ -1058,6 +1058,73 @@ describe('a change that another writer interleaves', () => {
         expect(settings.settleHandoff('7', record('7')!)).toBe('failed');
     });
 
+    describe('an assignment that keeps the owner (a paired phone’s)', () => {
+        test('names the owner the installation has: it goes through, with the owner unchanged and the generation moved on', () => {
+            settings.saveScenario(installationDoc('Inst'));
+            settings.saveScenario(installationDoc('Other'));
+            expect(settings.setInstallationScenario('Inst', 'cli', 0).ok).toBe(true);
+            expect(settings.setInstallationScenario('Other', 'cli', 1, { keepExecutor: true })).toMatchObject({
+                ok: true,
+                installation: { scenario: 'Other', executor: 'cli', generation: 2 },
+            });
+        });
+
+        test('names another owner than the stored one: refused, and nothing changes', () => {
+            settings.saveScenario(installationDoc('Inst'));
+            settings.saveScenario(installationDoc('Other'));
+            expect(settings.setInstallationScenario('Inst', 'cli', 0).ok).toBe(true);
+            expect(settings.setInstallationScenario('Other', 'electron', 1, { keepExecutor: true })).toEqual({
+                ok: false,
+                reason: 'owner-policy',
+                generation: 1,
+            });
+            expect(settings.getInstallationScenario()).toMatchObject({
+                scenario: 'Inst',
+                executor: 'cli',
+                generation: 1,
+            });
+        });
+
+        test('the owner is read under the same change as the generation: a transfer made after the phone looked is not undone', () => {
+            settings.saveScenario(installationDoc('Inst'));
+            settings.saveScenario(installationDoc('Other'));
+            expect(settings.setInstallationScenario('Inst', 'electron', 0).ok).toBe(true);
+            // The phone read owner electron at generation 1; then the user moved the installation to the CLI (generation 2).
+            expect(settings.transferInstallationOwner('cli', 1).ok).toBe(true);
+            // Its request names electron and (having read again) generation 2: the generation fence passes, the owner does not.
+            expect(settings.setInstallationScenario('Other', 'electron', 2, { keepExecutor: true })).toEqual({
+                ok: false,
+                reason: 'owner-policy',
+                generation: 2,
+            });
+            expect(settings.getInstallationScenario()).toMatchObject({ scenario: 'Inst', executor: 'cli' });
+        });
+
+        test('with no assignment there is no owner to keep: selecting is refused, clearing is not', () => {
+            settings.saveScenario(installationDoc('Inst'));
+            expect(settings.setInstallationScenario('Inst', 'electron', 0, { keepExecutor: true })).toEqual({
+                ok: false,
+                reason: 'owner-policy',
+                generation: 0,
+            });
+            expect(settings.setInstallationScenario(null, 'electron', 0, { keepExecutor: true }).ok).toBe(true);
+        });
+
+        test('a stale generation still reads as stale, before the owner is judged', () => {
+            settings.saveScenario(installationDoc('Inst'));
+            expect(settings.setInstallationScenario('Inst', 'electron', 5, { keepExecutor: true })).toMatchObject({
+                ok: false,
+                reason: 'stale-generation',
+            });
+        });
+
+        test('an option that is not keepExecutor changes nothing', () => {
+            settings.saveScenario(installationDoc('Inst'));
+            expect(settings.setInstallationScenario('Inst', 'cli', 0, {}).ok).toBe(true);
+            expect(settings.getInstallationScenario()).toMatchObject({ executor: 'cli' });
+        });
+    });
+
     test('a ledger held by another process is busy, whatever change needed it', async () => {
         assigned();
         held.add('scenariostate');

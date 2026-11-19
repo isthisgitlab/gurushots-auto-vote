@@ -91,7 +91,13 @@ describe('a simulation', () => {
             require('../../../src/ts/core/scenarioStateStore') as typeof import('../../../src/ts/core/scenarioStateStore');
         selection.rememberChallenges([timed], true);
         const run = await runInSimulationScope(
-            { nowMs: () => 1, ledger: createMemoryStateLedger(), patchSettings: (config) => config, breach: null },
+            {
+                nowMs: () => 1,
+                ledger: createMemoryStateLedger(),
+                patchSettings: (config) => config,
+                breach: null,
+                halts: [],
+            },
             async () => {
                 selection.rememberChallenges([keyed], false);
                 return selection.rememberedChallengesMock();

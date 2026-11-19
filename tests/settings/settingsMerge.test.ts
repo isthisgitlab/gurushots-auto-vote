@@ -292,3 +292,38 @@ describe('rebaseConfigText: the lifecycle members of the configuration', () => {
         ).toBe('x');
     });
 });
+
+describe('rebaseConfigText: photo pools', () => {
+    const inPools = (pools: unknown) => text({ ...getDefaultSettings(), photoPools: pools });
+    const poolsOf = (merged: string): unknown => {
+        const parsed: unknown = JSON.parse(merged);
+        if (!isPlainObject(parsed)) throw new Error('not an object');
+        return parsed.photoPools;
+    };
+    const rebasePools = (base: unknown, ours: unknown, theirs: unknown): unknown =>
+        poolsOf(rebaseConfigText(inPools(base), inPools(ours), inPools(theirs)));
+
+    test('a pool both writers added under one name keeps the one stored first, never replaced by the other', () => {
+        expect(rebasePools({}, { Beach: ['ours'] }, { Beach: ['theirs'] })).toEqual({ Beach: ['theirs'] });
+    });
+
+    test('pools added under different names both survive', () => {
+        expect(rebasePools({}, { Mine: ['m'] }, { Theirs: ['t'] })).toEqual({ Mine: ['m'], Theirs: ['t'] });
+    });
+
+    test('a pool this side changed or removed is applied, as for any value', () => {
+        expect(rebasePools({ A: ['1'], B: ['2'] }, { A: ['9'] }, { A: ['1'], B: ['2'], C: ['3'] })).toEqual({
+            A: ['9'],
+            C: ['3'],
+        });
+    });
+
+    test('with no pools at all in the earlier text, what each side added is kept', () => {
+        expect(rebasePools(undefined, { Mine: ['m'] }, { Theirs: ['t'] })).toEqual({ Mine: ['m'], Theirs: ['t'] });
+    });
+
+    test('a side that holds no pools at all leaves the other side’s as they are', () => {
+        expect(rebasePools(undefined, { Mine: ['m'] }, undefined)).toEqual({ Mine: ['m'] });
+        expect(rebasePools({ A: ['1'] }, undefined, { A: ['1'], B: ['2'] })).toBeUndefined();
+    });
+});

@@ -83,6 +83,7 @@ type InstallationRefusal =
     | 'unknown-scenario'
     | 'incompatible-scope'
     | 'invalid-executor'
+    | 'owner-policy'
     | 'no-installation'
     | 'not-saved';
 
@@ -121,12 +122,13 @@ const advanceInstallationRecord = (
 /**
  * Selects the installation scenario (`name`; null clears it) and its owner. Refused when the document is for challenges
  * (`incompatible-scope`), when `expectedGeneration` is not the current generation (`stale-generation`, with the current
- * one), and by the lifecycle preflight on the installation's progress. The generation advances by one either way.
+ * one), when `keepExecutor` is set and `executor` is not the owner the installation has (`owner-policy`), and by the lifecycle preflight on the installation's progress. The generation advances by one either way.
  */
 const setInstallationScenario = (
     name: string | null,
     executor: InstallationExecutor,
     expectedGeneration: number,
+    options?: { keepExecutor?: boolean },
 ): InstallationResult => {
     if (!isExecutor(executor)) return { ok: false, reason: 'invalid-executor' };
     const gated = runGated(
@@ -139,6 +141,16 @@ const setInstallationScenario = (
             if (name !== null && document === null) return { ok: false, reason: 'unknown-scenario', generation };
             if (document && document.scope !== 'installation')
                 return { ok: false, reason: 'incompatible-scope', generation };
+            // A caller that may not move the installation to another owner (a paired phone) names the owner it saw: that is
+            // checked here, on the configuration this change is made on, with the generation — never on an earlier read.
+            // With no assignment there is no owner to keep. Clearing names none.
+            if (
+                options?.keepExecutor === true &&
+                name !== null &&
+                settings.installationScenario?.executor !== executor
+            ) {
+                return { ok: false, reason: 'owner-policy', generation };
+            }
             const next = generation + 1;
             const moved = advanceInstallationRecord(settings, next, document);
             if (!moved.ok) return { ok: false, reason: moved.reason, generation };

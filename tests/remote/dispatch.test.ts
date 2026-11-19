@@ -158,7 +158,12 @@ describe('withoutUserDataPath', () => {
 describe('a scenario change goes through the control inbox', () => {
     /** A host whose inbox answers what the test scripts and whose handlers answer `handler`. */
     const scripted = (
-        script: { begin?: unknown; finish?: unknown; handler?: unknown; handlerThrows?: unknown } = {},
+        script: {
+            begin?: unknown;
+            finish?: unknown;
+            handler?: unknown;
+            handlerThrows?: unknown;
+        } = {},
     ): RemoteDispatchDeps & { calls: Array<{ channel: string; args: unknown[] }> } => {
         const calls: Array<{ channel: string; args: unknown[] }> = [];
         return {
@@ -236,6 +241,66 @@ describe('a scenario change goes through the control inbox', () => {
         });
         expect(deps.calls[2].args).toEqual([{ requestId: 'r1', target: '@installation', ...recorded }]);
         expect(outcome).toMatchObject({ kind: 'result', result: handler });
+    });
+
+    test('a phone’s assignment goes to the host with the owner-keeping option, and nothing else the phone sent', async () => {
+        const deps = scripted();
+        await dispatchRemoteInvoke(
+            'set-installation-scenario',
+            ['Plan', 'cli', 3, { keepExecutor: false }, 'extra'],
+            deps,
+            {
+                requestId: 'r1',
+            },
+        );
+        expect(names(deps)).toEqual(['begin-scenario-request', 'set-installation-scenario', 'finish-scenario-request']);
+        // The host checks the owner with the generation in the one change that writes it; no earlier read is made here.
+        expect(deps.calls[1].args).toEqual(['Plan', 'cli', 3, { keepExecutor: true }]);
+        // The inbox records the same arguments, so the Android service applies it under the same rule.
+        expect(JSON.parse((deps.calls[0].args[0] as { args: string }).args)).toEqual([
+            'Plan',
+            'cli',
+            3,
+            { keepExecutor: true },
+        ]);
+    });
+
+    test('an owner the host refuses to change is its own answer, passed through as the handler gave it', async () => {
+        const deps = scripted({ handler: { success: false, error: 'owner-policy', generation: 3 } });
+        const outcome = await dispatchRemoteInvoke('set-installation-scenario', ['Plan', 'cli', 3], deps, {
+            requestId: 'r1',
+        });
+        expect(outcome).toMatchObject({
+            kind: 'result',
+            result: { success: false, error: 'owner-policy', generation: 3 },
+        });
+        expect(deps.calls[2].args).toEqual([
+            { requestId: 'r1', target: '@installation', ok: false, error: 'owner-policy' },
+        ]);
+    });
+
+    test('a stale request answers with where the target stands now, as a control report the phone keeps', async () => {
+        const deps = scripted({ begin: { success: false, error: 'stale', revision: 7 } });
+        const outcome = await dispatchRemoteInvoke('save-scenario', [{}], deps, {
+            requestId: 'r1',
+            expectedRevision: 2,
+        });
+        expect(outcome).toEqual({
+            kind: 'result',
+            result: { success: false, error: 'stale', revision: 7 },
+            control: { requestId: 'r1', target: 'definitions', revision: 7 },
+        });
+        expect(names(deps)).toEqual(['begin-scenario-request']);
+    });
+
+    test.each([
+        ['a refusal that is not stale', { success: false, error: 'busy' }],
+        ['a stale answer with no revision', { success: false, error: 'stale' }],
+        ['a stale answer whose revision is not a number', { success: false, error: 'stale', revision: 'x' }],
+    ])('%s carries no control report', async (_label, begin) => {
+        const deps = scripted({ begin });
+        const outcome = await dispatchRemoteInvoke('save-scenario', [{}], deps, { requestId: 'r1' });
+        expect(outcome).toEqual({ kind: 'result', result: begin });
     });
 
     test('a recorded reason is cut to what the inbox keeps', async () => {

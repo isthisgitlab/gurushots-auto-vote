@@ -28,7 +28,7 @@ import { createMemoryEntryAgeLedger } from '../../entryAgeStore';
 import { createMemoryLedger } from '../../swapBackStore';
 import { createMemoryEntryTracker } from '../newEntryTracker';
 import { isClaimable } from '../autoClaim';
-import { ISOLATION_BREACHED, runInSimulationScope } from '../../simulationScope';
+import { ISOLATION_BREACHED, runInSimulationScope, simulationScope } from '../../simulationScope';
 import { soonestAccountWake } from '../../scheduling/thresholdWindow/ruleWakes';
 import { nextWakeAt } from '../../scenarios/nextWake';
 import {
@@ -414,13 +414,12 @@ const subjectWake = async (
     });
 };
 
-/** Why a scenario halted, from the notice the runner leaves for it: null when none did. */
-const haltOf = (events: SimulationEvent[]): string | null => {
-    const halts = events.flatMap((event) =>
-        event.type === 'notice' && event.message.startsWith('Halted: ') ? [event.message.slice('Halted: '.length)] : [],
-    );
-    return halts[0] ?? null;
-};
+/**
+ * Why the requested subject's scenario halted, from the runner's own signal (never from a notice's text): null when none did. A
+ * halt of another subject — a challenge run still runs the installation's stage — is not this run's.
+ */
+const haltOf = (key: string): string | null =>
+    simulationScope()?.halts.find((halt) => halt.subject === key)?.reason ?? null;
 
 /** A run that stopped before it began, or whose result was discarded: halted, with the reason and nothing else. */
 const haltedResult = (input: SimulationInput, halted: string): SimulationResult => ({
@@ -504,7 +503,7 @@ const drive = async (
             stoppedAt: at,
             passes: passInstants,
             needs: null,
-            halted: haltOf(events),
+            halted: haltOf(key),
         } satisfies SimulationResult;
     };
 
@@ -544,7 +543,7 @@ const drive = async (
             .slice(logged)
             .map((operation) => ({ type: 'operation' as const, ...operation, applied: true as const }));
         events.push(...made, ...traceStateChange(before, after, at, label));
-        const halted = haltOf(events);
+        const halted = haltOf(key);
         if (halted !== null) return finish('halted', at, null);
 
         // Work was done at this instant: another pass at it (a catch-up lands one photo per pass), up to a bound.
@@ -579,6 +578,7 @@ const runSimulation = async (
         ledger: memory.stores.scenarioLedger,
         patchSettings: simulatedSettings(input.scenario, input.source, input.subject),
         breach: null,
+        halts: [],
     };
     try {
         const run = await runInSimulationScope(scope, () => drive(input, clock, memory, timezone));

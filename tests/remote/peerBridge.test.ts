@@ -1160,6 +1160,36 @@ describe('installPeerBridge: which peer counts', () => {
             expect(other.expectedRevision).toBeUndefined();
         });
 
+        test('a stale refusal brings the revision the target stands at now, which the next change to it expects', async () => {
+            connect();
+            const stale = api.pauseScenario('c1') as Promise<unknown>;
+            const { id, requestId } = invokes()[0] as { id: number; requestId: string };
+            phone.receiveFromPeer(
+                {
+                    t: 'result',
+                    id,
+                    ok: true,
+                    result: { success: false, error: 'stale', revision: 7 },
+                    control: { requestId, target: 'c1', revision: 7 },
+                },
+                'host',
+            );
+            await expect(stale).resolves.toEqual({ success: false, error: 'stale', revision: 7 });
+            void api.pauseScenario('c1');
+            expect(invokes()[1].expectedRevision).toBe(7);
+        });
+
+        test('an owner the host will not change is the host’s own answer, not an old-computer refusal', async () => {
+            connect();
+            const refused = api.setInstallationScenario('Plan', 'cli', 3) as Promise<unknown>;
+            const { id } = invokes()[0] as { id: number };
+            phone.receiveFromPeer(
+                { t: 'result', id, ok: true, result: { success: false, error: 'owner-policy', generation: 3 } },
+                'host',
+            );
+            await expect(refused).resolves.toEqual({ success: false, error: 'owner-policy', generation: 3 });
+        });
+
         test('a loss after the send is unclear and carries the identity to ask about; nothing is sent again after the reconnect', async () => {
             connect();
             const lost = api.pauseScenario('c1') as Promise<{

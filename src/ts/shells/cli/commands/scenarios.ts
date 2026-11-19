@@ -722,7 +722,7 @@ const scenarioHandoffCommand = async (argv: string[]): Promise<number> => {
 const capitalised = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
 
 const POOL_USAGE =
-    'Usage: photo-pool list  |  photo-pool save "<name>" <photo id>...  |  photo-pool delete "<name>"  |  photo-pool rename "<name>" "<new name>"';
+    'Usage: photo-pool list  |  photo-pool save "<name>" <photo id>...  |  photo-pool create "<name>" <photo id>...  |  photo-pool delete "<name>"  |  photo-pool rename "<name>" "<new name>"';
 
 /** `photo-pool`: the account's named photo pools. */
 const photoPoolCommand = async (argv: string[]): Promise<number> => {
@@ -743,6 +743,13 @@ const photoPoolCommand = async (argv: string[]): Promise<number> => {
         const saved = await handlers()['set-photo-pool'](null, name, ids);
         if (!saved.success) return lifecycleFailure(saved, 'save the pool');
         ui().success(`Saved the pool "${stripTerminalControl(name)}" (${ids.length} photo(s)).`);
+        return 0;
+    }
+    if (action === 'create' && rest.length >= 2) {
+        const [name, ...ids] = rest;
+        const created = await handlers()['create-photo-pool'](null, name, ids);
+        if (!created.success) return lifecycleFailure(created, 'create the pool');
+        ui().success(`Created the pool "${stripTerminalControl(name)}" (${ids.length} photo(s)).`);
         return 0;
     }
     if (action === 'delete' && rest.length === 1) {

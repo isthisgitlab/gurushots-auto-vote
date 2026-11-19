@@ -610,7 +610,7 @@ const COMMANDS_BLOCK = `Commands:
   scenario-resume <challenge id|installation> - Resume a paused scenario
   scenario-handoff <challenge id|installation> "<scenario>"|--clear --generation=<n> - Give a subject another scenario, or
              none; <n> is the generation scenario-snapshot showed
-  photo-pool list|save "<name>" <photo id>...|delete "<name>"|rename "<name>" "<new name>" - The named photo pools a
+  photo-pool list|save|create "<name>" <photo id>...|delete "<name>"|rename "<name>" "<new name>" - The named photo pools a
              scenario phase draws from
   scenario-snapshot <challenge id|installation> - Where a subject stands: its scenario, generation, pause, settings in force, pins and pool
   stop-status - The Stop fence: whether it blocks a start, whether the last Stop is saved, and whether the owner acknowledged it

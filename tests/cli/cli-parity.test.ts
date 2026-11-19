@@ -204,6 +204,10 @@ const CLI_PARITY: Record<InvokeChannel, ParityEntry> = {
     'clear-scenario-assignment': { commands: ['scenario-handoff', 'scenario-installation'], flag: '--clear' },
     'get-photo-pools': { commands: ['photo-pool'], flag: 'list' },
     'set-photo-pool': { commands: ['photo-pool'], flag: 'save' },
+    'create-photo-pool': { commands: ['photo-pool'], flag: 'create' },
+    'get-phase-profiles': {
+        reason: 'The profile picker of the scenario builder; the CLI names a profile directly and the validator refuses one a phase may not apply.',
+    },
     'delete-photo-pool': { commands: ['photo-pool'], flag: 'delete' },
     'rename-photo-pool': { commands: ['photo-pool'], flag: 'rename' },
     'get-effective-entry-pins': { commands: ['scenario-snapshot'], flag: null },

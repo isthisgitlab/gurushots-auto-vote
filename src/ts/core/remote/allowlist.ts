@@ -33,6 +33,7 @@ export const ALLOWED = [
     'cleanup-stale-challenge-setting',
     'clear-scenario-assignment',
     'clear-skip-version',
+    'create-photo-pool',
     'delete-challenge-profile',
     'delete-photo-pool',
     'delete-scenario',
@@ -62,6 +63,7 @@ export const ALLOWED = [
     'get-log-backlog',
     'get-member-challenges',
     'get-open-chosen-annotations',
+    'get-phase-profiles',
     'get-photo-pools',
     'get-photo-stats',
     'get-releases-url',
@@ -125,6 +127,9 @@ export const ALLOWED = [
     'vote-on-challenge-manual',
 ] as const;
 
+/** What a phone is told when it would change the installation scenario's owner. */
+export const OWNER_TRANSFER_REFUSAL = 'Owner transfer is done on the selected computer.';
+
 /** The refused channels, each with the reason the refusal names. */
 export const REFUSED: Record<string, string> = {
     // Account: the sign-in stays on the desktop.
@@ -143,7 +148,7 @@ export const REFUSED: Record<string, string> = {
     'settings-changed': 'Events flow from the computer to the phone only.',
     // The installation scenario's owner: a paired phone chooses a scenario on its current computer, it never moves the
     // installation to another one.
-    'transfer-installation-scenario-owner': 'Owner transfer is done on the selected computer.',
+    'transfer-installation-scenario-owner': OWNER_TRANSFER_REFUSAL,
     // The controller's own routes (fence, arming, withdrawal, wake) and the control inbox's host routes: the phone's Start and
     // Stop go through autovote-command, and the host records a phone's scenario change in its inbox itself.
     'scenario-stop-fence': 'This is done on the computer.',
@@ -270,6 +275,7 @@ export const READ_REMOTE_CHANNELS: ReadonlySet<string> = new Set([
     'get-log-backlog',
     'get-member-challenges',
     'get-open-chosen-annotations',
+    'get-phase-profiles',
     'get-photo-pools',
     'get-photo-stats',
     'get-releases-url',
@@ -387,7 +393,12 @@ export const scenarioControlTarget = (channel: string, args: unknown[]): string 
     if (channel === 'save-scenario' || channel === 'rename-scenario' || channel === 'delete-scenario') {
         return 'definitions';
     }
-    if (channel === 'set-photo-pool' || channel === 'delete-photo-pool' || channel === 'rename-photo-pool') {
+    if (
+        channel === 'set-photo-pool' ||
+        channel === 'create-photo-pool' ||
+        channel === 'delete-photo-pool' ||
+        channel === 'rename-photo-pool'
+    ) {
         return 'pools';
     }
     if (channel === 'set-entry-pin') return 'pins';

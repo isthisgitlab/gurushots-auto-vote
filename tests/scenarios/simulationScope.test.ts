@@ -43,6 +43,7 @@ const scopeOf = (overrides: Partial<scopeModule.SimulationScope> = {}): scopeMod
     ledger: createMemoryStateLedger(),
     patchSettings: (config) => config,
     breach: null,
+    halts: [],
     ...overrides,
 });
 

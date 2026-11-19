@@ -77,10 +77,25 @@ const fencedAssignment = (ours: unknown, theirs: unknown): unknown =>
 const advancedRevision = (ours: unknown, theirs: unknown): unknown =>
     typeof ours === 'number' && typeof theirs === 'number' && ours !== theirs ? Math.max(ours, theirs) + 1 : ours;
 
+// A pool both writers added under one name keeps the one that was stored first: a pool made meanwhile is never replaced by a
+// pool of the same name that another writer made on an older view (a create is a no-overwrite write). Every other pool, and
+// a pool only one side changed, merges as any value does.
+const mergePools = (base: unknown, ours: unknown, theirs: unknown): unknown => {
+    if (!isPlainObject(ours) || !isPlainObject(theirs)) return merge(base, ours, theirs);
+    return mergeKeys(
+        isPlainObject(base) ? base : {},
+        ours,
+        theirs,
+        () => (from, mine, other) =>
+            from === undefined && mine !== undefined ? (other ?? mine) : merge(from, mine, other),
+    );
+};
+
 // The top-level members that are merged as units rather than field by field.
 const UNITS: Record<string, (base: unknown, ours: unknown, theirs: unknown) => unknown> = {
     installationScenario: (base, ours, theirs) => leaf(base, ours, theirs, fencedAssignment),
     scenarioDefinitionsRevision: (base, ours, theirs) => leaf(base, ours, theirs, advancedRevision),
+    photoPools: mergePools,
 };
 
 const mergeConfig = (

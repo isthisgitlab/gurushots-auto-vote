@@ -542,3 +542,52 @@ describe('SettingsModal — what a running scenario paints', () => {
         expect(screen.queryByText('app.effectiveScenarioNote')).toBeNull();
     });
 });
+
+describe('SettingsModal — a scenario save with no final answer', () => {
+    const editScenario = async () => {
+        selectTab('app.scenarios');
+        click('app.sbNew');
+        await screen.findByLabelText('app.sbName');
+        fireEvent.change(screen.getByLabelText('app.sbName'), { target: { value: 'Draft' } });
+    };
+
+    test('the modal neither closes (Escape, Cancel) nor saves around it, and does again once the save is final', async () => {
+        await openSettings();
+        await editScenario();
+        let release!: (answer: { success: true }) => void;
+        window.api.checkScenario = invalid(
+            jest.fn(
+                () =>
+                    new Promise((resolve) => {
+                        release = resolve;
+                    }),
+            ),
+        );
+        click('app.sbSave');
+        await waitFor(() => expect(window.api.checkScenario).toHaveBeenCalled());
+        // The builder reports its busy state from an effect: wait for the modal to have it.
+        await waitFor(() =>
+            expect(screen.getByRole<HTMLButtonElement>('button', { name: 'app.save' }).getAttribute('aria-busy')).toBe(
+                'true',
+            ),
+        );
+        fireEvent.keyDown(document, { key: 'Escape' });
+        fireEvent.click(screen.getAllByRole('button', { name: 'app.cancel' }).at(-1) as HTMLElement);
+        expect(asked()).toBe(false);
+        expect(onClose).not.toHaveBeenCalled();
+        // The modal's own Save is off, and even a click that reaches its handler writes nothing.
+        const modalSave = screen.getByRole<HTMLButtonElement>('button', { name: 'app.save' });
+        expect(modalSave.disabled).toBe(true);
+        modalSave.removeAttribute('disabled');
+        fireEvent.click(modalSave);
+        expect(screen.queryByText('app.settingsDropTitle')).toBeNull();
+        expect(mockApi.setGlobalDefault).not.toHaveBeenCalled();
+        await act(async () => {
+            release({ success: true });
+        });
+        await waitFor(() => expect(screen.queryByLabelText('app.sbName')).toBeNull());
+        await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+        fireEvent.keyDown(document, { key: 'Escape' });
+        await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    });
+});

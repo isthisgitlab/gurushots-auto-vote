@@ -301,14 +301,16 @@ function TextField({ id, settingKey, config, value, onChange, onReset, disabled,
 }
 
 /**
- * The `scenario` assignment: a pick of the stored scenarios ('' = none). A
- * name that no longer exists stays visible — marked as missing — so the user
- * sees the stale assignment instead of it silently reading as "none".
+ * The `scenario` assignment: a pick of the stored scenarios ('' = none). A challenge is assigned a challenge
+ * scenario, so the app-wide (installation) ones are not offered. A name that no longer exists stays visible —
+ * marked as missing — so the user sees the stale assignment instead of it silently reading as "none".
  */
 function ScenarioField({ id, settingKey, config, value, onChange, onReset, disabled, rejected }: SettingFieldProps) {
     const { t } = useTranslation();
     const { scenarios } = useScenarios();
-    const names = Object.keys(scenarios);
+    const names = Object.keys(scenarios).filter(
+        (name) => (scenarios[name] as { scope?: string } | undefined)?.scope !== 'installation',
+    );
     const current = String(value);
     const selected = names.find((name) => name.toLowerCase() === current.toLowerCase()) ?? current;
     const missing = current !== '' && !names.includes(selected);

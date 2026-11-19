@@ -13,6 +13,7 @@ import { ADMISSION_RULE_ID, evaluateScenario } from '../../scenarios/evaluate';
 import { entriesOf } from '../../scenarios/selectors';
 import { recordVoteSample } from '../../scenarios/speed';
 import { initialState } from '../../scenarioStateStore';
+import { noteSimulatedHalt } from '../../simulationScope';
 import type { StateLock } from '../../scenarioStateStore';
 import type { Challenge } from '../../types/gurushots';
 import type { ScenarioState } from '../../types/stores';
@@ -112,6 +113,7 @@ const loadState = (ctx: RunnerContext, now: number): ScenarioState | null => {
  * Records a halt on the state: it needs the user, so it is also a notice (once per distinct halt).
  */
 const noteHalt = (ctx: RunnerContext, state: ScenarioState, halted: string): void => {
+    noteSimulatedHalt(String(ctx.challengeId), halted);
     if (state.lastError?.message === halted) return;
     const at = nowSec();
     ctx.ledger.set(

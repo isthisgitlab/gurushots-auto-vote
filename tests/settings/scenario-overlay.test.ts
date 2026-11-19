@@ -819,6 +819,18 @@ describe('scenario phase bindings and profile', () => {
             expect(settings.scenarioSubjectReason('7')).toBe('profile-unavailable: Low');
         });
 
+        test('the profiles a phase may apply are the ones the runner’s own check accepts, now — not a cleaned-up view of them', () => {
+            settings.saveChallengeProfile('Low', { exposureTarget: 50 });
+            settings.saveChallengeProfile('Tactic', { autoBoost: true, boostTime: 120 });
+            settings.saveChallengeProfile('Manual', { manualPhotosOnly: true });
+            expect(settings.listPhaseProfiles().sort()).toEqual(['Low', 'Tactic']);
+            // `Low` no longer fits the defaults it is checked against: the display view would drop the bad value and still show
+            // it, but the check that publication and `useProfile` make refuses it, so it is no longer listed.
+            settings.setGlobalDefault('exposure', 60);
+            expect(settings.listPhaseProfiles()).toEqual(['Tactic']);
+            expect(settings.checkPhaseProfile('Low')).toMatchObject({ ok: false });
+        });
+
         describe('grouped auto-join timing', () => {
             beforeEach(() => {
                 settings.setGlobalDefault('autoJoinAfterHoursFromStart', 5);

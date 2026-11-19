@@ -1,4 +1,10 @@
-import { scenarioIssueText, scenarioPathText } from '@/utils/scenarioIssueText';
+import {
+    scenarioIssueText,
+    scenarioPathText,
+    scenarioRefusalText,
+    restrictionText,
+    statusReasonText,
+} from '@/utils/scenarioIssueText';
 import { fillTemplate } from './helpers/setup';
 
 import type { Translate } from '../../src/ts/core/translations/translator';
@@ -139,5 +145,99 @@ describe('scenarioPathText', () => {
         expect(scenarioPathText(`${long}x`, t)).toBe(`${long}x`);
         expect(scenarioPathText(`${long}[3]`, t)).toBe(`${long}[3]`);
         expect(scenarioPathText(`phases.main.rules${long}[0]`, t)).toBe(`Phase main › rules${long}[0]`);
+    });
+});
+
+describe('refusal reason codes', () => {
+    const t: Translate = (key) => key;
+
+    test.each([
+        ['busy', 'app.scenarioRefusal_busy'],
+        ['stale-generation', 'app.scenarioRefusal_staleGeneration'],
+        ['incompatible-scope', 'app.scenarioRefusal_incompatibleScope'],
+        ['conflict', 'app.scenarioRefusal_conflict'],
+        ['stale', 'app.scenarioRefusal_stale'],
+        ['owner-policy', 'app.scenarioRefusal_ownerPolicy'],
+        ['revision-unreadable', 'app.scenarioRefusal_revisionUnreadable'],
+        ['not-found', 'app.scenarioRefusal_unknownScenario'],
+        ['pool-unbound', null],
+    ])('%s reads as its own wording or none', (code, key) => {
+        const answer = scenarioRefusalText(code, t);
+        if (key === null) expect(answer).toBeNull();
+        else expect(answer).toBe(key);
+    });
+
+    test('a bare code a validator issue carries words itself', () => {
+        expect(scenarioIssueText('busy', t)).toEqual({ text: 'app.scenarioRefusal_busy', known: true });
+    });
+});
+
+describe('catalogue restrictions', () => {
+    const t: Translate = (key) => key;
+
+    test.each([
+        ['Only the window manager writes window geometry', 'app.sbRestriction_windowBounds'],
+        ['A phase cannot change the scenario assignment itself', 'app.sbRestriction_scenario'],
+        ['A phase cannot change Manual Only', 'app.sbRestriction_manualPhotosOnly'],
+        ['Only the user changes the resume delay for the next launch', 'app.sbRestriction_autovoteStartupDelay'],
+        ['Only the user changes sign-in retention', 'app.sbRestriction_stayLoggedIn'],
+        ['Only the user switches between real and mock mode', 'app.sbRestriction_mock'],
+        ['Only the voting controller starts or stops voting', 'app.sbRestriction_autovoteRunning'],
+        ['Only the voting controller records which launch started voting', 'app.sbRestriction_autovoteStartedLaunch'],
+        ['Only the user skips an update version', 'app.sbRestriction_skipUpdateVersion'],
+        ['Only the user acknowledges a notice', 'app.sbRestriction_noticeAcknowledgedVersion'],
+        ['Only the welcome screen marks onboarding as done', 'app.sbRestriction_onboardingCompleted'],
+        ['Only the user enables remote access or rotates its key', 'app.sbRestriction_remoteEnabled'],
+    ])('%s reads as %s', (restriction, key) => {
+        expect(restrictionText(restriction, t)).toBe(key);
+    });
+
+    test('a reason with no wording, or none, reads as the plain "no scenario can change it", never as English', () => {
+        expect(restrictionText('Something new the backend says', t)).toBe('app.sbUserOnly');
+        expect(restrictionText('constructor', t)).toBe('app.sbUserOnly');
+        expect(restrictionText(undefined, t)).toBe('app.sbUserOnly');
+    });
+});
+
+describe('status reasons', () => {
+    const t: Translate = (key) => key;
+
+    test.each([
+        ['the saved progress of this challenge cannot be read', 'progress'],
+        ['the saved progress of the installation scenario cannot be read', 'progress'],
+        ['profile-unavailable: Night', 'profileUnavailable'],
+        ['there is no profile named "Night"', 'profileMissing'],
+        ['the profile "Night" is not valid', 'profileInvalid'],
+        ['the profile "Night" sets manualPhotosOnly, which a phase cannot change', 'profileForbidden'],
+        ['nothing is published for this phase yet', 'notPublished'],
+        ['the published settings of this phase are malformed', 'outdated'],
+        ['the published settings are from an earlier visit to a phase', 'outdated'],
+        ['the scenario or its profile changed after its settings were published', 'outdated'],
+        ['the published settings of this phase have expired', 'outdated'],
+        ['the published settings do not match the bindings of this phase', 'outdated'],
+        ['evidence-not-loaded', 'notLoaded'],
+        ['challenge-not-started', 'notStarted'],
+        ['challenge-closed', 'closed'],
+        ['insufficient-history', 'history'],
+        ['not-applicable', 'notApplicable'],
+        ['not-present', 'notPresent'],
+        ['clock-unreadable', 'unreadable'],
+        ['turbo-time-malformed', 'unreadable'],
+        ['settings-unavailable', 'unreadable'],
+        ['something-nobody-worded', 'other'],
+        ['', 'other'],
+    ])('%j reads as %s', (reason, key) => {
+        expect(statusReasonText(reason, t)).toBe(`app.scenarioReason_${key}`);
+    });
+
+    test('reasons joined by the evidence read one by one, once each, and an absent one by its own reason', () => {
+        expect(statusReasonText('clock-unreadable; absent: not-present; rank-unreadable', t)).toBe(
+            'app.scenarioReason_unreadable, app.scenarioReason_notPresent',
+        );
+    });
+
+    test('no reason at all reads as not known', () => {
+        expect(statusReasonText(null, t)).toBe('app.scenarioReason_other');
+        expect(statusReasonText(undefined, t)).toBe('app.scenarioReason_other');
     });
 });

@@ -46,6 +46,8 @@ type SimulationScope = {
     patchSettings: (config: ConfigV2) => ConfigV2;
     /** The first thing that breached the scope, or null. */
     breach: SimulationIsolationError | null;
+    /** Why the scenario runner halted which subject during the run, in order: the typed signal the result's `halted` is read from. */
+    halts: Array<{ subject: string; reason: string }>;
 };
 
 let current: SimulationScope | null = null;
@@ -63,6 +65,15 @@ const isolateWhileSimulating = (save: SaveState): void => {
 };
 
 const simulationScope = (): SimulationScope | null => current;
+
+/**
+ * Tells the open scope that the scenario runner halted `subject` (its record's key: a challenge id, or the installation's), and why. The runner calls this where it records the halt, so a
+ * simulation learns of a halt from the runner itself and never from the text of a notice (a notice can be the user's own).
+ * Does nothing outside a scope.
+ */
+const noteSimulatedHalt = (subject: string, reason: string): void => {
+    current?.halts.push({ subject, reason });
+};
 
 /** The clock of the composition: the virtual one inside a simulation scope, else `Date.now()`. Milliseconds. */
 const clockMs = (): number => (current ? current.nowMs() : Date.now());
@@ -128,6 +139,7 @@ const runInSimulationScope = async <T>(scope: SimulationScope, body: () => Promi
 
 export {
     ISOLATION_BREACHED,
+    noteSimulatedHalt,
     SIMULATION_BUSY,
     SimulationIsolationError,
     clockMs,

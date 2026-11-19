@@ -57,6 +57,10 @@ const SUBJECT_KINDS: readonly SubjectKind[] = ['candidate', 'active', 'completed
 const isSubject = (value: unknown): value is string | number => value === INSTALLATION_KEY || isIdArg(value);
 
 /** A failure with only its reason, the generation the facade says it is at when it does. */
+/** The one option of `set-installation-scenario`: exactly `{ keepExecutor: true }` (a host-only path: the owner is kept). */
+const isKeepExecutor = (options: unknown): options is { keepExecutor: true } =>
+    isPlainObject(options) && Object.keys(options).length === 1 && options.keepExecutor === true;
+
 const refused = (reason: string, generation?: number) => ({
     success: false as const,
     error: reason,
@@ -270,6 +274,10 @@ const buildLifecycleHandlers = () =>
         'get-effective-presentation': async () =>
             safely('get-effective-presentation', () => ({ success: true as const, ...readEffective().presentation })),
 
+        // The saved profiles a phase may apply: the ones the runner's own check (phase publication, `useProfile`) accepts.
+        'get-phase-profiles': async () =>
+            safely('get-phase-profiles', () => ({ success: true as const, profiles: settings.listPhaseProfiles() })),
+
         'get-photo-pools': async () =>
             safely('get-photo-pools', () => ({ success: true as const, pools: settings.getPhotoPools() })),
 
@@ -312,7 +320,9 @@ const buildLifecycleHandlers = () =>
                     stopEpoch: currentStopEpoch(),
                     at: Date.now(),
                 });
-                return begun.ok ? { success: true as const, ...begun } : refused(begun.reason);
+                if (begun.ok) return { success: true as const, ...begun };
+                // A stale request answers where the target stands now, so the caller's next change can expect that.
+                return 'revision' in begun ? { ...refused('stale'), revision: begun.revision } : refused(begun.reason);
             });
         },
 
@@ -330,8 +340,14 @@ const buildLifecycleHandlers = () =>
             name: string | null,
             executor: InstallationExecutor,
             expectedGeneration: number,
+            options?: { keepExecutor: true },
         ) => {
-            if ((name !== null && !isName(name)) || typeof executor !== 'string' || !isCount(expectedGeneration)) {
+            if (
+                (name !== null && !isName(name)) ||
+                typeof executor !== 'string' ||
+                !isCount(expectedGeneration) ||
+                !(options === undefined || isKeepExecutor(options))
+            ) {
                 return invalidArgs;
             }
             if (backgroundServiceOwnsScenarios()) {
@@ -340,11 +356,12 @@ const buildLifecycleHandlers = () =>
                         name,
                         executor,
                         expectedGeneration,
+                        ...(options === undefined ? [] : [options]),
                     ]),
                 );
             }
             return safely('set-installation-scenario', () =>
-                installationResult(settings.setInstallationScenario(name, executor, expectedGeneration)),
+                installationResult(settings.setInstallationScenario(name, executor, expectedGeneration, options)),
             );
         },
 
@@ -440,6 +457,18 @@ const buildLifecycleHandlers = () =>
             }
             return safely('set-photo-pool', () => {
                 const outcome = settings.setPhotoPool(name, ids);
+                return outcome === 'ok' ? { success: true as const } : refused(outcome);
+            });
+        },
+
+        // Creating never replaces: a name another pool holds (in any case) answers `exists` and leaves that pool as it was. It is
+        // a channel of its own, so a host that has no such channel refuses it — a create can never reach a handler that upserts.
+        'create-photo-pool': async (event: unknown, name: string, ids: string[]) => {
+            if (typeof name !== 'string' || !Array.isArray(ids) || !ids.every((id) => typeof id === 'string')) {
+                return invalidArgs;
+            }
+            return safely('create-photo-pool', () => {
+                const outcome = settings.createPhotoPool(name, ids);
                 return outcome === 'ok' ? { success: true as const } : refused(outcome);
             });
         },

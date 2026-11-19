@@ -288,7 +288,9 @@ type BeginRefusal = 'invalid' | 'too-large' | 'conflict' | 'stale' | 'busy' | 'f
 type BeginOutcome =
     | { ok: true; outcome: 'accepted'; revision: number }
     | { ok: true; outcome: 'duplicate'; status: ControlRequestStatus; revision: number; error: string | null }
-    | { ok: false; reason: BeginRefusal };
+    | { ok: false; reason: BeginRefusal }
+    // The target moved on since the caller looked: the revision it stands at now, which the caller's next change expects.
+    | { ok: false; reason: 'stale'; revision: number };
 
 /** Persists a request as pending, or answers what is already recorded for its identity. Applies nothing. */
 const beginControlRequest = async (input: BeginInput): Promise<BeginOutcome> => {
@@ -339,7 +341,7 @@ const beginControlRequest = async (input: BeginInput): Promise<BeginOutcome> => 
             }
             const entry: ControlTarget = known ? inbox.targets[target] : { revision: 0, pending: null, results: [] };
             if (expectedRevision !== undefined && expectedRevision !== entry.revision) {
-                out.value = { ok: false, reason: 'stale' };
+                out.value = { ok: false, reason: 'stale', revision: entry.revision };
                 return null;
             }
             if (entry.pending !== null) {
