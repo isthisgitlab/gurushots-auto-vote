@@ -13,6 +13,7 @@ import {
     COMPOSITE_KINDS,
 } from '../../../../core/scenarios/builderSpec';
 import { ItemEditor } from './ItemEditors';
+import { useListFocus } from './listFocus';
 
 import type { ExprExpected } from '../../../../core/scenarios/builderSpec';
 import type { ComponentChildren } from 'preact';
@@ -448,12 +449,13 @@ function OperandList({
     depth: number;
 }) {
     const { t } = useTranslation();
+    const focus = useListFocus();
     const list = Array.isArray(value.of) ? value.of : [];
     const full = list.length >= vocabulary.SCENARIO_CAPS.aggregateOperands;
     return (
         <div className="space-y-1">
             {list.map((operand, index) => (
-                <div key={index} className="flex gap-1 items-start">
+                <div key={index} {...focus.row} className="flex gap-1 items-start">
                     <div className="flex-1 min-w-0">
                         <ExpressionEditor
                             value={operand}
@@ -470,9 +472,13 @@ function OperandList({
                     <button
                         type="button"
                         className="btn btn-sm btn-ghost text-error shrink-0"
+                        {...focus.remove}
                         aria-label={t('app.actionOnItem', { action: t('app.sbRemove'), item: `${index + 1}` })}
                         disabled={list.length <= 2}
-                        onClick={() => onChange({ kind: value.kind, of: list.filter((_, i) => i !== index) })}
+                        onClick={() => {
+                            focus.afterRemove(index);
+                            onChange({ kind: value.kind, of: list.filter((_, i) => i !== index) });
+                        }}
                     >
                         {t('app.sbRemove')}
                     </button>
@@ -481,13 +487,15 @@ function OperandList({
             <button
                 type="button"
                 className="btn btn-sm"
+                {...focus.add}
                 disabled={full}
-                onClick={() =>
+                onClick={() => {
+                    focus.afterAdd(list.length);
                     onChange({
                         kind: value.kind,
                         of: [...list, defaultExpression('literal', expected, { stages: context.stages })],
-                    })
-                }
+                    });
+                }}
             >
                 {t('app.sbAddOperand')}
             </button>

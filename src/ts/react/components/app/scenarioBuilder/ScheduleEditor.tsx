@@ -1,7 +1,9 @@
+import { useId } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { MAX_SCHEDULED_FILL_ENTRIES } from '../../../../core/settings/limits';
 import { defaultExpression, SCHEDULE_REPLACED_KEYS, SUBMIT_MAX_ROWS } from '../../../../core/scenarios/builderSpec';
 import { ExpressionEditor } from './ExpressionEditor';
+import { firstControl, useFocusAfterRender, useListFocus } from './listFocus';
 
 import type { ExpressionContext } from './ExpressionEditor';
 import type { ComponentChildren } from 'preact';
@@ -49,6 +51,8 @@ export function ScheduleEditor({
     heldKeys: readonly string[];
 }) {
     const { t } = useTranslation();
+    const id = useId();
+    const focusAfter = useFocusAfterRender();
     const doc = isPlainObject(schedules) ? schedules : {};
     const held = (name: 'submit' | 'vote' | 'pause') => (isPlainObject(doc[name]) ? doc[name] : null);
     const write = (name: 'submit' | 'vote' | 'pause', next: Record<string, unknown> | null) => {
@@ -72,7 +76,13 @@ export function ScheduleEditor({
                             type="button"
                             className="btn btn-sm"
                             disabled={conflict !== null}
-                            onClick={() =>
+                            data-schedule-add={`${id}:${name}`}
+                            onClick={() => {
+                                focusAfter(() =>
+                                    firstControl(
+                                        document.querySelector(`[data-schedule-kind="${id}:${name}"] [data-list-row]`),
+                                    ),
+                                );
                                 write(
                                     name,
                                     name === 'submit'
@@ -99,8 +109,8 @@ export function ScheduleEditor({
                                                   },
                                               ],
                                           },
-                                )
-                            }
+                                );
+                            }}
                         >
                             {t(`app.sbScheduleAdd_${name}`)}
                         </button>
@@ -119,6 +129,10 @@ export function ScheduleEditor({
                         name={name}
                         value={held(name) as Record<string, unknown>}
                         onChange={(next) => write(name, next)}
+                        onGone={() =>
+                            focusAfter(() => document.querySelector<HTMLElement>(`[data-schedule-add="${id}:${name}"]`))
+                        }
+                        kindMark={`${id}:${name}`}
                         context={context}
                     />
                 );
@@ -134,14 +148,21 @@ function ScheduleKind({
     name,
     value,
     onChange,
+    onGone,
+    kindMark,
     context,
 }: {
     name: 'submit' | 'vote' | 'pause';
     value: Record<string, unknown>;
     onChange: (next: Record<string, unknown> | null) => void;
+    /** Called as the whole kind goes (its own remove, or its last row's): the focus goes to the kind's add button. */
+    onGone: () => void;
+    /** What the editor finds this kind by (the add button's focus lands in it). */
+    kindMark: string;
     context: ExpressionContext;
 }) {
     const { t } = useTranslation();
+    const list = useListFocus();
     const rows = Array.isArray(value.rows) ? value.rows : [];
     const row = (index: number) => (isPlainObject(rows[index]) ? rows[index] : {});
     const setRows = (next: unknown[]) => (next.length === 0 ? onChange(null) : onChange({ ...value, rows: next }));
@@ -156,7 +177,7 @@ function ScheduleKind({
     const firstFreeCount = (): number =>
         Array.from({ length: SUBMIT_MAX_ROWS }, (_, n) => n + 1).find((count) => !takenCounts.has(count)) as number;
     return (
-        <div className="rounded border border-base-300 p-2 space-y-2 bg-base-100">
+        <div data-schedule-kind={kindMark} className="rounded border border-base-300 p-2 space-y-2 bg-base-100">
             <div className="flex flex-wrap gap-2 items-center">
                 <span className="text-xs font-medium">{t(`app.sbSchedule_${name}`)}</span>
                 {submit && (
@@ -177,13 +198,16 @@ function ScheduleKind({
                         action: t('app.sbRemove'),
                         item: t(`app.sbSchedule_${name}`),
                     })}
-                    onClick={() => onChange(null)}
+                    onClick={() => {
+                        onGone();
+                        onChange(null);
+                    }}
                 >
                     {t('app.sbRemove')}
                 </button>
             </div>
             {rows.map((_, index) => (
-                <div key={index} className="flex flex-wrap gap-2 items-start">
+                <div key={index} {...list.row} className="flex flex-wrap gap-2 items-start">
                     {submit && (
                         <Cell label={t('app.sbScheduleCount')}>
                             <select
@@ -223,11 +247,16 @@ function ScheduleKind({
                     <button
                         type="button"
                         className="btn btn-sm btn-ghost text-error"
+                        {...list.remove}
                         aria-label={t('app.actionOnItem', {
                             action: t(`app.sbScheduleRemoveRow_${name}`),
                             item: `${index + 1}`,
                         })}
-                        onClick={() => setRows(rows.filter((_, i) => i !== index))}
+                        onClick={() => {
+                            if (rows.length === 1) onGone();
+                            else list.afterRemove(index);
+                            setRows(rows.filter((_, i) => i !== index));
+                        }}
                     >
                         {t('app.sbRemove')}
                     </button>
@@ -236,8 +265,10 @@ function ScheduleKind({
             <button
                 type="button"
                 className="btn btn-sm"
+                {...list.add}
                 disabled={rows.length >= maxRows || (submit && takenCounts.size >= SUBMIT_MAX_ROWS)}
-                onClick={() =>
+                onClick={() => {
+                    list.afterAdd(rows.length);
                     setRows([
                         ...rows,
                         submit
@@ -255,8 +286,8 @@ function ScheduleKind({
                                   }),
                                   duration: defaultExpression('literal', 'duration', {}),
                               },
-                    ])
-                }
+                    ]);
+                }}
             >
                 {t(`app.sbScheduleAddRow_${name}`)}
             </button>

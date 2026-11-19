@@ -395,6 +395,62 @@ describe('rules', () => {
     });
 });
 
+describe('focus after adding and removing', () => {
+    /** A failed toBe on a DOM node makes Jest print the whole page: compare as a boolean. */
+    const isFocused = (element: Element | undefined) => document.activeElement === element;
+    const removePhase = (name: string) =>
+        screen.getByRole<HTMLButtonElement>('button', { name: `app.sbRemovePhase: ${name}` });
+
+    test('a phase added lands on the first control of the new phase', async () => {
+        await renderBuilder();
+        click('app.sbAddPhase');
+        const names = screen.getAllByLabelText<HTMLInputElement>('app.sbPhaseName');
+        expect(names).toHaveLength(3);
+        expect(isFocused(names[2])).toBe(true);
+    });
+
+    test('a phase removed lands on the remove button in its place, else the previous, else the add button', async () => {
+        await renderBuilder({ initial: { ...doc(), phases: { main: {}, mid: {}, end: {} } } });
+        fireEvent.click(removePhase('mid'));
+        // 'end' now sits where 'mid' was.
+        expect(isFocused(removePhase('end'))).toBe(true);
+        fireEvent.click(removePhase('end'));
+        // 'main' is the previous one, but the only phase left cannot be removed: the add button takes it.
+        expect(isFocused(screen.getByRole('button', { name: 'app.sbAddPhase' }))).toBe(true);
+    });
+
+    test('the last phase removed lands on the previous remove button', async () => {
+        await renderBuilder({ initial: { ...doc(), phases: { main: {}, mid: {}, end: {} } } });
+        fireEvent.click(removePhase('end'));
+        expect(isFocused(removePhase('mid'))).toBe(true);
+    });
+
+    test('a rule added lands on the first control of the new rule', async () => {
+        await renderBuilder();
+        fireEvent.click(screen.getAllByRole('button', { name: 'app.sbAddRule' })[0]);
+        const labels = screen.getAllByLabelText<HTMLInputElement>('app.sbRuleLabel');
+        expect(labels).toHaveLength(3);
+        expect(isFocused(labels[2])).toBe(true);
+    });
+
+    test('a rule removed lands on the remove button in its place, else the previous, else the add button', async () => {
+        await renderBuilder();
+        const named = (position: number) =>
+            screen.getByRole<HTMLButtonElement>('button', { name: `app.sbRemove: Rule ${position}` });
+        fireEvent.click(named(1));
+        // The second rule is now the first, and the remove button there is its.
+        expect(isFocused(named(1))).toBe(true);
+        fireEvent.click(named(1));
+        expect(isFocused(screen.getAllByRole('button', { name: 'app.sbAddRule' })[0])).toBe(true);
+    });
+
+    test('the last rule removed lands on the previous remove button', async () => {
+        await renderBuilder();
+        fireEvent.click(screen.getByRole('button', { name: 'app.sbRemove: Rule 2' }));
+        expect(isFocused(screen.getByRole('button', { name: 'app.sbRemove: Rule 1' }))).toBe(true);
+    });
+});
+
 describe('tabs', () => {
     const tabs = () => screen.getAllByRole('tab');
 

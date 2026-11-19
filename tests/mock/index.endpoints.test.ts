@@ -339,6 +339,59 @@ describe('getEligiblePhotos', () => {
     });
 });
 
+describe('photos already entered in the challenge', () => {
+    /** A session challenge holding the given entry ids; its member block is as the live read shapes it. */
+    const withEntries = (id: number, entryIds: string[] | undefined) => {
+        const cache = getSessionCache();
+        cache.challenges = invalid<NonNullable<typeof cache.challenges>>({
+            challenges: [
+                {
+                    id,
+                    title: 'Entered',
+                    url: 'entered',
+                    member: { ranking: { entries: entryIds?.map((e) => ({ id: e })) } },
+                },
+                {
+                    id: id + 1,
+                    title: 'Other',
+                    url: 'other',
+                    member: { ranking: { entries: [{ id: 'photo_old_008' }] } },
+                },
+            ],
+        });
+    };
+
+    test('getEligiblePhotos leaves out the photos entered in that challenge, as the live endpoint does', async () => {
+        withEntries(9100, ['photo_pink_flower_001', 'photo_old_008']);
+        const items = await settle(mockApiClient.getEligiblePhotos(9100, 'tok'));
+        expect(items).toHaveLength(10);
+        expect(items.map((p) => p.id)).not.toContain('photo_pink_flower_001');
+        expect(items.map((p) => p.id)).not.toContain('photo_old_008');
+        // A search reads the same filtered library, and the ids match as text.
+        const searched = await settle(mockApiClient.getEligiblePhotos('9100', 'tok', { search: 'Flower' }));
+        expect(searched.map((p) => p.id)).toEqual(['photo_blocked_007']);
+    });
+
+    test("another challenge's entries leave the library whole", async () => {
+        withEntries(9100, ['photo_pink_flower_001']);
+        expect(await settle(mockApiClient.getEligiblePhotos(9101, 'tok'))).toHaveLength(11);
+        expect(await settle(mockApiClient.getEligiblePhotos(777, 'tok'))).toHaveLength(12);
+    });
+
+    test('a challenge with no readable entries leaves the library whole', async () => {
+        withEntries(9100, undefined);
+        expect(await settle(mockApiClient.getEligiblePhotos(9100, 'tok'))).toHaveLength(12);
+    });
+
+    test('the library walk leaves them out too, and its offset counts what is left', async () => {
+        withEntries(9100, ['photo_pink_flower_001', 'photo_old_008']);
+        const walk = await settle(mockApiClient.getEligiblePhotosWalk(9100, 'tok'));
+        expect(walk.items).toHaveLength(10);
+        expect(walk.items.map((p) => p.id)).not.toContain('photo_old_008');
+        expect(walk.nextStart).toBe(10);
+    });
+});
+
 describe('getEligiblePhotosWalk', () => {
     test('reads the whole mock library in one complete walk', async () => {
         const walk = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok'));

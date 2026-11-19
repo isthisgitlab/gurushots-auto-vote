@@ -19,6 +19,8 @@ import { ScenarioError, failureIssuesOf } from '../ScenarioError';
 import { ConditionList, ActionList, LiteralByDescriptor } from './ItemEditors';
 import { ExpressionEditor } from './ExpressionEditor';
 import { ScheduleEditor } from './ScheduleEditor';
+import { useListFocus } from './listFocus';
+import type { ListFocus } from './listFocus';
 import { scenarioRefusalText, restrictionText } from '@/utils/scenarioIssueText';
 import {
     REPEAT_MODES,
@@ -630,6 +632,7 @@ function RuleEditor({
     scope,
     scopeStages,
     controls,
+    rowMarks,
 }: {
     rule: ScenarioDraftRule;
     onChange: (next: ScenarioDraftRule) => void;
@@ -637,6 +640,8 @@ function RuleEditor({
     scope: BuilderScope;
     scopeStages: readonly ScenarioStage[];
     controls: ComponentChildren;
+    /** The rules list's marks for a row (where the focus lands after an add). */
+    rowMarks: ListFocus['row'];
 }) {
     const { t } = useTranslation();
     const stages = stagesOf(rule, scope.scope);
@@ -647,7 +652,7 @@ function RuleEditor({
         onChange({ ...rule, stages: isDefault ? undefined : next });
     };
     return (
-        <div className="rounded border border-base-300 p-2 space-y-2 bg-base-100">
+        <div {...rowMarks} className="rounded border border-base-300 p-2 space-y-2 bg-base-100">
             <div className="flex flex-wrap gap-2 items-end">
                 <label className="flex flex-col text-xs gap-1 flex-1 min-w-40">
                     <span className="opacity-70">{t('app.sbRuleLabel')}</span>
@@ -735,6 +740,8 @@ function PhaseEditor({
     phases,
     base,
     schema,
+    focus,
+    position,
 }: {
     name: string;
     phase: ScenarioDraftPhase;
@@ -748,8 +755,12 @@ function PhaseEditor({
     /** The scope's keys and names; each rule's editor adds the rule's own stages. */
     base: BuilderScope;
     schema: RendererSchema | null;
+    /** The phases list's focus rule, and this phase's place in it. */
+    focus: ListFocus;
+    position: number;
 }) {
     const { t } = useTranslation();
+    const ruleFocus = useListFocus();
     const [editingName, setEditingName] = useState(name);
     const rules = phase.rules ?? [];
     const scopeName = draft.scope ?? 'challenge';
@@ -760,7 +771,7 @@ function PhaseEditor({
     const ruleActionLabel = (actionKey: string, index: number) =>
         t('app.actionOnItem', { action: t(actionKey), item: t('app.sbRuleN', { n: index + 1 }) });
     return (
-        <section className="rounded-lg border border-base-300 p-3 space-y-3">
+        <section {...focus.row} className="rounded-lg border border-base-300 p-3 space-y-3">
             <div className="flex gap-2 items-end">
                 <label className="flex flex-col text-xs gap-1 flex-1">
                     <span className="opacity-70">{t('app.sbPhaseName')}</span>
@@ -779,9 +790,13 @@ function PhaseEditor({
                 <button
                     type="button"
                     className="btn btn-sm btn-ghost text-error"
+                    {...focus.remove}
                     disabled={phases.length <= 1}
                     aria-label={t('app.actionOnItem', { action: t('app.sbRemovePhase'), item: name })}
-                    onClick={() => onDraft(removePhase(draft, name))}
+                    onClick={() => {
+                        focus.afterRemove(position);
+                        onDraft(removePhase(draft, name));
+                    }}
                 >
                     {t('app.sbRemovePhase')}
                 </button>
@@ -811,6 +826,7 @@ function PhaseEditor({
             {rules.map((rule, index) => (
                 <RuleEditor
                     key={rule.id}
+                    rowMarks={ruleFocus.row}
                     rule={rule}
                     phases={phases}
                     scope={{ ...base, stages: stagesOf(rule, scopeName) }}
@@ -839,8 +855,12 @@ function PhaseEditor({
                             <button
                                 type="button"
                                 className="btn btn-sm btn-ghost text-error"
+                                {...ruleFocus.remove}
                                 aria-label={ruleActionLabel('app.sbRemove', index)}
-                                onClick={() => setRules(rules.filter((_, i) => i !== index))}
+                                onClick={() => {
+                                    ruleFocus.afterRemove(index);
+                                    setRules(rules.filter((_, i) => i !== index));
+                                }}
                             >
                                 {t('app.sbRemove')}
                             </button>
@@ -848,7 +868,15 @@ function PhaseEditor({
                     }
                 />
             ))}
-            <button type="button" className="btn btn-sm" onClick={() => setRules([...rules, newRule(draft, name)])}>
+            <button
+                type="button"
+                className="btn btn-sm"
+                {...ruleFocus.add}
+                onClick={() => {
+                    ruleFocus.afterAdd(rules.length);
+                    setRules([...rules, newRule(draft, name)]);
+                }}
+            >
                 {t('app.sbAddRule')}
             </button>
         </section>
@@ -1432,6 +1460,7 @@ export function ScenarioBuilder({
     };
     const [error, setError] = useState<ScenarioErrorInfo | null>(null);
     const phases = Object.keys(draft.phases);
+    const phaseFocus = useListFocus();
     const scope = draft.scope ?? 'challenge';
     // A failed schema read sends an empty `{}` schema, which is a (keyless) RendererSchema too.
     const { schema } = useSettingsSchema();
@@ -1610,9 +1639,11 @@ export function ScenarioBuilder({
                         <div className="space-y-3">
                             <ScenarioHeader draft={draft} onDraft={setDraft} phases={phases} />
                             <div className="text-sm font-medium">{t('app.sbPhases')}</div>
-                            {phases.map((name) => (
+                            {phases.map((name, position) => (
                                 <PhaseEditor
                                     key={name}
+                                    focus={phaseFocus}
+                                    position={position}
                                     name={name}
                                     phase={draft.phases[name]}
                                     draft={draft}
@@ -1624,7 +1655,15 @@ export function ScenarioBuilder({
                                     schema={schema}
                                 />
                             ))}
-                            <button type="button" className="btn btn-sm" onClick={() => setDraft(addPhase(draft))}>
+                            <button
+                                type="button"
+                                className="btn btn-sm"
+                                {...phaseFocus.add}
+                                onClick={() => {
+                                    phaseFocus.afterAdd(phases.length);
+                                    setDraft(addPhase(draft));
+                                }}
+                            >
                                 {t('app.sbAddPhase')}
                             </button>
                         </div>

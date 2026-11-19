@@ -177,3 +177,101 @@ test('a window schedule stops at its row cap', () => {
     expect(schedulesOf().vote.rows).toHaveLength(6);
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'app.sbScheduleAddRow_vote' }).disabled).toBe(true);
 });
+
+describe('focus after adding and removing', () => {
+    const at = { kind: 'fact', name: 'clock.now' };
+    const threeRows = {
+        submit: {
+            alignment: 'end',
+            rows: [
+                { count: 1, at },
+                { count: 2, at },
+                { count: 3, at },
+            ],
+        },
+    };
+    /** A failed toBe on a DOM node makes Jest print the whole page: compare as a boolean. */
+    const isFocused = (element: Element | undefined) => document.activeElement === element;
+    const removeRow = (name: 'submit' | 'vote', position: number) =>
+        screen.getByRole<HTMLButtonElement>('button', {
+            name: `app.sbScheduleRemoveRow_${name}: ${position}`,
+        });
+
+    test('adding a schedule lands on the first control of its new row', () => {
+        render(<Probe initial={undefined} />);
+        fireEvent.click(screen.getByRole('button', { name: 'app.sbScheduleAdd_submit' }));
+        expect(isFocused(screen.getByRole('combobox', { name: 'app.sbScheduleCount' }))).toBe(true);
+    });
+
+    test('adding a row lands on the first control of that row, also when the add button turns off', () => {
+        render(<Probe initial={{ submit: { alignment: 'end', rows: threeRows.submit.rows.slice(0, 3) } }} />);
+        fireEvent.click(screen.getByRole('button', { name: 'app.sbScheduleAddRow_submit' }));
+        expect(schedulesOf().submit.rows).toHaveLength(4);
+        const counts = screen.getAllByRole('combobox', { name: 'app.sbScheduleCount' });
+        expect(isFocused(counts[3])).toBe(true);
+    });
+
+    test('a window row added lands on its first control', () => {
+        render(<Probe initial={undefined} />);
+        fireEvent.click(screen.getByRole('button', { name: 'app.sbScheduleAdd_vote' }));
+        fireEvent.click(screen.getByRole('button', { name: 'app.sbScheduleAddRow_vote' }));
+        const rows = document.querySelectorAll('[data-list-row]');
+        expect(rows).toHaveLength(2);
+        expect(rows[1]!.contains(document.activeElement)).toBe(true);
+        expect(document.activeElement === document.body).toBe(false);
+    });
+
+    test('removing a middle row lands on the remove button now in its place', () => {
+        render(<Probe initial={threeRows} />);
+        fireEvent.click(removeRow('submit', 2));
+        expect(schedulesOf().submit.rows).toHaveLength(2);
+        expect(isFocused(removeRow('submit', 2))).toBe(true);
+    });
+
+    test('removing the last row lands on the previous row remove button', () => {
+        render(<Probe initial={threeRows} />);
+        fireEvent.click(removeRow('submit', 3));
+        expect(isFocused(removeRow('submit', 2))).toBe(true);
+    });
+
+    test('removing the first row lands on the remove button now first', () => {
+        render(<Probe initial={threeRows} />);
+        fireEvent.click(removeRow('submit', 1));
+        expect(isFocused(removeRow('submit', 1))).toBe(true);
+    });
+
+    test('removing the only row of a schedule lands on its add button', () => {
+        render(<Probe initial={{ vote: { rows: [{ at, duration: { kind: 'literal', value: 1 } }] } }} />);
+        fireEvent.click(removeRow('vote', 1));
+        expect(value()).toBeNull();
+        expect(isFocused(screen.getByRole('button', { name: 'app.sbScheduleAdd_vote' }))).toBe(true);
+    });
+
+    test('removing a whole schedule lands on its add button', () => {
+        render(<Probe initial={threeRows} />);
+        fireEvent.click(screen.getByRole('button', { name: 'app.sbRemove: app.sbSchedule_submit' }));
+        expect(isFocused(screen.getByRole('button', { name: 'app.sbScheduleAdd_submit' }))).toBe(true);
+    });
+
+    test('an add the editor did not take leaves the focus alone', () => {
+        const props = { onChange: jest.fn(), context: { stages: ['active' as const], settingKeys: [] }, heldKeys: [] };
+        const schedule = { vote: { rows: [{ at, duration: { kind: 'literal', value: 1 } }] } };
+        const view = render(<ScheduleEditor schedules={schedule} {...props} />);
+        fireEvent.click(screen.getByRole('button', { name: 'app.sbScheduleAddRow_vote' }));
+        expect(props.onChange).toHaveBeenCalledTimes(1);
+        // The same rows again: there is no new row to land on, so nothing takes the focus.
+        view.rerender(<ScheduleEditor schedules={schedule} {...props} />);
+        expect(document.activeElement === document.body).toBe(true);
+    });
+
+    test('two editors on the page keep their focus to themselves', () => {
+        render(
+            <div>
+                <Probe initial={threeRows} />
+                <Probe initial={threeRows} />
+            </div>,
+        );
+        fireEvent.click(screen.getAllByRole('button', { name: 'app.sbScheduleRemoveRow_submit: 3' })[1]!);
+        expect(isFocused(screen.getAllByRole('button', { name: 'app.sbScheduleRemoveRow_submit: 2' })[1])).toBe(true);
+    });
+});

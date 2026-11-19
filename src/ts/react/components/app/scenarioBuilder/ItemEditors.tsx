@@ -27,7 +27,9 @@ import {
 } from '../../../../core/scenarios/vocabulary';
 import { moveItem } from '../../../../core/scenarios/builderModel';
 import { ExpressionEditor } from './ExpressionEditor';
+import { useListFocus } from './listFocus';
 
+import type { ListFocus } from './listFocus';
 import type { ComponentChildren } from 'preact';
 import type { FieldSpec } from '../../../../core/scenarios/builderSpec';
 import type { ScenarioValueDescriptor } from '../../../../core/types/settings';
@@ -423,13 +425,23 @@ export function LiteralByDescriptor({
 /**
  * One test an `entryCount` / `entriesWhere` list holds, over one entry field.
  */
-function PredicateEditor({ value, onChange, label }: { value: unknown; onChange: ValueChange; label: string }) {
+function PredicateEditor({
+    value,
+    onChange,
+    label,
+    focus,
+}: {
+    value: unknown;
+    onChange: ValueChange;
+    label: string;
+    focus: ListFocus;
+}) {
     const { t } = useTranslation();
     const item = (typeof value === 'object' && value !== null ? value : {}) as Record<string, unknown>;
     const set = (next: Record<string, unknown>) => onChange({ ...item, ...next });
     const booleanField = isOneOf(BOOLEAN_ENTRY_FIELDS, item.field);
     return (
-        <div role="group" aria-label={label} className="flex flex-wrap gap-1 items-center">
+        <div role="group" aria-label={label} {...focus.row} className="flex flex-wrap gap-1 items-center">
             <ChoiceSelect
                 label={t('app.sbField_field')}
                 value={String(item.field ?? '')}
@@ -472,6 +484,7 @@ function PredicateEditor({ value, onChange, label }: { value: unknown; onChange:
             <button
                 type="button"
                 className="btn btn-sm btn-ghost text-error"
+                {...focus.remove}
                 aria-label={label}
                 onClick={() => onChange(undefined)}
             >
@@ -486,6 +499,7 @@ function PredicateEditor({ value, onChange, label }: { value: unknown; onChange:
  */
 function PredicateList({ value, onChange }: { value: unknown; onChange: ValueChange }) {
     const { t } = useTranslation();
+    const focus = useListFocus();
     const list = Array.isArray(value) ? value : [];
     return (
         <div className="space-y-1">
@@ -494,19 +508,25 @@ function PredicateList({ value, onChange }: { value: unknown; onChange: ValueCha
                     key={index}
                     value={predicate}
                     label={t('app.actionOnItem', { action: t('app.sbRemove'), item: `${index + 1}` })}
-                    onChange={(next) =>
+                    focus={focus}
+                    onChange={(next) => {
+                        if (next === undefined) focus.afterRemove(index);
                         onChange(
                             next === undefined
                                 ? list.filter((_, i) => i !== index)
                                 : list.map((old, i) => (i === index ? next : old)),
-                        )
-                    }
+                        );
+                    }}
                 />
             ))}
             <button
                 type="button"
                 className="btn btn-sm"
-                onClick={() => onChange([...list, { field: 'votes', op: '>=', value: 0 }])}
+                {...focus.add}
+                onClick={() => {
+                    focus.afterAdd(list.length);
+                    onChange([...list, { field: 'votes', op: '>=', value: 0 }]);
+                }}
             >
                 {t('app.sbAddPredicate')}
             </button>
@@ -872,10 +892,13 @@ function ListControls({
     downBlocked,
     onMove,
     onRemove,
+    removeMarks,
 }: {
     index: number;
     count: number;
     itemName: string;
+    /** The list's marks for a remove button (where the focus lands after a remove). */
+    removeMarks: ListFocus['remove'];
     /** The item may not move up / down (a handoff stays the last step of its rule). */
     upBlocked: boolean;
     downBlocked: boolean;
@@ -907,6 +930,7 @@ function ListControls({
             <button
                 type="button"
                 className="btn btn-sm btn-ghost text-error"
+                {...removeMarks}
                 aria-label={nameOf('app.sbRemove')}
                 onClick={onRemove}
             >
@@ -935,6 +959,7 @@ function ItemList({
     addLabel: string;
 }) {
     const { t } = useTranslation();
+    const focus = useListFocus();
     const spec = KINDS[kind];
     const list: unknown[] = Array.isArray(value) ? value : [];
     // A handoff must be the last step of its rule: nothing is added after it or moved past it, and there is at most one.
@@ -969,13 +994,18 @@ function ItemList({
                             upBlocked={isHandoff(item)}
                             downBlocked={isHandoff(list[index + 1])}
                             onMove={(delta) => onChange(moveItem(list, index, delta))}
-                            onRemove={() => onChange(list.filter((_, i) => i !== index))}
+                            removeMarks={focus.remove}
+                            onRemove={() => {
+                                focus.afterRemove(index);
+                                onChange(list.filter((_, i) => i !== index));
+                            }}
                         />
                     }
                 />
             ))}
             <select
                 className="select select-sm"
+                {...focus.add}
                 aria-label={t(addLabel)}
                 value=""
                 onChange={(e) => {

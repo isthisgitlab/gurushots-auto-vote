@@ -188,6 +188,54 @@ describe('composite kinds', () => {
         expect(valueObject().of).toHaveLength(7);
     });
 
+    describe('focus after adding and removing an operand', () => {
+        /** A failed toBe on a DOM node makes Jest print the whole page: compare as a boolean. */
+        const isFocused = (element: Element | undefined) => document.activeElement === element;
+        const removeOperand = (position: number) =>
+            screen.getByRole<HTMLButtonElement>('button', { name: `app.sbRemove: ${position}` });
+        const addOperands = (count: number) => {
+            for (let n = 0; n < count; n++)
+                fireEvent.click(screen.getAllByRole('button', { name: 'app.sbAddOperand' }).at(-1)!);
+        };
+
+        test('adding an operand lands on the first control of the new operand', () => {
+            render(<Probe initial={null} />);
+            changeSelect(control('app.sbExprKind'), 'earlier');
+            addOperands(1);
+            expect(valueObject().of).toHaveLength(3);
+            const kinds = screen.getAllByLabelText('app.sbExprKind');
+            expect(isFocused(kinds.at(-1))).toBe(true);
+        });
+
+        test('adding the last operand a full list takes still lands on the new operand', () => {
+            render(<Probe initial={null} />);
+            changeSelect(control('app.sbExprKind'), 'earlier');
+            addOperands(6);
+            expect(valueObject().of).toHaveLength(8);
+            expect(isFocused(screen.getAllByLabelText('app.sbExprKind').at(-1))).toBe(true);
+        });
+
+        test('removing an operand lands on the remove button now in its place, else the previous one', () => {
+            render(<Probe initial={null} />);
+            changeSelect(control('app.sbExprKind'), 'earlier');
+            addOperands(2);
+            fireEvent.click(removeOperand(2));
+            expect(isFocused(removeOperand(2))).toBe(true);
+            fireEvent.click(removeOperand(3));
+            expect(valueObject().of).toHaveLength(2);
+            // Two operands are the least: both remove buttons are off, so the add button takes it.
+            expect(isFocused(screen.getByRole('button', { name: 'app.sbAddOperand' }))).toBe(true);
+        });
+
+        test('removing the last of three lands on the previous remove button', () => {
+            render(<Probe initial={null} />);
+            changeSelect(control('app.sbExprKind'), 'earlier');
+            addOperands(2);
+            fireEvent.click(removeOperand(4));
+            expect(isFocused(removeOperand(3))).toBe(true);
+        });
+    });
+
     test('at the depth cap only whole values are offered', () => {
         render(<ExpressionEditorDepthTest />);
         const kinds = [...screen.getAllByLabelText<HTMLSelectElement>('app.sbExprKind').at(-1)!.options]

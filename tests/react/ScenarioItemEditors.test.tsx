@@ -592,3 +592,62 @@ test('a setting key with a translated name shows the name', () => {
         mockTranslator.t.mockImplementation(original);
     }
 });
+
+describe('focus after adding and removing', () => {
+    /** A failed toBe on a DOM node makes Jest print the whole page: compare as a boolean. */
+    const isFocused = (element: Element | undefined) => document.activeElement === element;
+    const removeItem = (position: number) =>
+        screen.getByRole<HTMLButtonElement>('button', { name: `app.sbRemove: ${position}` });
+    const entryTests = {
+        type: 'entryCount',
+        where: [
+            { field: 'votes', op: '>=', value: 1 },
+            { field: 'votes', op: '>=', value: 2 },
+            { field: 'votes', op: '>=', value: 3 },
+        ],
+        op: '>=',
+        value: 0,
+    };
+
+    test('an entry test added lands on the first control of the new test', () => {
+        render(<Probe Editor={ItemEditor} kind="condition" initial={entryTests} scope={SCOPE} />);
+        fireEvent.click(screen.getByRole('button', { name: 'app.sbAddPredicate' }));
+        expect(predicatesOf()).toHaveLength(4);
+        const rows = screen.getAllByRole('group', { name: /^app\.sbRemove: / });
+        expect(rows[3]!.contains(document.activeElement)).toBe(true);
+        expect(document.activeElement === rows[3]).toBe(false);
+    });
+
+    test('an entry test removed lands on the remove button in its place, else the previous one', () => {
+        render(<Probe Editor={ItemEditor} kind="condition" initial={entryTests} scope={SCOPE} />);
+        fireEvent.click(removeItem(2));
+        expect(isFocused(removeItem(2))).toBe(true);
+        fireEvent.click(removeItem(2));
+        expect(isFocused(removeItem(1))).toBe(true);
+        fireEvent.click(removeItem(1));
+        expect(predicatesOf()).toHaveLength(0);
+        expect(isFocused(screen.getByRole('button', { name: 'app.sbAddPredicate' }))).toBe(true);
+    });
+
+    test('a condition removed lands on the remove button in its place, else the previous one, else the add list', () => {
+        render(<Probe Editor={ConditionList} initial={[null, null, null]} />);
+        fireEvent.click(removeItem(2));
+        expect(valueList()).toHaveLength(2);
+        expect(isFocused(removeItem(2))).toBe(true);
+        fireEvent.click(removeItem(2));
+        expect(isFocused(removeItem(1))).toBe(true);
+        fireEvent.click(removeItem(1));
+        expect(isFocused(screen.getByRole('combobox', { name: 'app.sbAddCondition' }))).toBe(true);
+    });
+
+    test('an action removed keeps the focus in its own list', () => {
+        render(
+            <div>
+                <Probe Editor={ActionList} initial={[null, null]} />
+                <Probe Editor={ActionList} initial={[null, null]} />
+            </div>,
+        );
+        fireEvent.click(screen.getAllByRole('button', { name: 'app.sbRemove: 1' })[1]!);
+        expect(isFocused(screen.getAllByRole('button', { name: 'app.sbRemove: 1' })[1])).toBe(true);
+    });
+});
