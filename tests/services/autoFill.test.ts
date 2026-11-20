@@ -3370,6 +3370,30 @@ describe('reflect-on-submit — auto-fill consumes the slot it just used', () =>
 });
 
 describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
+    test('searches portrait terms instead of camera equipment for eye contact', async () => {
+        const getEligiblePhotos = jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) => {
+            if (/camera|lens/i.test(opts.search ?? ''))
+                return [allowedPhoto('equipment', ['Camera', 'Camera Lens', 'Electronics'], 17000)];
+            if (opts.search === 'portrait') return [allowedPhoto('portrait', ['Portrait', 'Person', 'Face'], 100)];
+            return [];
+        });
+        const out = await fetchCandidatesForChallenge(
+            invalid({
+                id: 'c1',
+                title: 'Facing The Camera',
+                url: 'facing-the-camera2',
+                welcome_message:
+                    'For this challenge share your best photos where the subject is looking at the camera. I think that the most powerful photos are those where the viewer has direct eye-contact with the subject.',
+            }),
+            'tok',
+            {},
+            { getEligiblePhotos, logger: makeLogger() },
+        );
+        expect(out.map((p) => p.id)).toEqual(['portrait']);
+        const searches = getEligiblePhotos.mock.calls.map(([, , opts]) => opts.search);
+        expect(searches).toEqual(expect.arrayContaining(['portrait', 'face', 'person']));
+        expect(searches.join(' ')).not.toMatch(/camera|lens/i);
+    });
     test('tries the API default order when vote-sorted photos are all ineligible', async () => {
         const getEligiblePhotos = jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) =>
             opts.order === 'default'

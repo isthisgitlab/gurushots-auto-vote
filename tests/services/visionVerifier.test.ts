@@ -191,6 +191,16 @@ describe('descriptionLead', () => {
 });
 
 describe('challengePrompts', () => {
+    test('uses the eye-contact interpretation for Facing The Camera', () => {
+        expect(
+            challengePrompts({
+                title: 'Facing The Camera',
+                url: 'facing-the-camera2',
+                welcome_message:
+                    'For this challenge share your best photos where the subject is looking at the camera. I think that the most powerful photos are those where the viewer has direct eye-contact with the subject.',
+            }),
+        ).toEqual(['a portrait with the subject looking directly at the viewer and making eye contact']);
+    });
     test('builds prompts from any challenge title and description', () => {
         expect(challengePrompts(LEAVES)).toEqual(PROMPTS);
         expect(challengePrompts({ title: 'Metal & Wood' })).toEqual(['a photo of metal wood']);

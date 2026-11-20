@@ -30,6 +30,28 @@ const ROADS = {
     welcome_message: 'Show photos of the different kinds of roads found all around the world.',
 };
 
+const EYE_CONTACT = {
+    title: 'Facing The Camera',
+    url: 'facing-the-camera2',
+    welcome_message:
+        'For this challenge share your best photos where the subject is looking at the camera. I think that the most powerful photos are those where the viewer has direct eye-contact with the subject.',
+};
+
+test('camera-facing titles derive portrait subjects', () => {
+    expect(readChallengeTheme(EYE_CONTACT)).toEqual({ kind: 'eye-contact', subjects: ['portrait', 'face', 'person'] });
+    expect(buildSearchTerms(EYE_CONTACT)).toEqual(['portrait', 'face', 'person']);
+    expect(buildChallengeKeywords(EYE_CONTACT)).toEqual(['portrait', 'face', 'person']);
+    expect(buildThemeKeywords(EYE_CONTACT)).toEqual(['portrait', 'face', 'person']);
+    expect(buildSearchTerms(EYE_CONTACT, { mustIncludeTags: ['cat'], shouldIncludeTags: ['dog'] })).toEqual(['cat']);
+    expect(buildSearchTerms(EYE_CONTACT, { shouldIncludeTags: ['dog'] })).toEqual(['dog']);
+    expect(readChallengeTheme({ title: 'Looking Directly Into The Camera' }).kind).toBe('eye-contact');
+    expect(readChallengeTheme({ title: 'Looking At The Camera' }).kind).toBe('eye-contact');
+    expect(readChallengeTheme({ title: 'Looking Into The Camera' }).kind).toBe('eye-contact');
+    expect(readChallengeTheme({ title: 'Looking Directly At The Camera' }).kind).toBe('eye-contact');
+    expect(readChallengeTheme({ title: 'Vintage Cameras' }).kind).not.toBe('eye-contact');
+    expect(buildSearchTerms({ title: 'Vintage Cameras' })).toContain('camera');
+});
+
 describe('readChallengeTheme', () => {
     describe('open theme', () => {
         test('the description saying so, whatever the title', () => {

@@ -29,11 +29,12 @@ export interface Negation {
 
 /**
  * What a challenge's title and description say about its theme (readChallengeTheme):
- * open (no subject to match), a subject the description confirms, or unconfirmed.
+ * open (no subject to match), a subject the description confirms, an explicit
+ * eye-contact theme, or unconfirmed.
  */
 export interface ChallengeTheme {
-    kind: 'open' | 'subject' | 'unconfirmed';
-    /** Title subject stems the description repeats; empty unless kind is 'subject'. */
+    kind: 'open' | 'subject' | 'eye-contact' | 'unconfirmed';
+    /** Confirmed title stems, or derived portrait label stems for eye contact; otherwise empty. */
     subjects: readonly string[];
 }
 

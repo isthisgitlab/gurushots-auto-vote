@@ -93,6 +93,26 @@ describe('abstractTitleWords', () => {
 });
 
 describe('title readers with the real lexicon', () => {
+    test('eye contact ranks portrait labels ahead of camera equipment with and without semantic scores', async () => {
+        const challenge = {
+            title: 'Facing The Camera',
+            url: 'facing-the-camera2',
+            welcome_message:
+                'For this challenge share your best photos where the subject is looking at the camera. I think that the most powerful photos are those where the viewer has direct eye-contact with the subject.',
+        };
+        const photos = [
+            allowed('equipment', ['Camera', 'Camera Lens', 'Electronics'], 1000, { votes: 17000, statsKnown: true }),
+            allowed('portrait', ['Portrait', 'Person', 'Face'], 1000, { votes: 100, statsKnown: true }),
+        ];
+        const scores = await getSemanticScores(challenge, photos);
+        expect(scores).not.toBeNull();
+        expect(scores!.get('portrait')!.score).toBeGreaterThan(scores!.get('equipment')!.score);
+        expect(pickPhotosForChallenge(challenge, photos, 1, { semanticScores: scores })).toEqual(['portrait']);
+        expect(pickPhotosForChallenge(challenge, photos, 1)).toEqual(['portrait']);
+        const related = lexicon.relatedSearchTerms(buildSearchTerms(challenge));
+        expect(related).toEqual(expect.arrayContaining(['people', 'human', 'model']));
+        expect(related.join(' ')).not.toMatch(/camera|lens/i);
+    });
     const balloonFun = { title: 'Balloon Fun', url: 'balloon-fun', welcome_message: 'Have fun with balloons!' };
 
     // GuruShots' public challenge copy (136550), quoted word for word as test

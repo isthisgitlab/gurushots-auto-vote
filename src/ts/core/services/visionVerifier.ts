@@ -1,7 +1,7 @@
 /**
  * Local image/text check for the highest-ranked fill candidates of ANY
- * challenge. The prompts come from the challenge itself — its title subject
- * and the opening of its description — so no theme is hardcoded. The model is
+ * challenge. Prompts use the title subject and opening description, except for
+ * the shared eye-contact interpretation. The model is
  * downloaded and checksummed by the build, then shipped with the application.
  *
  * The check only reorders, and never empties a pick. Photos the model finds
@@ -18,7 +18,7 @@
 import { platform } from '../platform/port';
 import { entryPhotoUrl } from '../format/photoUrl';
 import { oneLine } from '../format/logSafe';
-import { OFF_THEME_MARGIN, jointOrder, stripTags, visualSubjectWords } from './photoPicker';
+import { OFF_THEME_MARGIN, jointOrder, readChallengeTheme, stripTags, visualSubjectWords } from './photoPicker';
 import * as lexicon from './semantic/lexicon';
 
 import type { JointBreakdown, JointInput, VoteStat } from './photoPicker/jointRank';
@@ -115,12 +115,14 @@ const descriptionLead = (message: string | undefined): string => {
 };
 
 /**
- * Text prompts for a challenge: its title subject, plus the description lead
+ * Text prompts for a challenge: its eye-contact interpretation, or its title subject plus the description lead
  * when there is one. Empty when the title names nothing visual — the
  * description of a meta challenge ("Photo of the Day") is about the contest,
  * not the picture, so it is never used alone.
  */
 const challengePrompts = (challenge: ChallengeText | null | undefined, ignoreWords: IgnoreWords = null): string[] => {
+    if (readChallengeTheme(challenge, ignoreWords).kind === 'eye-contact')
+        return ['a portrait with the subject looking directly at the viewer and making eye contact'];
     const subject = visualSubjectWords(challenge, ignoreWords);
     if (subject.length === 0) return [];
     const lead = descriptionLead(challenge?.welcome_message);

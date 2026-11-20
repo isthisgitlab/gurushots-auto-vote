@@ -270,9 +270,9 @@ const UNCONFIRMED: ChallengeTheme = Object.freeze({ kind: 'unconfirmed', subject
 const OPEN: ChallengeTheme = Object.freeze({ kind: 'open', subjects: Object.freeze([]) });
 
 /**
- * Whether a challenge has a subject to match, read from its title AND its
- * description rather than from a list of challenge names (GuruShots runs new
- * open-theme titles every day). Open when the description says so, or when no
+ * Whether a challenge has a subject to match, read from its title and its
+ * description. Explicit camera-facing titles produce an eye-contact theme with
+ * derived portrait labels. Open when the description says so, or when no
  * title word (nor, for an all-boilerplate title, slug word) is left once
  * boilerplate (STOPWORDS), the user's ignore words and format words are
  * removed. Otherwise a title word the description repeats is
@@ -302,6 +302,8 @@ const readChallengeTheme = (
             : '';
     if (OPEN_THEME_RE.test(title) || OPEN_THEME_RE.test(description)) return OPEN;
     const subject = titleSubject(title, ignoreWords);
+    if (/^(?:facing\s+the\s+camera|looking\s+(?:directly\s+)?(?:at|into)\s+the\s+camera)$/i.test(subject.trim()))
+        return { kind: 'eye-contact', subjects: ['portrait', 'face', 'person'] };
     const fromTitle = tokenise(subject, { ignoreWords, compounds: 'replace' });
     // A title of pure boilerplate ("Best of the Best") can still carry its
     // subject in the slug ("macro-insects4"), which buildThemeKeywords falls

@@ -82,7 +82,9 @@ const buildChallengeKeywords = (
 ): string[] => {
     // An open theme has no subject, and matching its prose ("breathtaking",
     // "Turbo") against photo labels would only rank noise.
-    if (readChallengeTheme(challenge, ignoreWords).kind === 'open') return [];
+    const theme = readChallengeTheme(challenge, ignoreWords);
+    if (theme.kind === 'open') return [];
+    if (theme.kind === 'eye-contact') return [...theme.subjects];
     // The WHOLE title, series prefix included — unlike buildThemeKeywords, which
     // pools its keywords into one vector and so must drop everything that is not
     // the subject. Here each keyword is matched on its own, so a series word is
@@ -152,7 +154,9 @@ const buildChallengeKeywords = (
  * decide, which is the right answer for a challenge with no visual subject.
  */
 const buildThemeKeywords = (challenge: ChallengeText | null | undefined, ignoreWords: IgnoreWords = null): string[] => {
-    if (readChallengeTheme(challenge, ignoreWords).kind === 'open') return [];
+    const theme = readChallengeTheme(challenge, ignoreWords);
+    if (theme.kind === 'open') return [];
+    if (theme.kind === 'eye-contact') return [...theme.subjects];
     const opts = { ignoreWords, compounds: 'replace' as const };
     // A negated subject must not become the theme (see parseNegation): pooling
     // "human" for "No Humans" pulls the vector straight at photos of people.
@@ -267,6 +271,7 @@ const buildSearchTerms = (challenge: ChallengeText | null | undefined, opts: Tag
     // and the client-side letter filter in pickPhotosForChallenge narrows it. A
     // non-letter title tokenises normally.
     const theme = readChallengeTheme(challenge, ignoreWords);
+    if (terms.length === 0 && theme.kind === 'eye-contact') return [...theme.subjects];
     if (terms.length === 0 && !detectLetterPrefix(challenge?.title) && theme.kind !== 'open') {
         // Subject segment only: on a series title the prefix ("Color Hunt") is
         // never a tag, so searching it spends a round-trip to find nothing and
