@@ -186,8 +186,9 @@ const noPhotoOutcome = (reason: JoinPick['reason'], owedClaim: Claim | null): Jo
  * for paid, the consent/affordability) has already been made by the caller.
  *
  * @param needsCoins paid cost (0 = free)
- * @param options.manual the user asked for this join: Submit Only Chosen Photos
- *   does not apply (the call site says so, never the renderer)
+ * @param options.manual The join call site sets this flag for a user-requested join.
+ *   The flag never comes from the renderer. The picker can keep its ranking when the
+ *   visual check abstains. Submit Only Chosen Photos does not apply.
  * @param options.coinsBefore the balance the caller already had, kept in the claim for the user to compare with
  *   GuruShots if the unlock gets no answer; nothing decides on it, and it costs no request
  * @param options.priceCeiling the price the decision to join used (the automatic pass): the open list is read again
@@ -226,10 +227,8 @@ const performJoin = async (
     }
     inFlight.add(key);
     try {
-        // The unlock claim is read BEFORE picking: a join whose coins are already
-        // spent must submit something, so Submit Only Chosen Photos is lifted for
-        // it — stranding paid coins behind a skipped pick would be worse than an
-        // automatic photo.
+        // Read the claim before picking. A paid claim lifts Submit Only
+        // Chosen Photos. If the picker returns no photo, the claim stays pending.
         if (needsCoins > 0 && (await claimsStale(challenge, deps, 'joining a paid challenge'))) return failedNoCharge();
         const claim = claimOf(deps.joinStateStore, id);
         const joined = needsCoins > 0 ? alreadyJoined(challenge, claim) : null;

@@ -129,9 +129,10 @@ const suggestedIdsFor = async (challenge: Challenge, token: string, deps: JoinDe
  * The user's chosen photos come first: when any can be entered the shortlist is
  * the chosen block alone, so the visual re-rank can only choose between chosen
  * photos — or, when the user asked for their order, the first usable photo in the
- * list is taken and nothing re-ranks it. With none usable the join picks as it always did — or, with Submit
- * Only Chosen Photos on, picks nothing (`ignoreChosenOnly` lifts that: a paid
- * join whose coins are already spent must still submit something).
+ * list is taken and nothing re-ranks it. With none usable, Submit Only Chosen
+ * Photos prevents a pick unless a manual join or a previously paid join bypasses it.
+ * An automatic pick with no usable chosen photo can be deferred when fallback
+ * is off and the visual check abstains.
  * GuruShots' suggested photos for this un-joined challenge rank above equally
  * theme-matched ones — a weak tiebreak the visual re-rank may still reorder.
  */
@@ -154,8 +155,8 @@ const pickJoinPhoto = async (
     const chosenSettings = resolveJoinChosen(challenge, pool);
     const enforceOnly = chosenSettings.only && !ignoreChosenOnly;
     // A photo pool with nothing to give, and Submit Only: nothing is picked and nothing is read or asked of GuruShots; the join
-    // does not happen (so a paid one spends nothing). A join the coins are already spent on, or one the user asked for, is not
-    // held back, as Submit Only is not.
+    // does not happen (so a paid one spends nothing). A previously paid join or a manual join bypasses Submit Only.
+    // Either can still return no photo for another reason.
     if (enforceOnly && pool?.block) {
         logPoolBlockOnce(logger, challenge, 'join', pool.block, pool.name);
         return { id: null, reason: pool.block };
