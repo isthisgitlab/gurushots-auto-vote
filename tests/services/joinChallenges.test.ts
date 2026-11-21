@@ -187,6 +187,10 @@ const makeStore = () => {
 type Endpoint<K extends keyof JoinDeps> = Extract<NonNullable<JoinDeps[K]>, (...args: never[]) => unknown>;
 const double = <K extends keyof JoinDeps>(impl: (...args: Parameters<Endpoint<K>>) => unknown) =>
     jest.fn<ReturnType<Endpoint<K>>, Parameters<Endpoint<K>>>((...args) => invalid(impl(...args)));
+const abstainingRank = () =>
+    double<'rankVisually'>(async (_challenge, ids, _eligible, want, options) =>
+        options.skipOnAbstain ? [] : ids.slice(0, want),
+    );
 // Doubles of the reads most tests drive: the rows and balances carry only the fields a test reads.
 const openList = (rows: unknown[]) => double<'getMemberChallenges'>(async () => rows);
 const balance = (value: unknown) => double<'getBankroll'>(async () => value);
@@ -275,6 +279,9 @@ describe('performJoin — ordering & idempotency', () => {
     });
 
     test('joins with the visually re-ranked photo from a 12-photo shortlist', async () => {
+        settings.getEffectiveSetting.mockImplementation(
+            (key) => ({ ...DEFAULT_SETTINGS, submitWithoutTagMatch: false })[key],
+        );
         photoPicker.finalizePick.mockReturnValue(['imgA', 'imgB']);
         const rankVisually = jest.fn(async () => ['imgB']);
         const challenge = { id: 3, title: 'Glorious Green Leaves' };
@@ -290,10 +297,66 @@ describe('performJoin — ordering & idempotency', () => {
         expect(rankVisually).toHaveBeenCalledWith(challenge, ['imgA', 'imgB'], expect.any(Array), 1, {
             logger: expect.any(Object),
             ignoreWords: null,
+            skipOnAbstain: true,
             jointInputs: expect.any(Map),
             loadVotes: expect.any(Function),
         });
         expect(deps.submitToChallenge).toHaveBeenCalledWith(3, ['imgB'], 'tok');
+    });
+
+    test.each([0, 100])('visual abstention with fallback off stops a fresh join costing %i', async (cost) => {
+        settings.getEffectiveSetting.mockImplementation(
+            (key) => ({ ...DEFAULT_SETTINGS, submitWithoutTagMatch: false })[key],
+        );
+        const rankVisually = abstainingRank();
+        const deps = makeDeps({ rankVisually });
+        expect((await performJoin(invalid({ id: 1 }), 'tok', deps, cost)).status).toBe('skipped-no-photo');
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(rankVisually).toHaveBeenCalledWith(
+            expect.anything(),
+            ['imgA'],
+            expect.any(Array),
+            1,
+            expect.objectContaining({ skipOnAbstain: true }),
+        );
+    });
+
+    test('a rule disables fallback above the global setting and preserves a paid claim', async () => {
+        rulesGive(() => ({ submitWithoutTagMatch: false }));
+        const store = fileWith({ '1': { unlockedAt: RECENT } });
+        const rankVisually = abstainingRank();
+        const deps = makeDeps({ joinStateStore: store, rankVisually });
+        expect((await performJoin(invalid({ id: 1 }), 'tok', deps, 100)).status).toBe('charged-pending-submit');
+        expect(store.read()).toEqual({ '1': { unlockedAt: RECENT } });
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+        expect(rankVisually).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.any(Array),
+            expect.any(Array),
+            1,
+            expect.objectContaining({ skipOnAbstain: true }),
+        );
+    });
+
+    test.each(['fallback on', 'manual join'] as const)('%s retains the photo on visual abstention', async (mode) => {
+        settings.getEffectiveSetting.mockImplementation(
+            (key) => ({ ...DEFAULT_SETTINGS, submitWithoutTagMatch: mode === 'fallback on' })[key],
+        );
+        const rankVisually = abstainingRank();
+        const deps = makeDeps({ rankVisually });
+        expect((await performJoin(invalid({ id: 1 }), 'tok', deps, 0, { manual: mode === 'manual join' })).status).toBe(
+            'joined',
+        );
+        expect(deps.submitToChallenge).toHaveBeenCalledWith(1, ['imgA'], 'tok');
+        expect(rankVisually).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.any(Array),
+            expect.any(Array),
+            1,
+            expect.objectContaining({ skipOnAbstain: false }),
+        );
     });
 
     test('no eligible photo → skip, NO coins spent', async () => {
@@ -3890,9 +3953,12 @@ describe('joinChallenges — edge paths', () => {
             }
         });
 
-        test('a picker returning nothing at all is "no photo"', async () => {
-            photoPicker.finalizePick.mockReturnValue(invalid(null));
-            expect((await performJoin(invalid({ id: 12 }), 'tok', makeDeps(), 0)).status).toBe('skipped-no-photo');
+        test('an empty picker result is "no photo"', async () => {
+            photoPicker.finalizePick.mockReturnValueOnce([]);
+            const deps = makeDeps();
+            expect((await performJoin(invalid({ id: 12 }), 'tok', deps, 100)).status).toBe('skipped-no-photo');
+            expect(deps.submitToChallenge).not.toHaveBeenCalled();
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
         });
     });
 

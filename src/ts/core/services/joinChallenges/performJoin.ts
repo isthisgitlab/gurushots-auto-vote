@@ -246,6 +246,7 @@ const performJoin = async (
         // 1. Photo first — no photo, no spend.
         const pick = await pickJoinPhoto(challenge, token, deps, {
             ignoreChosenOnly: manual || (unlock.alreadyUnlocked && needsCoins > 0),
+            manual,
         });
         const imageId = pick.id;
         if (!imageId) return noPhotoOutcome(pick.reason, needsCoins > 0 ? unlock.claim : null);

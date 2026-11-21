@@ -139,7 +139,7 @@ const pickJoinPhoto = async (
     challenge: Challenge,
     token: string,
     deps: JoinDeps,
-    { ignoreChosenOnly }: { ignoreChosenOnly: boolean },
+    { ignoreChosenOnly, manual }: { ignoreChosenOnly: boolean; manual: boolean },
 ): Promise<JoinPick> => {
     const mustIncludeTags = settings.getEffectiveTagSetting('mustIncludeTags', challenge);
     const shouldIncludeTags = settings.getEffectiveTagSetting('shouldIncludeTags', challenge);
@@ -202,7 +202,7 @@ const pickJoinPhoto = async (
         chosen,
     });
     const ranked = finalizePick(scored, VISUAL_SHORTLIST, chosenIds, chosen?.inOrder ? orderedIds : null);
-    if (!ranked || ranked.length === 0) {
+    if (ranked.length === 0) {
         if (!enforceOnly) return { id: null, reason: 'no-photo' };
         // With Submit Only the pool held nothing but chosen photos.
         logChosenSkipOnce(logger, challenge, 'join', 'none-usable');
@@ -216,12 +216,14 @@ const pickJoinPhoto = async (
     const shortlist = chosenRanked.length > 0 ? chosenRanked : ranked;
     // A single chosen photo has nothing to be re-ranked against, and one the user put in order is
     // not re-ranked: the first usable photo in the list is the pick.
-    if (chosenRanked.length === 1 || (chosenSettings.inOrder && chosenRanked.length > 0)) {
+    const useFirstChosen = chosenSettings.inOrder ? chosenRanked.length > 0 : chosenRanked.length === 1;
+    if (useFirstChosen) {
         return { id: chosenRanked[0], reason: 'picked' };
     }
     const [picked] = await (deps.rankVisually || rankVisually)(challenge, shortlist, eligible, 1, {
         logger,
         ignoreWords,
+        skipOnAbstain: !submitWithoutTagMatch && !manual && chosenRanked.length === 0,
         jointInputs: jointInputsOf(scored),
         // The votes of the photos the model accepts, from this pick's own lookup budget so a join does not
         // drain the voting pass's; mock ids never reach the real stats cache.
@@ -232,7 +234,7 @@ const pickJoinPhoto = async (
             persist: settings.getSetting('mock') !== true,
         }),
     });
-    return { id: picked, reason: 'picked' };
+    return picked ? { id: picked, reason: 'picked' } : { id: null, reason: 'no-photo' };
 };
 
 export type { JoinPick };

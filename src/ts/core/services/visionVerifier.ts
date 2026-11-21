@@ -4,7 +4,8 @@
  * the shared eye-contact interpretation. The model is
  * downloaded and checksummed by the build, then shipped with the application.
  *
- * The check only reorders, and never empties a pick. Photos the model finds
+ * The check normally reorders candidates. On a scored abstention it can return
+ * no photo when the caller requests it. Photos the model finds
  * clearly off-theme move behind the ones it accepts (the rejected ones in
  * order of fit). Among the accepted photos the tag ranking, the model's fit and
  * the photos' votes are weighed together (photoPicker/jointRank.ts) inside each
@@ -230,7 +231,7 @@ const orderByVisualFit = async (
  * @param eligible - photo records (id + member_id) for the ids
  * @param jointInputs - the tier values of the ranked photos, by id (jointInputsOf)
  * @param loadVotes - the votes of the photos the model accepted, asked only when it accepted two or more
- * @returns wantCount ids (fewer only if rankedIds is shorter)
+ * @returns up to wantCount ids, or none on abstention when requested
  */
 const rankVisually = async (
     challenge: ChallengeText | null | undefined,
@@ -241,12 +242,14 @@ const rankVisually = async (
         logger,
         ignoreWords = null,
         onVisualEvidence,
+        skipOnAbstain = false,
         jointInputs,
         loadVotes,
     }: {
         logger: FillLogger;
         ignoreWords?: IgnoreWords;
         onVisualEvidence?: (acceptedIds: Set<string>) => void;
+        skipOnAbstain?: boolean;
         jointInputs: ReadonlyMap<string, JointInput>;
         loadVotes: (ids: string[]) => Promise<Map<string, VoteStat>>;
     },
@@ -300,7 +303,11 @@ const rankVisually = async (
             },
         });
         const detail = { prompts, scores: scored };
-        if (order === null) return keepOriginal('abstained', detail);
+        if (order === null) {
+            if (!skipOnAbstain) return keepOriginal('abstained', detail);
+            log.info(`Visual check abstained for ${logger.challengeTag(challenge)}. No photo selected.`, detail);
+            return [];
+        }
         const picked = [...order, ...rankedIds.slice(shortlist.length)].slice(0, wantCount);
         const changed = picked.some((id, index) => id !== original[index]);
         const outcome = changed

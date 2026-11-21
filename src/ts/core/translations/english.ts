@@ -1446,9 +1446,9 @@ export const app = {
     ignoreTitleWords: 'Ignore These Words in Challenge Titles',
     ignoreTitleWordsDesc:
         'These words are removed from the title before photo searches. Extra words make the theme less clear and use up the few searches allowed per challenge. The list is pre-filled. Remove a word if a challenge really is about it.',
-    submitWithoutTagMatch: 'Submit Even Without a Tag Match',
+    submitWithoutTagMatch: 'Allow a fallback photo',
     submitWithoutTagMatchDesc:
-        'Only matters when Must Include Tags is set. On (default): no photo matches all the tags — the best one is still added so the slot is not empty. Off leaves it empty until a full match exists.',
+        'Use the best available photo when no photo matches all required tags. Auto-Join also uses a fallback when the photo check finds no confident match. You can choose a photo in Discover Challenges.',
     emergencySubmit: 'Emergency Submit',
     emergencySubmitDesc:
         'In the last minutes the best photos fill empty slots even against your tag rules and Submit Only Chosen Photos; Boost and won Turbo also apply. 0 = off, also dropping the Boost/Turbo rescue.',

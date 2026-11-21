@@ -1454,9 +1454,9 @@ export const app: LatvianApp = {
     ignoreTitleWords: 'Ignorēt šos vārdus izaicinājumu nosaukumos',
     ignoreTitleWordsDesc:
         'Šos vārdus izņem no nosaukuma pirms foto meklēšanas. Liekie vārdi padara tēmu neskaidrāku un iztērē izaicinājumam atļautās nedaudzās meklēšanas reizes. Saraksts ir iepriekš aizpildīts. Izņem vārdu, ja izaicinājums tiešām ir par to.',
-    submitWithoutTagMatch: 'Iesniegt arī bez tagu sakritības',
+    submitWithoutTagMatch: 'Atļaut rezerves foto',
     submitWithoutTagMatchDesc:
-        'Attiecas tikai tad, ja ir norādīti obligātie tagi. Ieslēgts (noklusējums): ja neviens foto neatbilst visiem tagiem, tomēr pievieno labāko, lai vieta nepaliktu tukša. Izslēgts: vieta paliek tukša, līdz ir pieejams foto, kas atbilst visiem tagiem.',
+        'Ja neviens foto neatbilst visiem obligātajiem tagiem, izmanto labāko pieejamo foto. Automātiskā pievienošanās izmanto rezerves foto arī tad, ja pārbaudē nav skaidras atbilstības. Foto vari izvēlēties sadaļā «Atrast izaicinājumus».',
     emergencySubmit: 'Ārkārtas iesniegšana',
     emergencySubmitDesc:
         'Pēdējās minūtēs labākie foto aizpilda tukšās vietas arī pret tagu noteikumiem un „Iesniegt tikai izvēlētos foto”; darbojas arī Boost un iegūtais Turbo. 0 = izslēgts, arī Boost/Turbo glābšana.',

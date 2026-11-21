@@ -181,11 +181,16 @@ describe('the chosen photo is the join photo', () => {
     });
 
     test('several chosen photos: the shortlist is the chosen block alone', async () => {
-        withSettings({ chosenPhotos: ['auto-3', 'auto-7'], submitWithoutTagMatch: true });
+        withSettings({ chosenPhotos: ['auto-3', 'auto-7'], submitWithoutTagMatch: false });
+        vision.rankVisually.mockImplementation(async (_c, ids, _e, want, options) =>
+            options.skipOnAbstain ? [] : ids.slice(0, want),
+        );
         const deps = makeDeps();
         await performJoin(challenge(), 'tok', deps, 0);
         expect(vision.rankVisually).toHaveBeenCalledTimes(1);
         expect([...vision.rankVisually.mock.calls[0][1]].sort()).toEqual(['auto-3', 'auto-7']);
+        expect(vision.rankVisually.mock.calls[0][4].skipOnAbstain).toBe(false);
+        expect(deps.submitToChallenge).toHaveBeenCalledWith(1, [vision.rankVisually.mock.calls[0][1][0]], 'tok');
         expect(deps.getEligiblePhotosWalk).not.toHaveBeenCalled();
     });
 
