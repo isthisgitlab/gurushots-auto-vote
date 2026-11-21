@@ -29,11 +29,12 @@ const resolvers = {
 
 describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, resolveThreshold) => {
     describe('calculateNextThresholdEntry', () => {
-        it('returns the soonest challenge to cross its last-minute boundary', async () => {
+        it.each(['first', 'second'])('returns the soonest entry when its challenge is listed %s', async (position) => {
             const now = Math.floor(Date.now() / 1000);
+            const earliest = { id: 2, title: 'C2', type: 'regular', close_time: now + 1800 };
+            const later = { id: 1, title: 'C1', type: 'regular', close_time: now + 3600 };
             const challenges = [
-                { id: 1, title: 'C1', type: 'regular', close_time: now + 3600 },
-                { id: 2, title: 'C2', type: 'regular', close_time: now + 1800 }, // soonest entry
+                ...(position === 'first' ? [earliest, later] : [later, earliest]),
                 { id: 3, title: 'Flash', type: 'flash', close_time: now + 1200 },
             ];
 
@@ -43,6 +44,18 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
             expect(result!.challengeId).toBe(2);
             expect(result!.entryTime).toBe(now + 1800 - 300);
             expect(result!.lastMinuteThreshold).toBe(5);
+        });
+
+        it('keeps the first challenge when entry times are equal', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            const challenges = [
+                { id: 2, title: 'C2', type: 'regular', close_time: now + 1800 },
+                { id: 1, title: 'C1', type: 'regular', close_time: now + 1800 },
+            ];
+
+            const result = await calculateNextThresholdEntry(invalid(challenges), now, resolveThreshold);
+
+            expect(result!.challengeId).toBe(2);
         });
 
         it('skips flash challenges', async () => {
