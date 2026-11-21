@@ -224,9 +224,13 @@ const detectLetterPrefix = (title: string | null | undefined): string | null => 
     return letter.toLowerCase();
 };
 
+const DESCRIPTION_LETTER_PHRASE_RE =
+    /\b(?:begin(?:s|ning)?|start(?:s|ing)?)\s+with\s+(?:the\s+)?letter\s+(?:([a-z])(?![\w-])|['"‘“]\s*([a-z])\s*['"’”](?![\w-]))/gi;
 // Require an explicit rule at the start of a sentence or after a rule lead-in.
-const DESCRIPTION_LETTER_RE =
-    /(?:^|(\bthat)\s+|\b(?:must|should)\s+)(?:begin(?:s|ning)?|start(?:s|ing)?)\s+with\s+(?:the\s+)?letter\s+(?:([a-z])(?![\w-])|['"‘“]\s*([a-z])\s*['"’”](?![\w-]))/gi;
+const DESCRIPTION_LETTER_RE = new RegExp(
+    String.raw`(?:^|(\bthat)\s+|\b(?:must|should)\s+)${DESCRIPTION_LETTER_PHRASE_RE.source}`,
+    'gi',
+);
 const DESCRIPTION_EXCLUSION_RE =
     /\b(?:no|not|never|without|avoid(?:s|ed|ing)?|exclud(?:e|es|ed|ing)|reject(?:s|ed|ing)?|\w+n['’]t)\b/i;
 const DESCRIPTION_REQUEST_RE = /\b(?:share|show|submit|enter)\b/i;
@@ -267,6 +271,9 @@ const withoutLetterPhrases = (text: string | null | undefined): string => {
     for (const re of LETTER_PATTERNS_GLOBAL) out = out.replace(re, ' ');
     return out;
 };
+
+const withoutDescriptionLetterPhrases = (text: string | null | undefined): string =>
+    typeof text === 'string' ? withoutLetterPhrases(stripTags(text).replace(DESCRIPTION_LETTER_PHRASE_RE, ' ')) : '';
 
 // Title words that name a challenge's FORMAT, never its subject: its length
 // ("10 Hours"), GuruShots' own features ("500 Guru's Picks", "Ultimate
@@ -353,6 +360,7 @@ export {
     detectLetterPrefix,
     readChallengeLetter,
     withoutLetterPhrases,
+    withoutDescriptionLetterPhrases,
     readChallengeTheme,
 };
 

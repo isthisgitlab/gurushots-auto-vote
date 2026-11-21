@@ -18,6 +18,7 @@ import {
     detectLetterPrefix,
     readChallengeLetter,
     withoutLetterPhrases,
+    withoutDescriptionLetterPhrases,
     readChallengeTheme,
     isParticiple,
 } from './title';
@@ -106,7 +107,10 @@ const buildChallengeKeywords = (
     const opts = { ignoreWords, compounds: 'replace' as const };
     const fromTitle = tokenise(stripIfLetter(letter, title), opts);
     const fromUrl = letter === null ? tokenise(challenge?.url, opts) : [];
-    const fromWelcome = tokenise(stripIfLetter(letter, challenge?.welcome_message), opts);
+    const fromWelcome = tokenise(
+        letter === null ? challenge?.welcome_message : withoutDescriptionLetterPhrases(challenge?.welcome_message),
+        opts,
+    );
     // A title word judged not-the-subject ("fun" in "Balloon Fun") is dropped
     // from every source: the slug and the prose repeat it, and here it would
     // score every photo vision-labelled "Fun" as on theme.

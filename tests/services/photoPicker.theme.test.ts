@@ -9,6 +9,7 @@ import type * as photoPickerModule from '../../src/ts/core/services/photoPicker'
 const {
     readChallengeTheme,
     buildScoredCandidates,
+    pickPhotosForChallenge,
     buildSearchTerms,
     buildChallengeKeywords,
     buildThemeKeywords,
@@ -218,6 +219,21 @@ describe('compound titles with the lexicon not loaded', () => {
 });
 
 describe('letter challenges — the letter phrase is not the subject', () => {
+    test.each([
+        ['All About E', 'Share photos that start with the letter <strong>E</strong>.', 'Eagle', 'Envelope'],
+        ['All About A', 'Share photos that start with the letter A this week.', 'Apple', 'Alphabet'],
+        ['The Letter E', 'Share photos that start with the letter <strong>E</strong>.', 'Eagle', 'Envelope'],
+    ])('description rule words do not affect scoring for %s', (title, welcome_message, popular, other) => {
+        const challenge = { title, welcome_message };
+        const photos = [
+            { id: popular, labels: [popular], votes: 100, permission: { allowed: true, message: null } },
+            { id: other, labels: [other, 'Letter'], votes: 1, permission: { allowed: true, message: null } },
+        ];
+        expect(pickPhotosForChallenge(challenge, photos, 1)).toEqual([popular]);
+        expect(buildChallengeKeywords(challenge)).not.toContain('start');
+        expect(buildChallengeKeywords(challenge)).not.toContain('letter');
+    });
+
     test('All About E uses the description rule to filter candidates', () => {
         const challenge = {
             title: 'All About E',
