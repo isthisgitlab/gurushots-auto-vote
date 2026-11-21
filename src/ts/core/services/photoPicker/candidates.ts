@@ -5,7 +5,7 @@
  */
 
 import { MIN_USER_TAG_STEM_LENGTH, tokeniseTagList } from './stemming';
-import { detectLetterPrefix, excludedSubjectOf, photoShowsExcluded } from './title';
+import { readChallengeLetter, excludedSubjectOf, photoShowsExcluded } from './title';
 import { buildChallengeKeywords } from './keywords';
 import { wholeLabelStems, labelWordStems, photoMatchesAllStems, countShouldMatches, scorePhoto } from './labels';
 import {
@@ -204,7 +204,7 @@ const buildScoredCandidates = (
     // stops generic 2-char vision labels ("in", "at", "on") from spuriously
     // satisfying an I/A/O challenge. Multi-word labels match on the first char of
     // the whole label string — the natural reading of "begins with".
-    const letterPrefix = detectLetterPrefix(challenge?.title);
+    const letterPrefix = readChallengeLetter(challenge);
 
     // Stem each photo's labels once, in BOTH representations, and carry them
     // through the filters and the scoring rather than recomputing.

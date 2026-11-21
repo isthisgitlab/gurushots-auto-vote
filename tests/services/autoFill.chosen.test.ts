@@ -749,6 +749,26 @@ describe('the uncertain-submission record on a letter challenge', () => {
         return ledger.isUncertain(challenge.id, 'p1');
     };
 
+    test('a description-only letter rule does not make a matching label subject evidence', async () => {
+        const ledger = createMemoryEntryAgeLedger();
+        const challenge = {
+            ...makeChallenge({ title: 'All About E' }),
+            url: 'all-about-e10',
+            welcome_message: 'Share photos of birds that start with the letter E',
+        };
+        await recordUncertainSubmission({
+            challenge,
+            label: 'autoSubmit',
+            scored: [entry(['Elephant'])],
+            picked: ['p1'],
+            visualEvidence: null,
+            ignoreWords: null,
+            chosenIds: null,
+            deps: invalid<RankDeps & FillDeps>({ logger: makeLog().logger, entryAges: ledger }),
+        });
+        expect(ledger.isUncertain(challenge.id, 'p1')).toBe(true);
+    });
+
     test('when the letter is the title only subject, a matching label is evidence', async () => {
         expect(await run('The Letter "S"', ['Sun'])).toBe(false);
         expect(await run('Letter S', ['Sun'])).toBe(false);

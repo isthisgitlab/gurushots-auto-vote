@@ -8,7 +8,7 @@ import {
     buildSearchTerms,
     buildThemeKeywords,
     compoundSpellings,
-    detectLetterPrefix,
+    readChallengeLetter,
     descriptionExclusions,
     parseNegation,
     readChallengeTheme,
@@ -141,7 +141,7 @@ const THEMED_SEARCH_MIN_BUDGET_MS = 1500;
  * are what a misread theme can be checked (and the rule measured) against.
  */
 const describeTheme = (theme: ChallengeTheme, challenge: Challenge, ignoreWords: IgnoreWords): string => {
-    const letter = detectLetterPrefix(challenge?.title);
+    const letter = readChallengeLetter(challenge);
     const upper = letter === null ? null : letter.toUpperCase();
     // A letter challenge that still names a subject ("A is for Apple") says so.
     const keptSubject = upper === null ? [] : buildThemeKeywords(challenge, ignoreWords);
@@ -258,7 +258,7 @@ const fetchCandidatesForChallenge = async (
     // the library is fetched unfiltered and narrowed client-side by the letter
     // tag filter in pickPhotosForChallenge. Leave a breadcrumb so a "wrong photo"
     // report is traceable to that path.
-    const letter = detectLetterPrefix(challenge?.title);
+    const letter = readChallengeLetter(challenge);
     const negation = parseNegation(challenge?.title, ignoreWords);
     if (letter && terms.length === 0) {
         logger

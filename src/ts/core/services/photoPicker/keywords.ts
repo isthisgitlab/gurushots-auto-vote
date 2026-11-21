@@ -16,6 +16,7 @@ import {
     PEOPLE_LABEL_STEMS,
     descriptionExclusions,
     detectLetterPrefix,
+    readChallengeLetter,
     withoutLetterPhrases,
     readChallengeTheme,
     isParticiple,
@@ -99,7 +100,7 @@ const buildChallengeKeywords = (
     // title and can carry nothing else, while the description's other words stay.
     const negation = parseNegation(challenge?.title, ignoreWords);
     const title = negation.active ? negation.positiveTitle : challenge?.title;
-    const letter = detectLetterPrefix(challenge?.title);
+    const letter = readChallengeLetter(challenge);
     // Compound mode: adjacent words the model knows ("Close Up") become one
     // term, so "Close Up" stops matching "Closed".
     const opts = { ignoreWords, compounds: 'replace' as const };
@@ -165,7 +166,7 @@ const buildThemeKeywords = (challenge: ChallengeText | null | undefined, ignoreW
     // empties out.
     const negation = parseNegation(challenge?.title, ignoreWords);
     const title = negation.active ? negation.positiveTitle : challenge?.title;
-    const letter = detectLetterPrefix(challenge?.title);
+    const letter = readChallengeLetter(challenge);
     const subject = titleSubject(title, ignoreWords);
     // Pooling is where an abstract word hurts most — "fun" averaged into
     // "balloon" drags the theme toward parties and laughter — so only the
@@ -215,7 +216,7 @@ const visualSubjectWords = (challenge: ChallengeText | null | undefined, ignoreW
     const negated = new Set(negation.stems);
     // A letter phrase is not a visual subject; strip it after titleSubject, as
     // buildThemeKeywords does.
-    const letter = detectLetterPrefix(challenge?.title);
+    const letter = readChallengeLetter(challenge);
     const subject = titleSubject(title, ignoreWords);
     const words = rawTokenise(stripIfLetter(letter, subject), {
         ignoreWords,
@@ -272,7 +273,7 @@ const buildSearchTerms = (challenge: ChallengeText | null | undefined, opts: Tag
     // non-letter title tokenises normally.
     const theme = readChallengeTheme(challenge, ignoreWords);
     if (terms.length === 0 && theme.kind === 'eye-contact') return [...theme.subjects];
-    if (terms.length === 0 && !detectLetterPrefix(challenge?.title) && theme.kind !== 'open') {
+    if (terms.length === 0 && !readChallengeLetter(challenge) && theme.kind !== 'open') {
         // Subject segment only: on a series title the prefix ("Color Hunt") is
         // never a tag, so searching it spends a round-trip to find nothing and
         // burns one of the SEARCH_TERMS_CAP slots the real subject needs.

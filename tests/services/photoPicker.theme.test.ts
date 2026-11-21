@@ -8,11 +8,13 @@
 import type * as photoPickerModule from '../../src/ts/core/services/photoPicker';
 const {
     readChallengeTheme,
+    buildScoredCandidates,
     buildSearchTerms,
     buildChallengeKeywords,
     buildThemeKeywords,
     visualSubjectWords,
     detectLetterPrefix,
+    readChallengeLetter,
     withoutLetterPhrases,
     parseNegation,
     tokenise,
@@ -216,6 +218,65 @@ describe('compound titles with the lexicon not loaded', () => {
 });
 
 describe('letter challenges — the letter phrase is not the subject', () => {
+    test('All About E uses the description rule to filter candidates', () => {
+        const challenge = {
+            title: 'All About E',
+            url: 'all-about-e10',
+            welcome_message:
+                "Share your best photos of anything that starts with the letter 'E'! Like, Eagle, Ears, Elephant, Engine, Eyes, Etc. Join our challenge and earn rewards! * Participation reward: 10 coins * Elite Level reward: 20 coins * ALLSTAR Level reward: 50 coins Good luck!",
+        };
+        const photos = [
+            { id: 'eagle', labels: ['Eagle'], votes: 1, permission: { allowed: true, message: null } },
+            { id: 'cat', labels: ['Cat'], votes: 1000, permission: { allowed: true, message: null } },
+        ];
+        expect(readChallengeTheme(challenge)).toEqual({ kind: 'unconfirmed', subjects: [] });
+        expect(buildScoredCandidates(challenge, photos).map((candidate) => candidate.id)).toEqual(['eagle']);
+        expect(buildScoredCandidates(challenge, [photos[1]], { submitWithoutTagMatch: false })).toEqual([]);
+        expect(buildScoredCandidates(challenge, [photos[1]], { submitWithoutTagMatch: true }).map((p) => p.id)).toEqual(
+            ['cat'],
+        );
+    });
+
+    test.each([
+        ['Starts with letter E', 'e'],
+        ['Begins with the letter e', 'e'],
+        ['Photos should begin with the letter “E”.', 'e'],
+        ["Photos must start with letter 'E'.", 'e'],
+        ['Photos. Starting with the letter E!', 'e'],
+        ['<p>Starts with the letter E.</p>', 'e'],
+        ['The letter E is exciting.', null],
+        ['Any photos that start with the letter E', null],
+        ['Do not submit any photos that start with the letter E.', null],
+        ['Any photos that start with the letter E will be rejected.', null],
+        ['Do not submit cats. Share photos that start with the letter E.', 'e'],
+        ['Any photos that start with the letter S. Show photos that begin with the letter E.', 'e'],
+        ['Share photos that start with the letter E without people.', 'e'],
+        ['Share photos that start with the letter E. Avoid portraits.', 'e'],
+        ["Don't share photos that start with the letter E.", null],
+        ['Show photos that start with the letter E and exclude people.', 'e'],
+        ['If you submit any photos that start with the letter E they will be rejected.', null],
+        ['Share photos that start with the letter E, are not allowed.', null],
+        ['Share photos that start with the letter E must not be submitted.', null],
+        ['Submit photos that start with the letter E.', 'e'],
+        ['Enter photos that start with the letter E.', 'e'],
+        ['Photos must not start with the letter E.', null],
+        ['Starts with the letter Eagle.', null],
+        ['Starts with the letter E-x.', null],
+        ["Starts with the letter 'E'x.", null],
+        ['Starts with the letter “E”-x.', null],
+    ])('reads description rule %s', (welcome_message, expected) => {
+        expect(readChallengeLetter({ title: 'All About E', welcome_message })).toBe(expected);
+    });
+
+    test('title wins and descriptions use the existing text limit', () => {
+        expect(readChallengeLetter({ title: 'Begins With S', welcome_message: 'Starts with the letter E.' })).toBe('s');
+        const rule = 'Starts with the letter E';
+        expect(
+            readChallengeLetter({ title: 'All About E', welcome_message: `${' '.repeat(4096 - rule.length)}${rule}` }),
+        ).toBe('e');
+        expect(readChallengeLetter({ title: 'All About E', welcome_message: `${' '.repeat(4096)}${rule}` })).toBeNull();
+        expect(readChallengeLetter({ title: 'All About E' })).toBeNull();
+    });
     // GuruShots challenge 136581 ("The Letter \"S\""), quoted word for word as
     // the API returned it on 2026-10-22.
     const LETTER_S_DESC =
