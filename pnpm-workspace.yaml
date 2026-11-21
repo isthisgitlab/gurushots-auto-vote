@@ -84,6 +84,9 @@ overrides:
     # never in the shipped notices tree). Drop once jest/electron-builder chains move
     # to minimatch >= 11 natively.
     'minimatch@>=7 <11.0.1': 11.0.4
+    # Stryker > typed-rest-client@2.3.1 pins qs affected by GHSA-6pq8-jhm2-2vcw.
+    # Drop once Stryker's typed-rest-client uses a patched qs.
+    'typed-rest-client@2.3.1>qs': 6.17.1
 # braces <=3.0.3 (GHSA-vfj7-8cjw-p6xm: stack exhaustion on deeply nested brace patterns)
 # has NO patched release: 3.0.3 is the latest, and micromatch 4.0.8 and watchboy 0.4.3,
 # the dependents that remain, are the latest too. What remains is electronmon > watchboy >
