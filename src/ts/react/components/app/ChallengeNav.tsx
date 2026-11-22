@@ -26,6 +26,36 @@ function ChipDot({ ringed, children }: { ringed: boolean; children: ComponentChi
     return <span className="inline-flex rounded-selector ring-2 ring-base-100">{children}</span>;
 }
 
+function formatBadge(c: Challenge, t: ReturnType<typeof useTranslation>['t']) {
+    const formats = [c?.type, c?.badge].map((value) => (typeof value === 'string' ? value.trim().toLowerCase() : ''));
+    const count = c?.max_photo_submits;
+    let badge: string;
+    let label: string;
+    if (formats.includes('magazine')) {
+        badge = 'M';
+        label = t('app.challengeFormatMagazine');
+    } else if (formats.includes('exhibition')) {
+        badge = 'E';
+        label = t('app.challengeFormatExhibition');
+    } else if (formats.includes('flash')) {
+        badge = 'F';
+        label = t('app.challengeFormatFlash');
+    } else if (typeof count === 'number' && Number.isInteger(count) && count > 0) {
+        badge = String(count);
+        label = t('app.challengePhotoLimit', { count });
+    } else {
+        return null;
+    }
+    return {
+        label,
+        marker: (
+            <span aria-hidden="true" className="badge badge-xs shrink-0">
+                {badge}
+            </span>
+        ),
+    };
+}
+
 /** One challenge's chip: its title, the status dots, a "T" badge on a team match and the marker of what customizes it. */
 function NavChip({
     challenge: c,
@@ -38,11 +68,13 @@ function NavChip({
 }) {
     const { t } = useTranslation();
     const { manual, automatic, byRule } = customizationOf(kind);
+    const format = formatBadge(c, t);
     const hint = [
         c?.teamMatch && t('app.teamChallenge'),
         manual && t('app.customSettingsHint'),
         automatic && t('app.titleRuleProfile'),
         byRule && t('app.ruleSettingsHint'),
+        format?.label,
     ]
         .filter(Boolean)
         .join(' · ');
@@ -69,6 +101,7 @@ function NavChip({
                     T
                 </span>
             )}
+            {format?.marker}
             {manual && <span aria-hidden="true">⚙️ </span>}
             {automatic && <span aria-hidden="true">🔄 </span>}
             {byRule && <span aria-hidden="true">📏 </span>}
