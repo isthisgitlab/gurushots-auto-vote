@@ -6,18 +6,41 @@
  */
 
 jest.mock('../../src/ts/core/apiFactory', () => ({ getApiStrategy: jest.fn() }));
+// What the app queued for the service is claimed and applied at the start of a cycle (its own tests: serviceControlInbox).
+jest.mock('../../src/ts/shells/headless/serviceControls', () => ({ processServiceControls: jest.fn(async () => {}) }));
 // Partial factory: the shell's four reads stay mocked, the rest of the facade
 // (the chosen-photos consumption above all) rides along real.
-jest.mock('../../src/ts/core/settings', () => ({
-    __esModule: true,
-    ...jest.requireActual<typeof import('../../src/ts/core/settings')>('../../src/ts/core/settings'),
-    getSetting: jest.fn(),
-    setSetting: jest.fn(),
-    loadSettings: jest.fn(() => ({ checkFrequencyMin: 2, checkFrequencyMax: 2 })),
-    getEffectiveSetting: jest.fn(),
-}));
+jest.mock('../../src/ts/core/settings', () => {
+    const loadSettings = jest.fn(() => ({ checkFrequencyMin: 2, checkFrequencyMax: 2 }));
+    return {
+        __esModule: true,
+        ...jest.requireActual<typeof import('../../src/ts/core/settings')>('../../src/ts/core/settings'),
+        getSetting: jest.fn(),
+        setSetting: jest.fn(),
+        loadSettings,
+        // The cadence settings of a tick are captured through the installation read: with no installation scenario the
+        // saved app block the test gives `loadSettings`.
+        captureInstallationSettings: jest.fn((keys: string[]) => {
+            const app: Record<string, unknown> = (loadSettings() as { app?: Record<string, unknown> }).app ?? {};
+            return { ok: true, values: Object.fromEntries(keys.map((key) => [key, app[key]])) };
+        }),
+        getEffectiveSetting: jest.fn(),
+    };
+});
+
+// The account's own boundaries pass through the real resolver unless a test says otherwise (it reads the installation
+// scenario and the ledgers, which this file does not stand up).
+jest.mock('../../src/ts/core/scheduling/nodeResolvers', () => {
+    const actual = jest.requireActual<typeof import('../../src/ts/core/scheduling/nodeResolvers')>(
+        '../../src/ts/core/scheduling/nodeResolvers',
+    );
+    return { __esModule: true, ...actual, resolveAccountWake: jest.fn(actual.resolveAccountWake) };
+});
 
 import apiFactoryModule = require('../../src/ts/core/apiFactory');
+import nodeResolversModule = require('../../src/ts/core/scheduling/nodeResolvers');
+import serviceControlsModule = require('../../src/ts/shells/headless/serviceControls');
+import cancellationModule = require('../../src/ts/core/voting/cancellation');
 const apiFactory = jest.mocked(apiFactoryModule);
 import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
@@ -118,6 +141,74 @@ describe('headless runOneCycle', () => {
         expect(typeof payload.nextDelayMs).toBe('number');
         expect(payload.nextDelayMs).toBeGreaterThan(0);
     });
+
+    describe('the control inbox the app queued for this service', () => {
+        const cycle = () => {
+            apiFactory.getApiStrategy.mockReturnValue(
+                invalid({
+                    fetchChallengesAndVote: jest.fn().mockResolvedValue({ success: true }),
+                    getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [] }),
+                }),
+            );
+            return g.GS!.runOneCycle();
+        };
+
+        test('is claimed and applied at the start of the cycle, before the vote', async () => {
+            const fetchChallengesAndVote = jest.fn().mockResolvedValue({ success: true });
+            apiFactory.getApiStrategy.mockReturnValue(
+                invalid({
+                    fetchChallengesAndVote,
+                    getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [] }),
+                }),
+            );
+            await g.GS!.runOneCycle();
+            expect(serviceControlsModule.processServiceControls).toHaveBeenCalledTimes(1);
+            expect(jest.mocked(serviceControlsModule.processServiceControls).mock.invocationCallOrder[0]).toBeLessThan(
+                fetchChallengesAndVote.mock.invocationCallOrder[0],
+            );
+        });
+
+        test('is applied even when nobody is signed in', async () => {
+            settings.getSetting.mockImplementation((key) => (key === 'token' ? '' : undefined));
+            await cycle();
+            expect(serviceControlsModule.processServiceControls).toHaveBeenCalledTimes(1);
+            expect(lastPayload().error).toBe('no-token');
+        });
+
+        test('is never read in mock mode (memory stores only)', async () => {
+            settings.getSetting.mockImplementation((key) =>
+                key === 'token' ? 'tok' : key === 'mock' ? true : undefined,
+            );
+            await cycle();
+            expect(serviceControlsModule.processServiceControls).not.toHaveBeenCalled();
+            expect(lastPayload().skipped).toBe('mock');
+        });
+    });
+
+    describe('a full Stop reaching the page', () => {
+        test('GS.cancel latches the cancellation flag, so the cycle running stops at its next boundary', () => {
+            cancellationModule.reset();
+            g.GS!.cancel();
+            expect(cancellationModule.isCancelled()).toBe(true);
+            cancellationModule.reset();
+        });
+
+        test('a cycle the fence admitted starts with the latch of an earlier Stop cleared', async () => {
+            cancellationModule.setCancelled(true);
+            await cycleOnce();
+            expect(cancellationModule.isCancelled()).toBe(false);
+        });
+    });
+
+    const cycleOnce = async () => {
+        apiFactory.getApiStrategy.mockReturnValue(
+            invalid({
+                fetchChallengesAndVote: jest.fn().mockResolvedValue({ success: true }),
+                getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [] }),
+            }),
+        );
+        await g.GS!.runOneCycle();
+    };
 
     test('with no token, reports not-ok and does not vote', async () => {
         settings.getSetting.mockImplementation((key) => (key === 'token' ? '' : undefined));
@@ -340,6 +431,52 @@ describe('headless runOneCycle', () => {
         expect(settings.getEffectiveSetting).toHaveBeenCalledWith('autoSubmitSchedule', '1');
     });
 
+    describe("the account's own wake (the installation scenario this service owns, the claim throttle, a mission's expiry)", () => {
+        const noChallenges = async () => {
+            apiFactory.getApiStrategy.mockReturnValue(
+                invalid({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [] }) }),
+            );
+        };
+
+        test('caps the next alarm to the soonest account boundary when no challenge is active', async () => {
+            await noChallenges();
+            const nowSec = Math.floor(FIXED_NOW_MS / 1000);
+            jest.mocked(nodeResolversModule.resolveAccountWake).mockReturnValueOnce({
+                installation: null,
+                candidates: [],
+                claimAt: nowSec + 45,
+                missionExpiry: null,
+            });
+
+            const delay = await computeNextDelayMs('tok', []);
+
+            expect(nodeResolversModule.resolveAccountWake).toHaveBeenCalledTimes(1);
+            expect(delay).toBeGreaterThan(0);
+            expect(delay).toBeLessThanOrEqual(45_000);
+        });
+
+        test('with no account boundary the alarm keeps the normal cadence', async () => {
+            await noChallenges();
+            jest.mocked(nodeResolversModule.resolveAccountWake).mockReturnValueOnce({
+                installation: null,
+                candidates: [],
+                claimAt: null,
+                missionExpiry: null,
+            });
+
+            await expect(computeNextDelayMs('tok', [])).resolves.toBe(120_000);
+        });
+
+        test('a resolver that cannot answer supplies no boundary: the cycle still gets its normal cadence', async () => {
+            await noChallenges();
+            jest.mocked(nodeResolversModule.resolveAccountWake).mockImplementationOnce(() => {
+                throw new Error('ledger unreadable');
+            });
+
+            await expect(computeNextDelayMs('tok', [])).resolves.toBe(120_000);
+        });
+    });
+
     // Network-outage recovery: on Android the headless loop schedules its own
     // AlarmManager ticks and does NOT use the cadence chain, so it carries its
     // own copy of the offline-retry cap. Without it a reconnection mid-cadence
@@ -517,6 +654,26 @@ describe('headless runOneCycle', () => {
             );
         });
 
+        test('cadence settings the installation cannot read give a plain retry beat, logged, never the saved cadence', async () => {
+            const getActiveChallenges = jest.fn();
+            apiFactory.getApiStrategy.mockReturnValue(invalid({ getActiveChallenges }));
+            // the saved cadence is 2 minutes; the installation phase overlays it and nothing valid is published
+            settings.captureInstallationSettings.mockReturnValueOnce({
+                ok: false,
+                key: 'checkFrequencyMin',
+                reason: 'the published settings of this phase have expired',
+            });
+
+            await expect(computeNextDelayMs('tok', null)).resolves.toBe(180_000);
+
+            // nothing was fetched or decided on the saved settings
+            expect(getActiveChallenges).not.toHaveBeenCalled();
+            expect(info).toHaveBeenCalledWith(
+                '[headless] cadence settings unavailable; using a plain retry beat',
+                'checkFrequencyMin is unavailable (the published settings of this phase have expired)',
+            );
+        });
+
         test('the detail of a failure goes to the log, never into the reported payload', async () => {
             apiFactory.getApiStrategy.mockReturnValue(
                 invalid({
@@ -556,6 +713,31 @@ describe('headless runOneCycle', () => {
             await g.GS!.runOneCycle();
 
             expect(lastPayload()).toEqual({ ok: false, error: 'cycle-failed', nextDelayMs: 120_000 });
+        });
+
+        test('the beat after a failed cycle is the installation’s cadence, captured once; one it cannot read is the plain default beat, never the saved cadence', async () => {
+            apiFactory.getApiStrategy.mockReturnValue(
+                invalid({
+                    fetchChallengesAndVote: jest.fn().mockRejectedValue(new Error('boom')),
+                    getActiveChallenges: jest.fn(),
+                }),
+            );
+            // The installation's phase gives a 5-minute cadence over the saved 2 minutes.
+            settings.captureInstallationSettings.mockReturnValueOnce({
+                ok: true,
+                values: { timezone: 'UTC', checkFrequencyMin: 5, checkFrequencyMax: 5 },
+            });
+            await g.GS!.runOneCycle();
+            expect(lastPayload()).toEqual({ ok: false, error: 'cycle-failed', nextDelayMs: 300_000 });
+            onCycleComplete.mockClear();
+
+            settings.captureInstallationSettings.mockReturnValueOnce({
+                ok: false,
+                key: 'checkFrequencyMin',
+                reason: 'the published settings of this phase have expired',
+            });
+            await g.GS!.runOneCycle();
+            expect(lastPayload()).toEqual({ ok: false, error: 'cycle-failed', nextDelayMs: 180_000 });
         });
 
         test('a throwing native bridge callback is logged, never rethrown', async () => {

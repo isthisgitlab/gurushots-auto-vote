@@ -5,31 +5,92 @@
  * (services/scenarioRunner.ts) executes the result and persists state.
  *
  * Rules are tried in phase order; the first whose `repeat` mode allows it
- * and whose conditions all hold fires. A rule interrupted mid-way (an action
+ * and whose conditions are all known true fires. A rule interrupted mid-way (an action
  * failed, or the app stopped) resumes from that action before anything else.
  */
 
 import { occurrencesOf } from '../scheduling/wallClock';
 
 import type { Bankroll, Challenge } from '../types/gurushots';
-import type { ScenarioEngineState } from '../types/scenario';
+import type { ScenarioEngineState, ScenarioStage } from '../types/scenario';
+import { DEFAULT_STAGES } from './vocabulary';
 import type { ScenarioDocument, ScenarioRule } from '../settings/scenarioSchema';
 import { firstFailing } from './conditions';
+import type { ExpressionContext } from './expressions';
+import type { FactEvidence, FactSubject } from './facts';
 import { nextWakeAt } from './nextWake';
 
 export interface EvaluateInput {
     scenario: ScenarioDocument;
     state: ScenarioEngineState;
-    challenge: Challenge;
+    /** The challenge a candidate or an active subject is; absent for an installation and a completed subject. */
+    challenge?: Challenge;
+    /** What the facts are read on (absent: the active challenge). */
+    subject?: FactSubject;
+    /** The stage being evaluated: only the rules that run in it are tried (absent: the scenario's default stage). */
+    stage?: ScenarioStage;
     /** unix seconds */
     now: number;
     timezone: string;
     bankroll?: Bankroll | null;
+    /** The evidence a loader fetched for the facts the rules read (a field it did not fetch reads as not loaded). */
+    evidence?: FactEvidence;
+    /** Where a setting reference reads (the snapshot owner's prepared settings); without it every one is unknown. */
+    readSetting?: ExpressionContext['readSetting'];
     /** rules already fired in this pass */
     skipRuleIds?: Set<string>;
     /** false for a plan that has not started: it has no phase clock, so no in-phase bound is a wake (nextWake.ts) */
     phaseClock?: boolean;
 }
+
+/**
+ * The id of the rule a count-1 `absolute` submit row stands for. It is no rule of the document (a document rule id never
+ * starts with "@"): an implicit pre-join rule, `join` once the row is due, that resumes like any other after an interruption.
+ */
+const ADMISSION_RULE_ID = '@admission';
+
+const ADMISSION_RULE: ScenarioRule = {
+    id: ADMISSION_RULE_ID,
+    repeat: 'always',
+    stages: ['preJoin'],
+    do: [{ type: 'join' }],
+};
+
+/**
+ * Whether a phase asks for a photo at count 1: an `absolute` submit schedule with a row of count 1 (an end-aligned one
+ * never does: the first photo is the join itself).
+ */
+const admitsAtCountOne = (phase: ScenarioDocument['phases'][string] | undefined): boolean =>
+    phase?.schedules?.submit?.alignment === 'absolute' && phase.schedules.submit.rows.some((row) => row.count === 1);
+
+/**
+ * Whether the count-1 row of the phase is known and due: only a row whose resolved instant is known and has come asks for
+ * the join. An unknown, absent or future row does not.
+ */
+const admissionDue = (phase: ScenarioDocument['phases'][string], state: ScenarioEngineState, now: number): boolean => {
+    const { published } = state;
+    const submit = published?.phase === state.phase ? published.schedules?.submit : undefined;
+    return (
+        admitsAtCountOne(phase) &&
+        submit?.alignment === 'absolute' &&
+        submit.rows.some((row) => row.count === 1 && row.state === 'known' && row.at <= now)
+    );
+};
+
+/**
+ * The stage a scenario's rules run in when the caller names none: a challenge scenario's active stage, an installation's
+ * account stage.
+ */
+const defaultStage = (scenario: ScenarioDocument): ScenarioStage =>
+    scenario.scope === 'installation' ? 'account' : 'active';
+
+/**
+ * Whether a rule runs in a stage: the stages it declares, else its scenario's default.
+ */
+const runsIn = (rule: ScenarioRule, scenario: ScenarioDocument, stage: ScenarioStage): boolean => {
+    const stages: readonly ScenarioStage[] = rule.stages ?? DEFAULT_STAGES[scenario.scope ?? 'challenge'];
+    return stages.includes(stage);
+};
 
 /**
  * Identity of the local calendar day `now` falls in: the instant of its
@@ -71,6 +132,12 @@ const firedRecord = (state: ScenarioEngineState, now: number, timezone: string) 
     phaseEnteredAt: state.phaseEnteredAt,
 });
 
+/**
+ * When the engine next needs to look: only a subject with a challenge has clock boundaries to predict.
+ */
+const wakeOf = (input: EvaluateInput): number | null =>
+    input.challenge === undefined ? null : nextWakeAt({ ...input, challenge: input.challenge });
+
 const evaluateScenario = (
     input: EvaluateInput,
 ): {
@@ -87,10 +154,12 @@ const evaluateScenario = (
     if (!phase) {
         return { ...base, halted: `Phase "${state.phase}" no longer exists in scenario "${scenario.name}"` };
     }
-    const rules = phase.rules ?? [];
+    const stage = input.stage ?? defaultStage(scenario);
+    const allRules = [...(phase.rules ?? []), ...(admitsAtCountOne(phase) ? [ADMISSION_RULE] : [])];
+    const rules = (phase.rules ?? []).filter((candidate) => runsIn(candidate, scenario, stage));
 
     if (state.inFlight) {
-        const rule = rules.find((candidate) => candidate.id === state.inFlight?.ruleId);
+        const rule = allRules.find((candidate) => candidate.id === state.inFlight?.ruleId);
         if (!rule || state.inFlight.actionIndex >= rule.do.length) {
             return {
                 ...base,
@@ -98,23 +167,34 @@ const evaluateScenario = (
             };
         }
         const resume = { ruleId: rule.id, rule, startIndex: state.inFlight.actionIndex };
+        // An interrupted rule resumes in its own stage: another stage's evaluation leaves it as it is.
+        const own = runsIn(rule, scenario, stage);
         return {
             ...base,
             halted: null,
-            fire: skip.has(rule.id) ? null : resume,
+            fire: skip.has(rule.id) || !own ? null : resume,
             explain: [
                 {
                     ruleId: rule.id,
                     label: rule.label ?? rule.id,
                     status: 'ready',
-                    reason: 'resuming an interrupted rule',
+                    reason: own ? 'resuming an interrupted rule' : 'an interrupted rule of another stage',
                 },
             ],
-            nextWakeAt: nextWakeAt(input),
+            nextWakeAt: wakeOf(input),
         };
     }
 
-    const ctx = { challenge: input.challenge, state, now, timezone, bankroll: input.bankroll ?? null };
+    const ctx = {
+        challenge: input.challenge,
+        subject: input.subject,
+        state,
+        now,
+        timezone,
+        bankroll: input.bankroll ?? null,
+        ...input.evidence,
+        readSetting: input.readSetting,
+    };
     let fire: { ruleId: string; rule: ScenarioRule; startIndex: number } | null = null;
     const explain = [];
     for (const rule of rules) {
@@ -126,8 +206,14 @@ const evaluateScenario = (
         }
         const conditions = rule.if ?? [];
         const failing = firstFailing(conditions, ctx);
-        if (failing !== -1) {
-            const reason = `condition ${failing + 1} (${conditions[failing].type}) does not hold`;
+        if (failing) {
+            // A rule fires only on a known true result: a false condition and one the data could not decide both wait,
+            // and the reason says which.
+            const subject = `condition ${failing.index + 1} (${conditions[failing.index].type})`;
+            const reason =
+                failing.truth.state === 'unknown'
+                    ? `${subject} cannot be decided: ${failing.truth.reason}`
+                    : `${subject} does not hold`;
             explain.push({ ruleId: rule.id, label, status: 'waiting' as const, reason });
             continue;
         }
@@ -139,7 +225,11 @@ const evaluateScenario = (
         });
         fire ??= { ruleId: rule.id, rule, startIndex: 0 };
     }
-    return { ...base, halted: null, fire, explain, nextWakeAt: nextWakeAt(input) };
+    // The count-1 admission comes after every rule of the document, and only while the candidate is before its join.
+    if (!fire && stage === 'preJoin' && !skip.has(ADMISSION_RULE_ID) && admissionDue(phase, state, now)) {
+        fire = { ruleId: ADMISSION_RULE_ID, rule: ADMISSION_RULE, startIndex: 0 };
+    }
+    return { ...base, halted: null, fire, explain, nextWakeAt: wakeOf(input) };
 };
 
 /**
@@ -156,4 +246,4 @@ const startState = (scenario: ScenarioDocument, now: number): ScenarioEngineStat
     inFlight: null,
 });
 
-export { evaluateScenario, firedRecord, localDayOf, startState };
+export { ADMISSION_RULE_ID, admitsAtCountOne, evaluateScenario, firedRecord, localDayOf, runsIn, startState };

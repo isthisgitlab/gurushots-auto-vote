@@ -11,6 +11,8 @@
 
 import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
+import { answerInstallationReadFromSaved } from '../helpers/savedInstallationRead';
+answerInstallationReadFromSaved(settings);
 import VotingLogic = require('../../src/ts/core/services/VotingLogic');
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 const { buildChallenge: buildBaseChallenge } =
@@ -492,6 +494,18 @@ describe('describeDeadlineActions — Auto-Submit clock rows', () => {
             thresholdSec: 0,
             dueAt: Date.UTC(2026, 0, 15, 12) / 1000,
         });
+    });
+
+    test('a zone the installation cannot read gives no clock deadline: nothing is shown for a clock-only submission', () => {
+        mockSettings({ autoSubmitSchedule: [], autoSubmitTime: ['12:00'] });
+        settings.captureInstallationSettings = invalid(
+            jest.fn(() => ({ ok: false, key: 'timezone', reason: 'the published settings have expired' })),
+        );
+        try {
+            expect(autoSubmitRow(clockChallenge(clockNow + 7200))).toBeUndefined();
+        } finally {
+            answerInstallationReadFromSaved(settings);
+        }
     });
 
     test('shows an active clock-only submission as due now', () => {

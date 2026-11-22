@@ -7,10 +7,18 @@
  */
 
 jest.mock('../../src/ts/core/settings', () => ({
+    scenarioSubjectAvailable: jest.fn(() => true),
+    scenarioSubjectReason: jest.fn(() => null),
     getEffectiveSetting: jest.fn(() => false),
     getSetting: jest.fn(() => 'UTC'),
+    // The installation's own read of the time zone: the saved one while no installation scenario overlays it.
+    captureInstallationSettings: jest.fn((keys: string[]) => ({
+        ok: true,
+        values: Object.fromEntries(keys.map((key) => [key, 'UTC'])),
+    })),
     getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
     consumeChosenPhotos: jest.fn(() => false),
+    reconcilePhotoPool: jest.fn(() => false),
 }));
 
 jest.mock('../../src/ts/core/services/VotingLogic', () => ({
@@ -1030,6 +1038,37 @@ describe('pinned photo', () => {
                 clock.mockRestore();
             }
             expect(result.challenges![0].boostHoldUntil).toBe(nextClockBoundary + 60);
+        });
+
+        test('a zone the installation cannot read supplies no clock boundary: the wake follows the fill schedule alone', async () => {
+            const nextClockBoundary = Math.floor(NOW / 60) * 60 + 60;
+            const clockTime = new Date(nextClockBoundary * 1000).toISOString().slice(11, 16);
+            votingLogic.resolvePin.mockReturnValue({ state: 'gone' });
+            votingLogic.getAutoFillThresholdSec.mockReturnValue(900);
+            settings.getEffectiveSetting.mockImplementation((key) => {
+                if (key === 'autoSubmit') return true;
+                if (key === 'autoSubmitTime') return [clockTime];
+                if (key === 'autoSubmitWindowMinutes') return 60;
+                return false;
+            });
+            // Held for the whole pass and put back after it: no other read of the zone may take the answer first.
+            const saved = settings.captureInstallationSettings.getMockImplementation();
+            settings.captureInstallationSettings.mockReturnValue({
+                ok: false,
+                key: 'timezone',
+                reason: 'the published settings have expired',
+            });
+            const clock = jest.spyOn(Date, 'now').mockReturnValue(NOW * 1000);
+            let result: Awaited<ReturnType<typeof run>>;
+            try {
+                result = await run(makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 1800 })]));
+            } finally {
+                clock.mockRestore();
+                settings.captureInstallationSettings.mockReset();
+                if (saved) settings.captureInstallationSettings.mockImplementation(saved);
+            }
+            // Fill boundary NOW + 2700 is past the deadline - 60 s: the wake clamps to the deadline, never to the clock boundary.
+            expect(result.challenges![0].boostHoldUntil).toBe(NOW + 1740);
         });
 
         test('an active clock window arms a bounded later wake, while a malformed close time does not', async () => {

@@ -169,6 +169,65 @@ describe('shouldPlayAutoTurbo', () => {
         expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state: 'FREE' }), NOW)).toBe(false);
     });
 
+    describe('asked for directly (a scenario’s earnTurbo)', () => {
+        const direct = { direct: true };
+
+        test('does not need the Auto-Play Turbo switch, where the normal automation does', () => {
+            mockSettings({ autoTurbo: false });
+            const challenge = turboChallenge({ state: 'FREE', mode: 'classic' });
+            expect(VotingLogic.shouldPlayAutoTurbo(challenge, NOW)).toBe(false);
+            expect(VotingLogic.shouldPlayAutoTurbo(challenge, NOW, {})).toBe(false);
+            expect(VotingLogic.shouldPlayAutoTurbo(challenge, NOW, { direct: false })).toBe(false);
+            expect(VotingLogic.shouldPlayAutoTurbo(challenge, NOW, direct)).toBe(true);
+        });
+
+        test('keeps the normal automation’s other conditions: a missing or closed challenge, the mode, the state and timer', () => {
+            mockSettings({ autoTurbo: false });
+            expect(VotingLogic.shouldPlayAutoTurbo(invalid(null), NOW, direct)).toBe(false);
+            expect(
+                VotingLogic.shouldPlayAutoTurbo(
+                    turboChallenge({ state: 'FREE', mode: 'classic' }, { close_time: NOW }),
+                    NOW,
+                    direct,
+                ),
+            ).toBe(false);
+            expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state: 'FREE' }), NOW, direct)).toBe(false);
+            expect(
+                VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state: 'USED', mode: 'classic' }), NOW, direct),
+            ).toBe(false);
+            expect(
+                VotingLogic.shouldPlayAutoTurbo(
+                    turboChallenge({ state: 'TIMER', mode: 'classic', time_to_open: NOW + 1 }),
+                    NOW,
+                    direct,
+                ),
+            ).toBe(false);
+            expect(
+                VotingLogic.shouldPlayAutoTurbo(
+                    turboChallenge({ state: 'TIMER', mode: 'classic', time_to_open: NOW }),
+                    NOW,
+                    direct,
+                ),
+            ).toBe(true);
+        });
+
+        test('keeps the Snap rules: a Snap marked unavailable or cooling down is left alone', () => {
+            mockSettings({ autoTurbo: false });
+            markSnapUnavailable('42');
+            expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state: 'FREE', mode: 'snap' }), NOW, direct)).toBe(
+                false,
+            );
+            startSnapAutoCooldown('43', NOW * 1000);
+            expect(
+                VotingLogic.shouldPlayAutoTurbo(
+                    turboChallenge({ state: 'FREE', mode: 'snap' }, { id: '43' }),
+                    NOW,
+                    direct,
+                ),
+            ).toBe(false);
+        });
+    });
+
     test.each(['FREE', 'IN_PROGRESS'])('plays a %s turbo', (state) => {
         mockSettings({ autoTurbo: true });
         expect(VotingLogic.shouldPlayAutoTurbo(turboChallenge({ state, mode: 'classic' }), NOW)).toBe(true);

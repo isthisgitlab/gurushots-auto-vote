@@ -10,6 +10,7 @@ import { invalid } from '../helpers/invalid';
 import { pickOption } from './helpers/test-utils';
 import { act } from '@testing-library/preact';
 import { fireSettingsChanged } from './helpers/setup';
+import { installEffectiveBus, presentationOf } from './helpers/effective';
 import { CURRENT_NOTICE_VERSION } from '../../src/ts/core/noticeVersion';
 import { resetPlatformKind } from '../helpers/platformKind';
 import { markPlatformKind } from '../../src/ts/core/platform/kind';
@@ -471,5 +472,56 @@ describe('Login page', () => {
         });
         await Promise.resolve();
         expect(root.textContent).toBe('common.loading');
+    });
+
+    describe('the effective presentation', () => {
+        let bus: ReturnType<typeof installEffectiveBus>;
+        beforeEach(() => {
+            bus = installEffectiveBus();
+            window.api.getSettings = jest.fn().mockResolvedValue({ app: { theme: 'light' } });
+        });
+
+        test("paints a running scenario's theme over the saved one, and the toggle keeps showing and saving the saved one", async () => {
+            bus.answer({ presentation: { success: true, ...presentationOf(5, { theme: 'dark', language: 'en' }) } });
+            render(<LoginPage />);
+            await waitFor(() => expect(document.documentElement.getAttribute('data-theme')).toBe('dark'));
+            expect(themeSelect().value).toBe('light');
+            expect(window.api.setSetting).not.toHaveBeenCalled();
+
+            // The withdrawal is the next projection; nothing is written for it either.
+            act(() => bus.firePresentation(presentationOf(6, { theme: 'light', language: 'en' })));
+            expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+            expect(window.api.setSetting).not.toHaveBeenCalled();
+        });
+
+        test('ignores a stale event, and follows a missed one on focus', async () => {
+            bus.answer({ presentation: { success: true, ...presentationOf(5, { theme: 'dark' }) } });
+            render(<LoginPage />);
+            await waitFor(() => expect(document.documentElement.getAttribute('data-theme')).toBe('dark'));
+            act(() => bus.firePresentation(presentationOf(4, { theme: 'cupcake' })));
+            expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+            bus.answer({ presentation: { success: true, ...presentationOf(7, { theme: 'forest' }) } });
+            await act(async () => {
+                window.dispatchEvent(new Event('focus'));
+            });
+            await waitFor(() => expect(document.documentElement.getAttribute('data-theme')).toBe('forest'));
+        });
+
+        test('keeps the last painted theme and warns, with the reason, when it cannot be read', async () => {
+            bus.answer({ presentation: { success: true, ...presentationOf(5, { theme: 'dark' }) } });
+            render(<LoginPage />);
+            await waitFor(() => expect(document.documentElement.getAttribute('data-theme')).toBe('dark'));
+            act(() =>
+                bus.firePresentation(
+                    presentationOf(6, { available: false, theme: null, reason: 'publication-expired' }),
+                ),
+            );
+            expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+            const warning = screen.getByText('app.effectiveUnavailableTitle').closest('.alert') as HTMLElement;
+            expect(warning.className).toContain('alert-warning');
+            // An unreadable value with no reason of its own still says it cannot be read.
+            act(() => bus.firePresentation(presentationOf(7, { available: false, reason: null })));
+            expect(screen.getByText('app.effectiveUnavailableReason')).toBeTruthy();
+        });
     });
 });

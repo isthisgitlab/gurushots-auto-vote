@@ -193,7 +193,7 @@ jest.mock('../../src/ts/shells/cli/commands/scenarios', () =>
             'scenarioResetCmd',
             'scenarioResetAllCmd',
             'scenarioDryRunCmd',
-            'scenarioSimulateCmd',
+            'scenarioSimulateCommand',
             'scenarioVocabulary',
         ].map((name) => [name, jest.fn(async () => 0)]),
     ),
@@ -534,6 +534,8 @@ const COMMANDS_BLOCK = `Commands:
   fill-exposure - Spend a fill to top exposure up to 100%: fill-exposure --challenge=<id> [--yes]
              Currency actions spend nothing without --yes; they print the cost first.
   start    - Start continuous voting on a schedule (runs until stopped with Ctrl+C)
+  stop     - Stop all automation on this computer (the running app or CLI sees the recorded Stop at its next
+             check; never a pause of the voting stages only). Exits 1 when the Stop could not be saved.
   status   - Show current status and settings, including the Auto-claim and Auto-join lines and, when signed in,
              a Standing section: each challenge's rank, its benchmark gap and its team-match standing.
   bankroll - Show your currency balances (keys / swaps / fills / coins). Alias: coins
@@ -597,7 +599,21 @@ const COMMANDS_BLOCK = `Commands:
   delete-scenario "<name>" - Delete a scenario and clear its assignments
   scenario-status --challenge=<id> - Where a challenge is in its scenario
   scenario-dry-run --challenge=<id> - What the scenario would do right now (spends nothing)
-  scenario-simulate --challenge=<id> - A what-if timeline until the challenge closes (spends nothing)
+  scenario-simulate <name> --subject=installation|candidate|active|completed --until=<ISO 8601> [--challenge=<id>]
+             [--assumptions=<file>] - A what-if run of the whole lifecycle until that time (spends nothing). A
+             challenge subject needs --challenge. The file assumes outcomes ({"outcomes":{"submit":"success"}}).
+  scenario-installation ["<name>"|--clear] [--executor=electron|cli|web|android-service|android-app] - Show the installation
+             scenario; with a name, set it (run by --executor, else by its current runtime, else by the CLI); --clear clears it
+  scenario-owner-transfer --executor=<runtime> --generation=<n> - Hand the installation scenario to another runtime;
+             <n> is the generation scenario-installation or scenario-snapshot showed
+  scenario-pause <challenge id|installation> - Pause a scenario: no rule runs and nothing is published until it resumes
+  scenario-resume <challenge id|installation> - Resume a paused scenario
+  scenario-handoff <challenge id|installation> "<scenario>"|--clear --generation=<n> - Give a subject another scenario, or
+             none; <n> is the generation scenario-snapshot showed
+  photo-pool list|save|create "<name>" <photo id>...|delete "<name>"|rename "<name>" "<new name>" - The named photo pools a
+             scenario phase draws from
+  scenario-snapshot <challenge id|installation> - Where a subject stands: its scenario, generation, pause, settings in force, pins and pool
+  stop-status - The Stop fence: whether it blocks a start, whether the last Stop is saved, and whether the owner acknowledged it
   scenario-reset --challenge=<id> - Forget a challenge's scenario progress (the plan restarts). It may spend again an action
              whose outcome is unknown (no answer, or the app could not record it), and it restarts the scenario's
              spend counter.
@@ -1422,7 +1438,11 @@ describe('scenario commands', () => {
         [['delete-scenario', 'My plan'], 'deleteScenarioCmd', ['My plan']],
         [['scenario-status', '--challenge=7'], 'scenarioStatusCmd', ['7']],
         [['scenario-dry-run', '--challenge=7'], 'scenarioDryRunCmd', ['7']],
-        [['scenario-simulate', '--challenge=7'], 'scenarioSimulateCmd', ['7']],
+        [
+            ['scenario-simulate', 'Plan', '--subject=active', '--challenge=7', '--until=2026-12-01T18:00:00Z'],
+            'scenarioSimulateCommand',
+            [['Plan', '--subject=active', '--challenge=7', '--until=2026-12-01T18:00:00Z']],
+        ],
         [['scenario-reset', '--challenge=7'], 'scenarioResetCmd', ['7']],
         [['scenario-reset', '--all'], 'scenarioResetAllCmd', []],
         [['scenario-vocabulary'], 'scenarioVocabulary', []],

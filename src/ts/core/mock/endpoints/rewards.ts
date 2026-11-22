@@ -40,7 +40,7 @@ const getMyCompletedChallenges: typeof rewardsModule.getMyCompletedChallenges = 
     {
         name: 'getMyCompletedChallenges',
         tokenArg: 0,
-        onNoToken: () => [],
+        onNoToken: () => null,
     },
     async () => {
         await simulateApiResponse({}, 200);
@@ -69,7 +69,7 @@ const getMyMissions: typeof rewardsModule.getMyMissions = mockMethod(
     {
         name: 'getMyMissions',
         tokenArg: 0,
-        onNoToken: () => [],
+        onNoToken: () => null,
     },
     async () => {
         await simulateApiResponse({}, 200);

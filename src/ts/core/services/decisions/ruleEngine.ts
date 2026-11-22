@@ -284,6 +284,11 @@ const _runVotingRules = (
         // than silently dropped (see `blocked`).
         return blocked('voting paused: inside configured pause window', true);
     }
+    // A phase's dynamic pause with a window the evidence could not tell: permission to vote is unproven, so voting waits
+    // until every pause window is known to be clear (the literal pause never gets here: its windows are always known).
+    if (mode === 'auto' && pause.unproven) {
+        return blocked('voting paused: a pause window cannot be determined yet', true);
+    }
 
     // Scheduled fill sits below flash/last-minute (which always win) and above
     // the threshold rules (which it can replace). Computed lazily here so the
@@ -295,7 +300,8 @@ const _runVotingRules = (
     // Replace mode blocks the threshold rules (normal AND final-window) outside
     // the window — auto only, mirroring onlyBoost: a manual vote is explicit
     // user intent and is never refused just because a schedule exists.
-    if (mode === 'auto' && sched.active && sched.replaces) {
+    if (mode === 'auto' && (sched.active || sched.unproven) && sched.replaces) {
+        // An unreadable replacing schedule cannot fall through to ordinary voting: only a known open window votes.
         return blocked('scheduled-fill-only: outside scheduled fill window');
     }
 

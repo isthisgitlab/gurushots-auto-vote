@@ -21,10 +21,16 @@ import type { AutovoteState } from '../../core/autovote/state';
  * What useAutovote returns: the state machine's state plus its controls.
  */
 export type AutovoteContextValue = AutovoteState & {
+    /** The user's Run (stopped) or Resume voting (armed). */
     start: () => Promise<void>;
+    /** Full Stop. */
     stop: () => Promise<void>;
-    toggle: () => Promise<void>;
     rearmSchedule: () => Promise<void>;
+    /**
+     * A Run / Resume is on its way: sent to a computer that has not answered yet (the paired phone), or still awaiting the
+     * fence's admission in this window (the mode does not show voting yet). Stop all automation is offered while it is.
+     */
+    startPending: boolean;
 };
 
 const AutovoteContext = createContext<AutovoteContextValue | null>(null);
@@ -41,7 +47,8 @@ function createRendererDeadlineNotifier(): CycleNotifier | null {
     const deliver = isNativePlatform() ? null : deliverElectronNotification;
     if (!deliver) return null;
     const shared = {
-        getSetting: (key: string) => ipc.getGlobalDefault(key),
+        // The installation's effective value (the saved one, or the published phase over it), not the saved default.
+        getSetting: (key: string) => ipc.getEffectiveSetting(key, null),
         // The core uses closures, no `this`, so the method passes unbound.
         translate: rendererTranslator.t,
         deliver,
@@ -58,6 +65,19 @@ function createRendererDeadlineNotifier(): CycleNotifier | null {
     // Both are self-contained and never throw.
     return (challenges, now) => Promise.all([deadlines(challenges, now), scenarios(challenges)]);
 }
+
+/**
+ * The controller's routes to the host (the priority Stop fence, the installation's publication, the account's wake sources and
+ * the installation-only cycle), over IPC. The Android app's window uses them too: its Stop reaches the native service first
+ * (shells/capacitor/bridge/capacitor.ts), and its fence is a native side store that the service and the alarms read.
+ */
+const hostRoutes = (): Partial<AutovoteHost> => ({
+    stopFence: ipc.createStopFencePort(),
+    runArmedCycle: ipc.runArmedCycle,
+    getAccountWake: ipc.getAccountWakeFromHost,
+    withdrawInstallation: ipc.withdrawInstallationOnHost,
+    reArmInstallation: ipc.rearmInstallationOnHost,
+});
 
 /**
  * Provider for the autovote state machine. A thin adapter over the autovote
@@ -116,6 +136,7 @@ export function AutovoteProvider({
             translate: rendererTranslator.t,
             notifier: createRendererDeadlineNotifier(),
             getOnChallengesRefresh: () => refreshRef.current,
+            ...hostRoutes(),
         };
     }
 
@@ -172,24 +193,20 @@ export function AutovoteProvider({
 
     // Stable per mount: the controller reads the latest onChallengesRefresh
     // identity at call time (through the host), so the controls never need to
-    // track it.
-    const start = useCallback(() => controller.start(), [controller]);
-    const stop = useCallback(() => controller.stop(), [controller]);
-    const rearmSchedule = useCallback(() => controller.rearmSchedule(), [controller]);
-
-    /**
-     * Toggle autovote. Reading the reducer's `running` is correct here:
-     * start/stop dispatch START/STOP — and set the live flag — synchronously
-     * before their first await, so `getState()` never lags behind a session
-     * that is mid-setup.
-     */
-    const toggle = useCallback(async () => {
-        if (controller.getState().running) {
-            await controller.stop();
-        } else {
+    // track it. The local Run is wrapped for the window before the state shows it: admission can await the
+    // fence, and Stop all automation is offered through that window too (a Stop during admission is exactly
+    // what the gate's checks handle).
+    const [localStartPending, setLocalStartPending] = useState(false);
+    const start = useCallback(async () => {
+        setLocalStartPending(true);
+        try {
             await controller.start();
+        } finally {
+            setLocalStartPending(false);
         }
     }, [controller]);
+    const stop = useCallback(() => controller.stop(), [controller]);
+    const rearmSchedule = useCallback(() => controller.rearmSchedule(), [controller]);
 
     // Memoized so consumers re-render only when the state or a control
     // actually changes, not on every provider render (e.g. when the parent
@@ -199,10 +216,11 @@ export function AutovoteProvider({
             ...state,
             start,
             stop,
-            toggle,
             rearmSchedule,
+            // The state is replaced on every change the controller makes, so this is read afresh with it.
+            startPending: localStartPending || (controller.getStartPending?.() ?? false),
         }),
-        [state, start, stop, toggle, rearmSchedule],
+        [state, start, stop, rearmSchedule, controller, localStartPending],
     );
 
     return <AutovoteContext.Provider value={value}>{children}</AutovoteContext.Provider>;

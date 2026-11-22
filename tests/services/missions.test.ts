@@ -8,7 +8,7 @@ jest.mock('../../src/ts/core/logger', () => {
     const level = { info: jest.fn(), warning: jest.fn() };
     return { withCategory: jest.fn(() => level), __level: level };
 });
-jest.mock('../../src/ts/core/settings', () => ({ getEffectiveSetting: jest.fn() }));
+jest.mock('../../src/ts/core/settings', () => ({ captureInstallationSettings: jest.fn() }));
 
 import type { Challenge, Mission } from '../../src/ts/core/types/gurushots';
 import type { CategoryLogger } from '../../src/ts/core/logger';
@@ -29,11 +29,13 @@ import type * as missionsModule from '../../src/ts/core/services/missions';
 const {
     classifyMission,
     loadMissionNeeds,
+    missionEvidence,
     consumeMission,
     neediestFillMission,
     isMissionVoteCandidate,
     missionVoteQuota,
     registerMissionNeeds,
+    getNextMissionExpiry,
     recordManualTurboWin,
     resetMissionLog,
 } = require('../../src/ts/core/services/missions') as typeof missionsModule;
@@ -50,8 +52,12 @@ const mission = (name: string, current: number, required: number, over: Partial<
     ...over,
 });
 
+// The installation's mission switches as the cycle captures them: on for the named ones, off for the rest.
 const enable = (...keys: string[]) =>
-    settings.getEffectiveSetting.mockImplementation((key) => (keys.includes(key) ? true : undefined));
+    settings.captureInstallationSettings.mockImplementation((captured) => ({
+        ok: true,
+        values: Object.fromEntries(captured.map((key) => [key, keys.includes(key)])),
+    }));
 const ALL = ['missionJoinEarly', 'missionUseFills', 'missionSaveTurbos', 'missionUseBoosts', 'missionVote'];
 const infoMessages = () => logger.__level.info.mock.calls.map((c) => c[0]);
 
@@ -180,7 +186,7 @@ describe('classifyMission', () => {
 });
 
 describe('loadMissionNeeds', () => {
-    const deps = (list: Mission[]) => ({ getMyMissions: jest.fn(async () => list) });
+    const deps = (list: Mission[] | null) => ({ getMyMissions: jest.fn(async () => list) });
 
     test('reads what each active mission still needs', async () => {
         const d = deps([
@@ -200,6 +206,47 @@ describe('loadMissionNeeds', () => {
             fillMissions: [{ id: 'Use Fill 3 times', required: 3, current: 1, remaining: 2, spentThisPass: 0 }],
         });
         expect(d.getMyMissions).toHaveBeenCalledWith('tok');
+    });
+
+    test('the earliest expiry of an unfinished mission the list showed is kept for the scheduler, and cleared by a list with none', async () => {
+        const d = deps([
+            mission('Join 7 challenges', 2, 7, { expiration_timestamp: NOW_SEC + 900 }),
+            mission('Use Fill 3 times', 1, 3, { expiration_timestamp: NOW_SEC + 300 }),
+            mission('Vote on 400 photos', 400, 400, { expiration_timestamp: NOW_SEC + 60 }),
+        ]);
+        await loadMissionNeeds('tok', NOW_MS, d);
+        expect(getNextMissionExpiry()).toBe(NOW_SEC + 300);
+        await loadMissionNeeds('tok', NOW_MS, deps([mission('Join 7 challenges', 7, 7)]));
+        expect(getNextMissionExpiry()).toBeNull();
+    });
+
+    test('the switches are captured together as the cycle starts, from the installation read', async () => {
+        const d = deps([mission('Join 7 challenges', 2, 7)]);
+        await loadMissionNeeds('tok', NOW_MS, d);
+        expect(settings.captureInstallationSettings).toHaveBeenCalledTimes(1);
+        expect(settings.captureInstallationSettings).toHaveBeenCalledWith(ALL);
+    });
+
+    test('a switch the installation cannot read means no mission is read this cycle, said so, never the saved switch', async () => {
+        settings.captureInstallationSettings.mockReturnValue({
+            ok: false,
+            key: 'missionVote',
+            reason: 'the published settings of this phase have expired',
+        });
+        const d = deps([mission('Join 7 challenges', 2, 7)]);
+        await expect(loadMissionNeeds('tok', NOW_MS, d)).resolves.toBeNull();
+        expect(d.getMyMissions).not.toHaveBeenCalled();
+        expect(logger.__level.warning).toHaveBeenCalledWith(
+            expect.stringContaining('missionVote is unavailable (the published settings of this phase have expired)'),
+            null,
+        );
+    });
+
+    test('no token reads no switch and no mission', async () => {
+        const d = deps([]);
+        await expect(loadMissionNeeds('', NOW_MS, d)).resolves.toBeNull();
+        expect(settings.captureInstallationSettings).not.toHaveBeenCalled();
+        expect(d.getMyMissions).not.toHaveBeenCalled();
     });
 
     test('complete, claimable, expired and malformed missions need nothing', async () => {
@@ -317,14 +364,38 @@ describe('loadMissionNeeds', () => {
         expect(d.getMyMissions).not.toHaveBeenCalled();
     });
 
-    test('a non-array list reads as no missions; a throw is logged and yields null', async () => {
+    test('a failed read gives the no-needs value marked unreadable, says so, and is not summarised as "none active"', async () => {
+        await expect(loadMissionNeeds('tok', NOW_MS, deps(null))).resolves.toEqual({
+            join: 0,
+            fill: 0,
+            turbo: 0,
+            boost: 0,
+            vote: 0,
+            readable: false,
+        });
         await expect(loadMissionNeeds('tok', NOW_MS, deps(invalid(undefined)))).resolves.toEqual({
             join: 0,
             fill: 0,
             turbo: 0,
             boost: 0,
             vote: 0,
+            readable: false,
         });
+        expect(logger.__level.warning).toHaveBeenCalledWith(
+            'could not read missions (the request failed or the answer held no list)',
+            null,
+        );
+        expect(infoMessages()).toEqual([]);
+    });
+
+    test('a confirmed empty list is a read: no needs, not marked unreadable, and no failure warning', async () => {
+        const needs = await loadMissionNeeds('tok', NOW_MS, deps([]));
+        expect(needs).toEqual({ join: 0, fill: 0, turbo: 0, boost: 0, vote: 0 });
+        expect(needs?.readable).toBeUndefined();
+        expect(logger.__level.warning).not.toHaveBeenCalled();
+    });
+
+    test('a throw is logged and yields null', async () => {
         await expect(
             loadMissionNeeds('tok', NOW_MS, { getMyMissions: jest.fn().mockRejectedValue(new Error('down')) }),
         ).resolves.toBeNull();
@@ -344,6 +415,67 @@ describe('loadMissionNeeds', () => {
         await loadMissionNeeds('tok', NOW_MS, deps([]));
         expect(infoMessages()).toEqual(['🎯 Active missions: turbo 3 to go', 'No automatable mission active']);
         expect(logger.withCategory).toHaveBeenCalledWith('missions');
+    });
+});
+
+describe('missionEvidence', () => {
+    test('reads every kind regardless of the mission settings, and the earliest expiry of an unfinished mission', () => {
+        enable();
+        const evidence = missionEvidence(
+            [
+                mission('Join 7 challenges', 2, 7, { expiration_timestamp: NOW_SEC + 7200 }),
+                mission('Use Fill 3 times', 1, 3, { expiration_timestamp: NOW_SEC + 600 }),
+                mission('Win Turbo 4 times', 0, 4),
+                mission('Vote on 400 photos', 100, 400),
+                mission('Use a boost', 0, 1),
+            ],
+            NOW_SEC,
+        );
+        expect(evidence).toEqual({
+            needs: { join: 5, fill: 2, turbo: 4, boost: 1, vote: 300 },
+            unreadable: [],
+            nextExpiry: NOW_SEC + 600,
+            expiryUnreadable: false,
+        });
+    });
+
+    test('an unclassified mission adds to no need and no expiry; a claimable or expired one needs nothing', () => {
+        const evidence = missionEvidence(
+            [
+                mission('Play 6 Duels', 0, 6, { expiration_timestamp: NOW_SEC + 10 }),
+                mission('Reach Allstar Level 2 times', 0, 2, { expiration_timestamp: NOW_SEC + 20 }),
+                mission('Join 3 challenges', 3, 3, { claim_state: 'CLAIM', expiration_timestamp: NOW_SEC + 30 }),
+                mission('Use Fill 3 times', 0, 3, { expiration_timestamp: NOW_SEC - 5 }),
+                mission('Win Turbo 4 times', 4, 4, { expiration_timestamp: NOW_SEC + 40 }),
+            ],
+            NOW_SEC,
+        );
+        expect(evidence.needs).toEqual({ join: 0, fill: 0, turbo: 0, boost: 0, vote: 0 });
+        expect(evidence.nextExpiry).toBeNull();
+        expect(evidence.unreadable).toEqual([]);
+    });
+
+    test('a recognized mission whose progress cannot be read marks its kind unreadable, never zero', () => {
+        const evidence = missionEvidence(
+            [
+                mission('Join 7 challenges', 0, 7, { progress: invalid({ current: 'x', required: 7 }) }),
+                mission('Use Fill 3 times', 0, 3, { progress: invalid({ current: null, required: null }) }),
+                mission('Use a boost', 0, 1, { progress: invalid(undefined) }),
+                mission('Use 2 boosts', 0, 2),
+            ],
+            NOW_SEC,
+        );
+        expect(evidence.unreadable).toEqual(['join', 'fill', 'boost']);
+        expect(evidence.needs.boost).toBe(2);
+    });
+
+    test('an expiry that is present but not a number makes the expiry unreadable; a missing one is no expiry', () => {
+        expect(
+            missionEvidence([mission('Join 7 challenges', 0, 7, { expiration_timestamp: invalid('soon') })], NOW_SEC),
+        ).toMatchObject({ nextExpiry: null, expiryUnreadable: true });
+        expect(
+            missionEvidence([mission('Join 7 challenges', 0, 7, { expiration_timestamp: undefined })], NOW_SEC),
+        ).toMatchObject({ nextExpiry: null, expiryUnreadable: false, needs: { join: 7 } });
     });
 });
 

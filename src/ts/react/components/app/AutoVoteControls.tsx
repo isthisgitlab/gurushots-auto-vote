@@ -6,6 +6,9 @@ import { ToneNote } from '@/components/ui/ToneNote';
 import { formatDuration } from '@/utils/formatters';
 import { useTick } from '@/hooks/useTick';
 
+import type { ExecutionMode } from '../../../core/autovote/state';
+import type { StopResult } from '../../../core/autovote/runGate';
+
 /**
  * Isolated 1Hz countdown of the startup hold on an auto-resume, so the tick
  * re-renders only this node. A late timer clamps at zero.
@@ -78,32 +81,86 @@ const STATUS_LABEL_KEYS: Record<string, string> = {
     Error: 'app.statusError',
 };
 
+// What the controller is doing → the translation key of its label (the English text is EXECUTION_MODE_LABELS).
+const MODE_LABEL_KEYS: Record<ExecutionMode, string> = {
+    stopped: 'app.modeStopped',
+    armed: 'app.modeArmed',
+    voting: 'app.modeVoting',
+};
+
 /**
- * Autovote controls - toggle button, status, last run, cycle count. While an
- * auto-resume is held at launch (`pendingStartAt`) the toggle gives way to a
- * countdown with Start now / Don't resume, so there is never a second Start.
+ * The line under the mode label about the last full Stop and a Run that is on its way: a Stop the computer has not confirmed
+ * (a paired phone), or one that was not saved (stopped on this device only, which says to press Stop again).
+ */
+function StopNote({
+    lastStop,
+    executionMode,
+    startPending,
+}: {
+    lastStop: StopResult | null;
+    executionMode: ExecutionMode;
+    startPending: boolean;
+}) {
+    const { t } = useTranslation();
+    if (lastStop?.outcome === 'requested') return <p className="text-sm mt-1">{t('app.stopRequested')}</p>;
+    // Only while still stopped: once the mode shows what came of the Run, the mode says it (a local Run runs its
+    // first cycle with the mode already voting).
+    if (startPending && executionMode === 'stopped') {
+        return <p className="text-sm mt-1">{t('app.startRequested')}</p>;
+    }
+    if (lastStop?.outcome === 'stopped-locally' && executionMode === 'stopped') {
+        // Only while stopped: a later Run is a new session, and this Stop's result no longer says anything about it.
+        return (
+            <div role="alert" className="alert alert-warning mt-3 text-sm items-start">
+                <div className="space-y-1">
+                    <p className="font-semibold">{t('app.stopLocalTitle')}</p>
+                    <p>{t('app.stopLocalDetail')}</p>
+                </div>
+            </div>
+        );
+    }
+    return null;
+}
+
+/**
+ * Autovote controls: the execution mode in a polite status region, and the controls that fit it. Stopped: Start. Armed (a
+ * scenario is active and voting is paused): Resume voting, and Stop all automation. Voting: Stop all automation. Stop all
+ * automation always asks for a full Stop, and is kept in view while a Run is on its way and after a Stop that was not saved.
+ * While an auto-resume is held at launch (`pendingStartAt`) the buttons give way to a countdown with Start now / Don't
+ * resume, so there is never a second Start. The activity status (Running, Error, last run, cycles) is a separate line: it
+ * never stands for the mode.
  */
 export function AutoVoteControls({
-    running,
+    executionMode,
+    lastStop,
+    startPending = false,
     status,
     statusClass,
     error = null,
     lastRun,
     cycles,
-    onToggle,
+    onStart,
+    onStop,
     autoJoinActive,
     pendingStartAt,
     onStartNow,
     onCancelResume,
 }: {
-    running: boolean;
+    executionMode: ExecutionMode;
+    /** what the last full Stop came to, or null when none was given */
+    lastStop: StopResult | null;
+    /** a Run / Resume was sent to a host that has not answered yet (the paired phone) */
+    startPending?: boolean;
     status: string;
     statusClass: string;
     /** why the last cycle failed (the reducer's error); shown while the status is Error */
     error?: string | null;
     lastRun: string | null;
     cycles: number;
-    onToggle: () => void | Promise<void>;
+    /** Start (stopped) or Resume voting (armed) */
+    onStart: () => void | Promise<void>;
+    /** Stop all automation */
+    onStop: () => void | Promise<void>;
     autoJoinActive: boolean;
     pendingStartAt: number | null;
     onStartNow: () => void | Promise<void>;
@@ -111,57 +168,91 @@ export function AutoVoteControls({
 }) {
     const { t } = useTranslation();
     const pending = pendingStartAt !== null;
-    const toggleRef = useRef<HTMLButtonElement>(null);
+    const primaryRef = useRef<HTMLButtonElement>(null);
     const focusInHold = useRef(false);
+    const focusInControls = useRef(false);
     // The notice just went away (Start now, Don't resume, or the timer): if focus
-    // was in it, it would drop to the page, so hand it to the toggle (WCAG 2.4.3).
+    // was in it, it would drop to the page, so hand it to the primary control (WCAG 2.4.3).
     useEffect(() => {
         if (pending || !focusInHold.current) return;
         focusInHold.current = false;
-        toggleRef.current?.focus();
+        primaryRef.current?.focus();
     }, [pending]);
+    // A transition swaps the buttons (Stop gives way to Start, Start to Stop): focus that was on one goes to the first of the
+    // new set, never to the page. Removing a focused node fires no blur, so `focusInControls` still says it was there.
+    useEffect(() => {
+        if (focusInControls.current) primaryRef.current?.focus();
+    }, [executionMode, startPending]);
+
+    const canStop = executionMode !== 'stopped' || startPending || lastStop?.outcome === 'stopped-locally';
+    const canStart = !startPending && executionMode !== 'voting';
+    const startKey = executionMode === 'armed' ? 'app.resumeVoting' : 'app.startAutoVote';
+    const stopButton = (
+        <button
+            key="stop"
+            ref={canStart ? undefined : primaryRef}
+            className="btn btn-sm btn-error max-sm:min-h-10"
+            onClick={() => void onStop()}
+        >
+            <StrokeIcon className="w-4 h-4 mr-1" d={ICON_PATHS.close} />
+            {t('app.stopAllAutomation')}
+        </button>
+    );
 
     return (
         <div className="card bg-base-100 shadow-md mb-4">
             <div className="card-body p-4">
                 <div className="flex flex-wrap items-center justify-between gap-4">
-                    {/* Toggle Button — hidden while a held resume offers Start now */}
+                    {/* Controls — hidden while a held resume offers Start now */}
                     {!pending && (
-                        <button
-                            ref={toggleRef}
-                            className={`btn btn-sm max-sm:min-h-10 ${running ? 'btn-error' : 'btn-neutral'}`}
-                            onClick={() => void onToggle()}
+                        <div
+                            className="flex flex-wrap gap-2"
+                            onFocus={() => {
+                                focusInControls.current = true;
+                            }}
+                            onBlur={() => {
+                                focusInControls.current = false;
+                            }}
                         >
-                            {running ? (
-                                <>
-                                    <StrokeIcon className="w-4 h-4 mr-1" d={ICON_PATHS.close} />
-                                    {t('app.stopAutoVote')}
-                                </>
-                            ) : (
-                                <>
+                            {canStart && (
+                                <button
+                                    key="start"
+                                    ref={primaryRef}
+                                    className="btn btn-sm btn-neutral max-sm:min-h-10"
+                                    onClick={() => void onStart()}
+                                >
                                     <StrokeIcon className="w-4 h-4 mr-1" d={ICON_PATHS.smile} />
-                                    {t('app.startAutoVote')}
-                                </>
+                                    {t(startKey)}
+                                </button>
                             )}
-                        </button>
+                            {canStop && stopButton}
+                        </div>
                     )}
 
                     {/* Status Info */}
                     <div className="flex flex-wrap items-center gap-4">
+                        {/* What the controller is doing: a polite region, so a change of mode is announced */}
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium">{t('app.modeLabel')}</span>
+                            <span className="badge badge-sm badge-outline" role="status" aria-live="polite">
+                                {t(MODE_LABEL_KEYS[executionMode])}
+                            </span>
+                        </div>
+
                         {/* Status Badge */}
                         <div className="flex items-center gap-2">
                             <span className="text-sm font-medium">{t('app.status')}</span>
                             <span className={`badge badge-sm ${pending ? 'badge-warning' : statusClass}`} role="status">
                                 {pending ? t('app.statusWaiting') : t(STATUS_LABEL_KEYS[status] ?? 'app.statusError')}
                             </span>
-                            {/* Auto-join is a property of the running autovote, so it
-                                sits next to the running status. Shown only while
-                                autovote runs — that is when the join pre-step
-                                actually executes, and showing it while autovote is
+                            {/* Auto-join is a property of the voting autovote, so it
+                                sits next to the status. Shown only while the voting
+                                stages run — that is when the join pre-step
+                                actually executes, and showing it while they are
                                 off would wrongly imply background joining. Own
                                 polite live region so arming/disarming mid-session
                                 is announced. */}
-                            {autoJoinActive && running && (
+                            {autoJoinActive && executionMode === 'voting' && (
                                 <span
                                     className="badge badge-success badge-sm gap-1"
                                     role="status"
@@ -186,6 +277,12 @@ export function AutoVoteControls({
                             <span className="text-sm">{cycles}</span>
                         </div>
                     </div>
+                </div>
+
+                {/* In armed mode a scenario may still act: say so where it is announced */}
+                <div aria-live="polite">
+                    {executionMode === 'armed' && <p className="text-sm mt-2">{t('app.modeArmedNote')}</p>}
+                    <StopNote lastStop={lastStop} executionMode={executionMode} startPending={startPending} />
                 </div>
 
                 {!pending && status === 'Error' && error && (

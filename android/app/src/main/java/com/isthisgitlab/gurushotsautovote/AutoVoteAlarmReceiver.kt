@@ -14,12 +14,22 @@ import android.util.Log
  * An alarm that fires after automation was stopped (the stop raced it, or it
  * outlived the process) starts nothing: starting a foreground service obliges
  * it to enter the foreground, which a service that is not wanted should not do.
+ * The same holds for an alarm whose Stop epoch is no longer the live one: every
+ * alarm carries the epoch it was scheduled under, and a delivery that finds the
+ * fence blocked, unreadable or past that epoch builds no work and schedules
+ * nothing, so a delayed alarm cannot carry on a run a Stop ended.
  */
 class AutoVoteAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (!ServiceState.isEnabled(context)) return
+        val stamp = intent.getLongExtra(AutoVoteService.EXTRA_STOP_EPOCH, AutoVoteService.NO_EPOCH)
+        if (!StopFence.allows(context, stamp)) {
+            Log.w(AutoVoteService.TAG, "Alarm refused: its Stop epoch is not the live one")
+            return
+        }
         val svc = Intent(context, AutoVoteService::class.java).apply {
             action = AutoVoteService.ACTION_RUN_CYCLE
+            putExtra(AutoVoteService.EXTRA_STOP_EPOCH, stamp)
         }
         try {
             context.startForegroundService(svc)
@@ -29,7 +39,7 @@ class AutoVoteAlarmReceiver : BroadcastReceiver() {
             Log.w(AutoVoteService.TAG, "The system refused to start the service (${e.javaClass.simpleName})")
             val saved = ServiceState.status(context)
             ServiceState.record(context, saved.cycleCount, saved.lastRunAt, AutoVoteService.ERROR_FGS_NOT_ALLOWED)
-            AutoVoteService.scheduleAlarm(context, AutoVoteService.cycleIntervalMs(context))
+            AutoVoteService.scheduleAlarm(context, AutoVoteService.cycleIntervalMs(context), stamp)
         }
     }
 }

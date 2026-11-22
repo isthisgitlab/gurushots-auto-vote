@@ -18,6 +18,12 @@ import { printableChallengeId } from './pin';
 import { openBoostWindows } from '../../../core/voting/boostWindow';
 import { isMarkedChallenge } from '../../../core/challengeMarks';
 import { errorMessage } from '../../../core/errorMessage';
+import { currentAutovoteControl } from '../../../core/autovote/control';
+import { EXECUTION_MODE_LABELS } from '../../../core/autovote/state';
+import { formatDateTime } from '../../../core/dateFormat';
+import { INSTALLATION_KEY } from '../../../core/scenarioStateFile';
+
+import type { ExecutionMode } from '../../../core/autovote/state';
 
 import type { Challenge, RankingTotal } from '../../../core/types/gurushots';
 import type { NullEventHandlers } from '../../../core/types/cli';
@@ -32,6 +38,72 @@ const actionsHandlers = (): ActionsHandlers =>
     (_actionsHandlers ??= (
         require('../../../core/ipc/actions.handlers') as typeof import('../../../core/ipc/actions.handlers')
     ).buildHandlers());
+
+type LifecycleHandlers = NullEventHandlers<
+    ReturnType<typeof import('../../../core/ipc/scenarioLifecycle.handlers').buildLifecycleHandlers>
+>;
+let _lifecycleHandlers: LifecycleHandlers | undefined;
+const lifecycleHandlers = (): LifecycleHandlers =>
+    (_lifecycleHandlers ??= (
+        require('../../../core/ipc/scenarioLifecycle.handlers') as typeof import('../../../core/ipc/scenarioLifecycle.handlers')
+    ).buildLifecycleHandlers());
+
+/**
+ * The mode the saved records last showed, for a process that has no controller to ask: the running flag the controller itself
+ * writes (set only while the voting stages run), else the Stop fence's own record (a Stop: stopped, with its time). An arm the
+ * fence allowed is never read as a mode that still runs — a separate process cannot know what became of it — so armed is never
+ * inferred here. `at` is when that record was made (Unix ms), or null where it carries no time. This is what was reported,
+ * never what is running now.
+ */
+const lastReportedMode = (): { mode: ExecutionMode; at: number | null } => {
+    if (settings.getSetting('autovoteRunning') === true) {
+        const launch = settings.getSetting('autovoteStartedLaunch');
+        return { mode: 'voting', at: isInteger(launch) && launch > 0 ? launch : null };
+    }
+    const read = settings.readStopFence();
+    if (read.state !== 'ok') return { mode: 'stopped', at: null };
+    return { mode: 'stopped', at: read.fence.lastStop?.at ?? null };
+};
+
+/**
+ * The execution mode, the installation scenario's owner and why the scenario is paused. A controller in this process answers
+ * the live mode. A separate process (the usual `status` run) cannot reach the controller of another one: it says what was last
+ * reported, with its time, and that the owner's own status is unavailable — with an installation scenario to name and without
+ * one (a plain voting run has a controller too); it never shows a saved mode as the live one.
+ */
+const logExecutionMode = async () => {
+    const live = currentAutovoteControl();
+    if (live) {
+        logger.withCategory('ui').info(`Execution mode: ${EXECUTION_MODE_LABELS[live.mode()]}`);
+    } else {
+        const { mode, at } = lastReportedMode();
+        logger
+            .withCategory('ui')
+            .info(
+                `Last reported mode: ${EXECUTION_MODE_LABELS[mode]} (${at === null ? 'time unknown' : formatDateTime(new Date(at))})`,
+            );
+    }
+    const installation = settings.getInstallationScenario();
+    if (installation === null) {
+        logger.withCategory('ui').info('Installation scenario: none');
+        if (!live) logger.withCategory('ui').info('Owner status unavailable (a running app reports its own state)');
+        return;
+    }
+    logger.withCategory('ui').info(`Installation scenario: ${stripTerminalControl(installation.scenario)}`);
+    logger
+        .withCategory('ui')
+        .info(`Installation owner: ${installation.executor}${live ? '' : ' — owner status unavailable'}`);
+    try {
+        const snapshot = await lifecycleHandlers()['get-scenario-snapshot'](null, INSTALLATION_KEY);
+        if (snapshot.success !== true) {
+            logger.withCategory('ui').info('Scenario pause: could not be read');
+        } else if (snapshot.paused) {
+            logger.withCategory('ui').info(`Scenario paused: ${stripTerminalControl(snapshot.paused.reason)}`);
+        }
+    } catch {
+        logger.withCategory('ui').info('Scenario pause: could not be read');
+    }
+};
 
 /**
  * The photos pinned for Boost / Turbo, not a challenge's settings: labelled on their own. Only ids that hold a
@@ -242,6 +314,7 @@ const showStatus = async () => {
     const isAuthenticated = getMiddleware().isAuthenticated();
 
     logOverview(userSettings, isAuthenticated);
+    await logExecutionMode();
     await logAutomationStatus();
     logSettingsSection(userSettings);
     logPinnedEntries(userSettings);

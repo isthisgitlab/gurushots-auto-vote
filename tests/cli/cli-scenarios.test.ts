@@ -29,11 +29,25 @@ jest.mock('../../src/ts/core/ipc/scenarios.handlers', () => {
             'reset-all-scenario-state',
             'dry-run-scenario',
             'simulate-scenario',
+            'get-installation-scenario',
+            'set-installation-scenario',
+            'transfer-installation-scenario-owner',
+            'pause-scenario',
+            'resume-scenario',
+            'handoff-scenario',
+            'clear-scenario-assignment',
+            'get-photo-pools',
+            'set-photo-pool',
+            'create-photo-pool',
+            'delete-photo-pool',
+            'rename-photo-pool',
+            'get-scenario-snapshot',
+            'get-stop-status',
         ].map((channel) => [channel, jest.fn()]),
     );
     return { __handlers: handlers, buildHandlers: () => handlers };
 });
-jest.mock('node:fs', () => ({ readFileSync: jest.fn(), writeFileSync: jest.fn() }));
+jest.mock('node:fs', () => ({ readFileSync: jest.fn(), writeFileSync: jest.fn(), statSync: jest.fn() }));
 
 import { invalid } from '../helpers/invalid';
 import fsModule = require('node:fs');
@@ -222,11 +236,40 @@ describe('import-scenario', () => {
     });
 
     test('with --yes it imports', async () => {
+        h['get-scenarios'].mockResolvedValue(invalid({ success: true, scenarios: {}, revision: 4 }));
         h['preview-scenario-import'].mockResolvedValue(preview());
-        h['import-scenario'].mockResolvedValue({ success: true, name: 'Plan' });
+        h['import-scenario'].mockResolvedValue({ success: true, name: 'Plan', unboundPools: [] });
         await expect(cmd.importScenarioCmd('plan.json', { yes: true, overwrite: true })).resolves.toBe(0);
-        expect(h['import-scenario']).toHaveBeenCalledWith(null, '{"name":"Plan"}', { overwrite: true });
+        expect(h['import-scenario']).toHaveBeenCalledWith(null, '{"name":"Plan"}', {
+            overwrite: true,
+            expectedDefinitionRevision: 4,
+        });
         expect(text('success')).toContain('Imported scenario "Plan"');
+    });
+
+    test('an overwrite states the revision of the scenarios it read; a plain import reads nothing', async () => {
+        h['preview-scenario-import'].mockResolvedValue(preview());
+        h['import-scenario'].mockResolvedValue({ success: true, name: 'Plan', unboundPools: [] });
+        h['get-scenarios'].mockClear();
+        await cmd.importScenarioCmd('plan.json', { yes: true });
+        expect(h['get-scenarios']).not.toHaveBeenCalled();
+        expect(h['import-scenario']).toHaveBeenLastCalledWith(null, '{"name":"Plan"}', {
+            overwrite: false,
+            expectedDefinitionRevision: undefined,
+        });
+        // A revision that cannot be read, or a list that cannot be loaded, states none: the overwrite is a conflict.
+        h['get-scenarios'].mockResolvedValueOnce(invalid({ success: true, scenarios: {}, revision: null }));
+        await cmd.importScenarioCmd('plan.json', { yes: true, overwrite: true });
+        expect(h['import-scenario']).toHaveBeenLastCalledWith(null, '{"name":"Plan"}', {
+            overwrite: true,
+            expectedDefinitionRevision: undefined,
+        });
+        h['get-scenarios'].mockResolvedValueOnce(invalid({ success: false, error: 'x' }));
+        await cmd.importScenarioCmd('plan.json', { yes: true, overwrite: true });
+        expect(h['import-scenario']).toHaveBeenLastCalledWith(null, '{"name":"Plan"}', {
+            overwrite: true,
+            expectedDefinitionRevision: undefined,
+        });
     });
 
     test('an unreadable file, an invalid scenario and a failed import', async () => {
@@ -579,87 +622,748 @@ describe('scenario-reset / dry-run / vocabulary', () => {
         await expect(cmd.scenarioDryRunCmd('7')).resolves.toBe(1);
         expect(text('error')).toContain("The challenge's data cannot be read, so the scenario cannot be checked");
         expect(text('error')).not.toContain('challenge-data-incomplete');
-
-        h['simulate-scenario'].mockResolvedValueOnce({ success: false, error: 'challenge-data-incomplete' });
-        await expect(cmd.scenarioSimulateCmd('7')).resolves.toBe(1);
-        expect(text('error')).toContain("The challenge's data cannot be read, so the scenario cannot be checked");
-        expect(text('error')).not.toContain('challenge-data-incomplete');
     });
 
-    test('simulate prints the timeline and why it stops', async () => {
-        h['simulate-scenario'].mockResolvedValueOnce(
-            invalid({
+    describe('scenario-simulate', () => {
+        const UNTIL = '2026-12-01T18:00:00Z';
+        const UNTIL_SEC = Date.parse(UNTIL) / 1000;
+        const base = ['Plan', '--subject=active', '--challenge=7', `--until=${UNTIL}`];
+        const result = (patch: Record<string, unknown> = {}) =>
+            invalid<Resolved<'simulate-scenario'>>({
                 success: true,
                 scenario: 'Plan',
-                startPhase: 'main',
-                events: [
-                    {
-                        at: 1_800_000_000,
-                        phase: 'main',
-                        label: 'Morning entry',
-                        actions: ['enterPhoto'],
-                        toPhase: null,
-                    },
-                    {
-                        at: 1_800_000_600,
-                        phase: 'ma\u202Ein',
-                        label: 'Ho\u202Eld it',
-                        actions: ['swap', 'goto'],
-                        toPhase: 'holding',
-                    },
-                ],
-                stoppedBecause: 'idle',
-                stoppedAt: 1_800_000_600,
-                halted: null,
-            }),
-        );
-        await expect(cmd.scenarioSimulateCmd('7')).resolves.toBe(0);
-        expect(text()).toContain('[main] Morning entry: enterPhoto');
-        expect(text()).toContain('[main] Hold it: swap, goto → phase holding');
-        expect(text()).not.toContain('\u202E');
-        expect(text()).toContain('waits on live data');
-    });
-
-    test('simulate on a Manual Only challenge keeps the timeline and notes it is paused', async () => {
-        h['simulate-scenario'].mockResolvedValueOnce(
-            invalid({
-                success: true,
-                scenario: 'Plan',
-                startPhase: 'main',
-                manualOnly: true,
+                subject: { kind: 'active', challengeId: '7' },
+                now: UNTIL_SEC - 3600,
+                until: UNTIL_SEC,
+                manualOnly: false,
                 events: [],
-                stoppedBecause: 'idle',
-                stoppedAt: 1_800_000_000,
+                assumptions: {},
+                diagnostics: [],
+                deadlines: [],
+                finalState: null,
+                stopReason: 'idle',
+                stoppedAt: UNTIL_SEC - 60,
+                passes: [],
+                needs: null,
                 halted: null,
-            }),
-        );
-        await expect(cmd.scenarioSimulateCmd('7')).resolves.toBe(0);
-        expect(text()).toContain('Paused (Manual Only): this is what would run if the switch were off now.');
-        expect(text()).toContain('Nothing would run.');
-    });
+                ...patch,
+            });
 
-    test('simulate: an empty or halted timeline, and a failure', async () => {
-        h['simulate-scenario'].mockResolvedValueOnce(
-            invalid({
-                success: true,
-                scenario: 'Plan',
-                startPhase: 'x',
-                events: [],
-                stoppedBecause: 'halted',
-                stoppedAt: 1,
-                halted: 'Phase gone',
-            }),
-        );
-        await cmd.scenarioSimulateCmd('7');
-        expect(text()).toContain('Nothing would run.');
-        expect(text('warning')).toContain('Phase gone');
-        h['simulate-scenario'].mockResolvedValueOnce({ success: false, error: 'no-scenario' });
-        await expect(cmd.scenarioSimulateCmd('7')).resolves.toBe(1);
+        test.each([
+            [[], 'Name the scenario to simulate.'],
+            [['A', 'B', '--subject=active'], 'Name one scenario only (put a name with spaces in quotes).'],
+            [['Plan', '--bogus=1'], 'Unknown option --bogus.'],
+            [['Plan', '--subject=active', '--subject=installation'], '--subject is given twice.'],
+            [['Plan'], '--subject is missing: installation, candidate, active or completed.'],
+            [
+                ['Plan', '--subject=active'],
+                '--until is missing: the time to simulate until, as ISO 8601 (2026-12-01T18:00:00Z).',
+            ],
+            [
+                ['Plan', '--subject=installation', `--until=${UNTIL}`, '--challenge=7'],
+                '--challenge is not used with an installation subject: the installation has no challenge.',
+            ],
+            [
+                ['Plan', '--subject=completed', `--until=${UNTIL}`],
+                '--challenge=<id> is required for a completed subject.',
+            ],
+            [
+                ['Plan', '--subject=active', `--until=${UNTIL}`, '--challenge='],
+                '--challenge=<id> is required for a active subject.',
+            ],
+        ])('%p fails plainly: %s', async (argv, message) => {
+            await expect(cmd.scenarioSimulateCommand(argv)).resolves.toBe(1);
+            expect(text('error')).toContain(message);
+            expect(text('info')).toContain('Usage: scenario-simulate <name> --subject=');
+            expect(h['simulate-scenario']).not.toHaveBeenCalled();
+        });
+
+        test('parseSimulateArgs: a name with = in a value keeps it, and the optional flags are carried', () => {
+            expect(
+                cmd.parseSimulateArgs([
+                    'Plan',
+                    '--subject=candidate',
+                    '--challenge=9',
+                    '--until=a=b',
+                    '--assumptions=x=y.json',
+                ]),
+            ).toEqual({
+                ok: true,
+                name: 'Plan',
+                subject: 'candidate',
+                until: 'a=b',
+                challenge: '9',
+                assumptions: 'x=y.json',
+            });
+            expect(cmd.parseSimulateArgs(['Plan', '--subject=installation', '--until=2026-12-01'])).toMatchObject({
+                ok: true,
+                challenge: null,
+                assumptions: null,
+            });
+        });
+
+        test.each([
+            ['2026-12-01T18:00:00Z', Date.parse('2026-12-01T18:00:00Z') / 1000],
+            ['2026-12-01T18:00:00.500+02:00', Math.floor(Date.parse('2026-12-01T16:00:00.500Z') / 1000)],
+            ['2026-12-01T18:00', Math.floor(Date.parse('2026-12-01T18:00') / 1000)],
+            ['2026-12-01', Math.floor(Date.parse('2026-12-01') / 1000)],
+            ['soon', null],
+            ['2026-13-45', null],
+            ['12/01/2026', null],
+            ['', null],
+        ])('--until %p reads as %p', (value, seconds) => {
+            expect(cmd.isoToSeconds(value)).toBe(seconds);
+        });
+
+        test('sends the one request the GUI sends: an installation has no challenge', async () => {
+            h['simulate-scenario'].mockResolvedValueOnce(result({ subject: { kind: 'installation' } }));
+            await expect(
+                cmd.scenarioSimulateCommand(['Whole', '--subject=installation', `--until=${UNTIL}`]),
+            ).resolves.toBe(0);
+            expect(h['simulate-scenario']).toHaveBeenCalledWith(null, {
+                scenario: { name: 'Whole' },
+                subject: { kind: 'installation' },
+                until: UNTIL_SEC,
+            });
+            expect(text()).toContain('Scenario "Plan" on the installation, until');
+        });
+
+        test.each(['candidate', 'active', 'completed'])('a %s subject names its challenge', async (kind) => {
+            h['simulate-scenario'].mockResolvedValueOnce(result({ subject: { kind, challengeId: '7' } }));
+            await cmd.scenarioSimulateCommand(['Plan', `--subject=${kind}`, '--challenge=7', `--until=${UNTIL}`]);
+            expect(h['simulate-scenario']).toHaveBeenCalledWith(null, {
+                scenario: { name: 'Plan' },
+                subject: { kind, challengeId: '7' },
+                until: UNTIL_SEC,
+            });
+            expect(text()).toContain(`on ${kind} challenge 7, until`);
+        });
+
+        test('--assumptions reads a bounded JSON file and passes it on for the handler to validate', async () => {
+            const assumptions = { outcomes: { submit: 'success' } };
+            fs.statSync.mockReturnValueOnce(invalid({ size: 40 }));
+            fs.readFileSync.mockReturnValueOnce(JSON.stringify(assumptions));
+            h['simulate-scenario'].mockResolvedValueOnce(result({ assumptions }));
+            await expect(cmd.scenarioSimulateCommand([...base, '--assumptions=a.json'])).resolves.toBe(0);
+            expect(fs.readFileSync).toHaveBeenCalledWith('a.json', 'utf8');
+            expect(h['simulate-scenario']).toHaveBeenCalledWith(null, expect.objectContaining({ assumptions }));
+            expect(text()).toContain('Assumed: submit success. Nothing else is assumed.');
+        });
+
+        test('an assumptions file that is too big, missing or not JSON stops before anything runs', async () => {
+            fs.statSync.mockReturnValueOnce(invalid({ size: 300 * 1024 }));
+            await expect(cmd.scenarioSimulateCommand([...base, '--assumptions=big.json'])).resolves.toBe(1);
+            expect(text('error')).toContain('larger than 256 KB');
+            fs.statSync.mockImplementationOnce(() => {
+                throw new Error('ENOENT');
+            });
+            await expect(cmd.scenarioSimulateCommand([...base, '--assumptions=none.json'])).resolves.toBe(1);
+            expect(text('error')).toContain('could not be read as JSON: ENOENT');
+            fs.statSync.mockImplementationOnce(() => {
+                throw new Error('');
+            });
+            await expect(cmd.scenarioSimulateCommand([...base, '--assumptions=empty.json'])).resolves.toBe(1);
+            fs.statSync.mockReturnValueOnce(invalid({ size: 3 }));
+            fs.readFileSync.mockReturnValueOnce('{no');
+            await expect(cmd.scenarioSimulateCommand([...base, '--assumptions=bad.json'])).resolves.toBe(1);
+            expect(text('error')).toContain('could not be read as JSON');
+            expect(h['simulate-scenario']).not.toHaveBeenCalled();
+        });
+
+        test('--until that is not ISO 8601 stops before anything runs, naming it safely', async () => {
+            await expect(
+                cmd.scenarioSimulateCommand(['Plan', '--subject=active', '--challenge=7', '--until=to‮morrow']),
+            ).resolves.toBe(1);
+            expect(text('error')).toContain('--until is not a time ISO 8601 knows');
+            expect(text('error')).not.toContain('‮');
+            expect(h['simulate-scenario']).not.toHaveBeenCalled();
+        });
+
+        test('prints each kind of event, the deadlines, the preview, and why it stops', async () => {
+            h['simulate-scenario'].mockResolvedValueOnce(
+                result({
+                    events: [
+                        {
+                            type: 'operation',
+                            at: 1_800_000_000,
+                            subject: '7',
+                            operation: 'submitToChallenge',
+                            outcome: 'success',
+                            applied: true,
+                        },
+                        { type: 'rule', at: 1_800_000_100, subject: '7', phase: 'ma‮in', ruleId: 'r‮1', applied: true },
+                        { type: 'phase', at: 1_800_000_200, subject: '7', from: 'a', to: 'b', applied: true },
+                        {
+                            type: 'published',
+                            at: 1_800_000_300,
+                            subject: '7',
+                            phase: 'b',
+                            validUntil: null,
+                            applied: true,
+                        },
+                        { type: 'notice', at: 1_800_000_400, subject: '7', message: 'he‮llo', applied: true },
+                        { type: 'preview', at: 1_800_009_000, subject: '7', reason: 'next-wake', applied: false },
+                    ],
+                    deadlines: [
+                        { kind: 'submit', count: 2, at: 1_800_000_000 },
+                        { kind: 'vote', start: 1_800_000_000, end: null },
+                        { kind: 'publication', validUntil: null },
+                    ],
+                    stopReason: 'horizon',
+                }),
+            );
+            await expect(cmd.scenarioSimulateCommand(base)).resolves.toBe(0);
+            const out = text();
+            expect(out).toContain('submitToChallenge 7: success');
+            expect(out).toContain('[main] rule r1 ran');
+            expect(out).toContain('phase a → b');
+            expect(out).toContain('[b] settings published');
+            expect(out).toContain('notice: hello');
+            expect(out).not.toContain('‮');
+            expect(out).toContain('Submit 2 by ');
+            expect(out).toContain('vote window ');
+            expect(out).toContain('Settings valid until nothing time-based pending');
+            expect(out).toContain('Next look after that: ');
+            expect(out).toContain('(not simulated)');
+            expect(out).toContain('the time you asked for is reached');
+            expect(out).toContain('Assumed: nothing — a step that needs an outcome stops the run.');
+        });
+
+        test('with nothing to show, it says so; paused by Manual Only, it notes it', async () => {
+            h['simulate-scenario'].mockResolvedValueOnce(result({ manualOnly: true }));
+            await cmd.scenarioSimulateCommand(base);
+            expect(text()).toContain('Nothing would run.');
+            expect(text()).toContain('Paused (Manual Only): this is what would run if the switch were off now.');
+            expect(text()).toContain('waits on live data');
+        });
+
+        test('a run that needs an outcome says which, and how to assume it', async () => {
+            h['simulate-scenario'].mockResolvedValueOnce(
+                result({
+                    stopReason: 'needsEvidence',
+                    needs: { operation: 'submit', subject: '7', at: UNTIL_SEC - 100 },
+                }),
+            );
+            await expect(cmd.scenarioSimulateCommand(base)).resolves.toBe(0);
+            expect(text('warning')).toContain('Needs the outcome of "submit" for 7');
+            expect(text('warning')).toContain('{ "outcomes": { "submit": "success" } }');
+            expect(text()).toContain('it needs an outcome you have not assumed');
+        });
+
+        test('a halted scenario is shown with its reason', async () => {
+            h['simulate-scenario'].mockResolvedValueOnce(result({ stopReason: 'halted', halted: 'Phase g‮one' }));
+            await cmd.scenarioSimulateCommand(base);
+            expect(text('warning')).toContain('Phase gone');
+        });
+
+        test.each([
+            ['invalid-assumptions', 'The assumptions are not valid'],
+            ['assumptions-too-large', 'The assumptions are too large.'],
+            ['until-in-past', '--until is already past.'],
+            ['simulation-busy', 'Another simulation is running'],
+            ['scenario-scope-mismatch', 'This scenario does not fit that subject'],
+            ['subjects-unreadable', 'could not be read, so nothing was simulated'],
+            ['challenge-not-found', 'That challenge is not in the list'],
+            ['unknown-scenario', 'There is no saved scenario with that name.'],
+        ])('the refusal %s is worded, never the raw code', async (error, words) => {
+            h['simulate-scenario'].mockResolvedValueOnce({ success: false, error });
+            await expect(cmd.scenarioSimulateCommand(base)).resolves.toBe(1);
+            expect(text('error')).toContain(words);
+            expect(text('error')).not.toContain(error);
+        });
+
+        test('a challenge whose data cannot be read is worded, and a scenario that is not valid shows its issues', async () => {
+            h['simulate-scenario'].mockResolvedValueOnce({ success: false, error: 'challenge-data-incomplete' });
+            await expect(cmd.scenarioSimulateCommand(base)).resolves.toBe(1);
+            expect(text('error')).toContain("The challenge's data cannot be read, so the scenario cannot be checked");
+            h['simulate-scenario'].mockResolvedValueOnce({
+                success: false,
+                error: 'No phase',
+                issues: [{ path: 'start', message: 'No phase' }],
+            });
+            await expect(cmd.scenarioSimulateCommand(base)).resolves.toBe(1);
+            expect(text('error')).toContain('Simulation failed: No phase');
+            expect(text('error')).toContain('start: No phase');
+        });
     });
 
     test('vocabulary lists every piece', async () => {
         await expect(cmd.scenarioVocabulary()).resolves.toBe(0);
         expect(text()).toContain('dailyWindow');
         expect(text()).toContain('enterPhoto');
+    });
+});
+
+describe('the installation scenario and lifecycle commands', () => {
+    const wrong = (message = 'Wrong arguments') => expect(text('error')).toContain(message);
+
+    describe('scenario-installation', () => {
+        test('with no argument it shows the assignment and its owner', async () => {
+            h['get-installation-scenario'].mockResolvedValue(
+                invalid({
+                    success: true,
+                    installation: { scenario: 'Plan', executor: 'electron', generation: 4 },
+                    generation: 4,
+                }),
+            );
+            await expect(cmd.scenarioInstallationCommand([])).resolves.toBe(0);
+            expect(text('info')).toContain('Installation scenario: "Plan", run by electron (generation 4).');
+            h['get-installation-scenario'].mockResolvedValue(
+                invalid({ success: true, installation: null, generation: 0 }),
+            );
+            await cmd.scenarioInstallationCommand([]);
+            expect(text('info')).toContain('The installation has no scenario.');
+        });
+
+        test('a name sets it, run by the current owner, or by --executor, or by the CLI when none is set', async () => {
+            h['set-installation-scenario'].mockResolvedValue(
+                invalid({ success: true, installation: {}, generation: 5 }),
+            );
+            h['get-installation-scenario'].mockResolvedValue(
+                invalid({
+                    success: true,
+                    installation: { scenario: 'Old', executor: 'web', generation: 4 },
+                    generation: 4,
+                }),
+            );
+            await expect(cmd.scenarioInstallationCommand(['Plan'])).resolves.toBe(0);
+            expect(h['set-installation-scenario']).toHaveBeenLastCalledWith(null, 'Plan', 'web', 4);
+            expect(text('success')).toContain('Installation scenario "Plan" is set, run by web.');
+            await cmd.scenarioInstallationCommand(['Plan', '--executor=electron']);
+            expect(h['set-installation-scenario']).toHaveBeenLastCalledWith(null, 'Plan', 'electron', 4);
+            h['get-installation-scenario'].mockResolvedValue(
+                invalid({ success: true, installation: null, generation: 0 }),
+            );
+            await cmd.scenarioInstallationCommand(['Plan']);
+            expect(h['set-installation-scenario']).toHaveBeenLastCalledWith(null, 'Plan', 'cli', 0);
+        });
+
+        test('--clear clears it under its generation', async () => {
+            h['get-installation-scenario'].mockResolvedValue(
+                invalid({
+                    success: true,
+                    installation: { scenario: 'Plan', executor: 'cli', generation: 4 },
+                    generation: 4,
+                }),
+            );
+            h['clear-scenario-assignment'].mockResolvedValue(invalid({ success: true, generation: 5 }));
+            await expect(cmd.scenarioInstallationCommand(['--clear'])).resolves.toBe(0);
+            expect(h['clear-scenario-assignment']).toHaveBeenCalledWith(null, '@installation', 4);
+            expect(text('success')).toContain('Installation scenario cleared.');
+        });
+
+        test('a refusal says why in plain words and exits 1', async () => {
+            h['get-installation-scenario'].mockResolvedValue(
+                invalid({ success: true, installation: null, generation: 0 }),
+            );
+            h['set-installation-scenario'].mockResolvedValue(invalid({ success: false, error: 'incompatible-scope' }));
+            await expect(cmd.scenarioInstallationCommand(['Plan'])).resolves.toBe(1);
+            expect(text('error')).toContain(
+                'Could not change the installation scenario: that scenario is not an installation scenario',
+            );
+            h['clear-scenario-assignment'].mockResolvedValue(invalid({ success: false, error: 'weird-code' }));
+            await expect(cmd.scenarioInstallationCommand(['--clear'])).resolves.toBe(1);
+            expect(text('error')).toContain('weird-code');
+        });
+
+        test('progress that cannot be read stops a change, and a failed read is reported', async () => {
+            h['get-installation-scenario'].mockResolvedValue(
+                invalid({ success: true, installation: null, generation: null }),
+            );
+            await expect(cmd.scenarioInstallationCommand(['Plan'])).resolves.toBe(1);
+            expect(text('error')).toContain('the saved progress cannot be read');
+            expect(h['set-installation-scenario']).not.toHaveBeenCalled();
+            h['get-installation-scenario'].mockResolvedValue(invalid(failure));
+            await expect(cmd.scenarioInstallationCommand([])).resolves.toBe(1);
+        });
+
+        test('missing, extra and contradicting arguments fail plainly, and nothing changes', async () => {
+            for (const argv of [
+                ['Plan', 'Other'],
+                ['--clear', 'Plan'],
+                ['--clear', '--executor=cli'],
+                ['--executor=cli'],
+                ['Plan', '--executor=a', '--executor=b'],
+                ['Plan', '--unknown'],
+                ['Plan', '--clear=yes'],
+            ]) {
+                logger.__calls.length = 0;
+                await expect(cmd.scenarioInstallationCommand(argv)).resolves.toBe(1);
+                wrong();
+            }
+            expect(h['set-installation-scenario']).not.toHaveBeenCalled();
+            expect(h['clear-scenario-assignment']).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('scenario-owner-transfer', () => {
+        test('moves the owner under the generation given', async () => {
+            h['transfer-installation-scenario-owner'].mockResolvedValue(
+                invalid({ success: true, installation: { executor: 'web' }, generation: 5 }),
+            );
+            await expect(cmd.scenarioOwnerTransferCommand(['--executor=web', '--generation=4'])).resolves.toBe(0);
+            expect(h['transfer-installation-scenario-owner']).toHaveBeenCalledWith(null, 'web', 4);
+            expect(text('success')).toContain('The installation scenario is now run by web (generation 5).');
+        });
+
+        test('a refusal exits 1 and a wrong shape fails plainly', async () => {
+            h['transfer-installation-scenario-owner'].mockResolvedValue(
+                invalid({ success: false, error: 'stale-generation', generation: 9 }),
+            );
+            await expect(cmd.scenarioOwnerTransferCommand(['--executor=web', '--generation=4'])).resolves.toBe(1);
+            expect(text('error')).toContain('it changed since you looked');
+            for (const argv of [
+                [],
+                ['--executor=web'],
+                ['--generation=4'],
+                ['--executor=web', '--generation=x'],
+                ['--executor=web', '--generation=-1'],
+                ['--executor=web', '--generation=4', 'extra'],
+            ]) {
+                logger.__calls.length = 0;
+                await expect(cmd.scenarioOwnerTransferCommand(argv)).resolves.toBe(1);
+                wrong();
+            }
+        });
+    });
+
+    describe('scenario-pause / scenario-resume', () => {
+        test('pause and resume a challenge, or the installation', async () => {
+            h['pause-scenario'].mockResolvedValue(invalid({ success: true, paused: true }));
+            h['resume-scenario'].mockResolvedValue(invalid({ success: true, paused: false }));
+            await expect(cmd.scenarioPauseCommand(['12'])).resolves.toBe(0);
+            expect(h['pause-scenario']).toHaveBeenCalledWith(null, '12');
+            expect(text('success')).toContain('Paused the scenario of challenge 12.');
+            await expect(cmd.scenarioResumeCommand(['installation'])).resolves.toBe(0);
+            expect(h['resume-scenario']).toHaveBeenCalledWith(null, '@installation');
+            expect(text('success')).toContain('Resumed the scenario of the installation.');
+            await cmd.scenarioPauseCommand(['@installation']);
+            expect(h['pause-scenario']).toHaveBeenLastCalledWith(null, '@installation');
+        });
+
+        test('a refusal exits 1; missing or extra arguments fail plainly', async () => {
+            h['pause-scenario'].mockResolvedValue(invalid({ success: false, error: 'no-progress' }));
+            await expect(cmd.scenarioPauseCommand(['12'])).resolves.toBe(1);
+            expect(text('error')).toContain('Could not pause the scenario: it has no progress yet');
+            h['resume-scenario'].mockResolvedValue(invalid({ success: false, error: 'busy' }));
+            await expect(cmd.scenarioResumeCommand(['12'])).resolves.toBe(1);
+            for (const argv of [[], ['12', '13'], ['12', '--now']]) {
+                logger.__calls.length = 0;
+                await expect(cmd.scenarioPauseCommand(argv)).resolves.toBe(1);
+                wrong();
+                logger.__calls.length = 0;
+                await expect(cmd.scenarioResumeCommand(argv)).resolves.toBe(1);
+                wrong();
+            }
+        });
+    });
+
+    describe('scenario-handoff', () => {
+        test('hands a subject to a scenario, or clears it, under the generation given', async () => {
+            h['handoff-scenario'].mockResolvedValue(invalid({ success: true, generation: 3 }));
+            h['clear-scenario-assignment'].mockResolvedValue(invalid({ success: true, generation: 4 }));
+            await expect(cmd.scenarioHandoffCommand(['12', 'Next', '--generation=2'])).resolves.toBe(0);
+            expect(h['handoff-scenario']).toHaveBeenCalledWith(null, '12', 'Next', 2);
+            expect(text('success')).toContain('Challenge 12 now follows "Next".');
+            await expect(cmd.scenarioHandoffCommand(['12', '--clear', '--generation=3'])).resolves.toBe(0);
+            expect(h['clear-scenario-assignment']).toHaveBeenCalledWith(null, '12', 3);
+            expect(text('success')).toContain('Challenge 12 has no scenario now.');
+            await cmd.scenarioHandoffCommand(['installation', 'Next', '--generation=2']);
+            expect(h['handoff-scenario']).toHaveBeenLastCalledWith(null, '@installation', 'Next', 2);
+            expect(text('success')).toContain('The installation now follows "Next".');
+            await cmd.scenarioHandoffCommand(['installation', '--clear', '--generation=2']);
+            expect(text('success')).toContain('The installation has no scenario now.');
+        });
+
+        test('a refusal exits 1', async () => {
+            h['handoff-scenario'].mockResolvedValue(invalid({ success: false, error: 'unresolved-spend' }));
+            await expect(cmd.scenarioHandoffCommand(['12', 'Next', '--generation=2'])).resolves.toBe(1);
+            expect(text('error')).toContain('Could not hand over the scenario: a spend may not be finished');
+            h['clear-scenario-assignment'].mockResolvedValue(invalid({ success: false, error: 'busy' }));
+            await expect(cmd.scenarioHandoffCommand(['12', '--clear', '--generation=2'])).resolves.toBe(1);
+        });
+
+        test('missing, extra and contradicting arguments fail plainly', async () => {
+            for (const argv of [
+                [],
+                ['12'],
+                ['12', 'Next'],
+                ['12', '--clear'],
+                ['12', 'Next', '--clear', '--generation=2'],
+                ['12', 'Next', 'More', '--generation=2'],
+                ['12', 'Next', '--generation=2', '--generation=3'],
+                ['12', 'Next', '--generation=two'],
+                ['12', 'Next', '--generation=2', '--other'],
+            ]) {
+                logger.__calls.length = 0;
+                await expect(cmd.scenarioHandoffCommand(argv)).resolves.toBe(1);
+                wrong();
+            }
+            expect(h['handoff-scenario']).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('photo-pool', () => {
+        test('list names each pool and how many photos it holds', async () => {
+            h['get-photo-pools'].mockResolvedValue(invalid({ success: true, pools: { a: ['1', '2'], b: [] } }));
+            await expect(cmd.photoPoolCommand(['list'])).resolves.toBe(0);
+            expect(text('info')).toContain('Photo pools (2):');
+            expect(text('info')).toContain('a — 2 photo(s)');
+            h['get-photo-pools'].mockResolvedValue(invalid({ success: true, pools: {} }));
+            await cmd.photoPoolCommand(['list']);
+            expect(text('info')).toContain('No photo pools yet.');
+            h['get-photo-pools'].mockResolvedValue(invalid(failure));
+            await expect(cmd.photoPoolCommand(['list'])).resolves.toBe(1);
+        });
+
+        test('save, delete and rename call the handlers and report plainly', async () => {
+            h['set-photo-pool'].mockResolvedValue(invalid({ success: true }));
+            h['delete-photo-pool'].mockResolvedValue(invalid({ success: true }));
+            h['rename-photo-pool'].mockResolvedValue(invalid({ success: true }));
+            await expect(cmd.photoPoolCommand(['save', 'a', '1', '2'])).resolves.toBe(0);
+            expect(h['set-photo-pool']).toHaveBeenCalledWith(null, 'a', ['1', '2']);
+            expect(text('success')).toContain('Saved the pool "a" (2 photo(s)).');
+            await expect(cmd.photoPoolCommand(['delete', 'a'])).resolves.toBe(0);
+            expect(h['delete-photo-pool']).toHaveBeenCalledWith(null, 'a');
+            expect(text('success')).toContain('Deleted the pool "a".');
+            await expect(cmd.photoPoolCommand(['rename', 'a', 'b'])).resolves.toBe(0);
+            expect(h['rename-photo-pool']).toHaveBeenCalledWith(null, 'a', 'b');
+            expect(text('success')).toContain('Renamed the pool "a" to "b".');
+        });
+
+        test('create makes a pool that does not exist yet, and a name that is taken exits 1 with its reason', async () => {
+            h['create-photo-pool'].mockResolvedValue(invalid({ success: true }));
+            await expect(cmd.photoPoolCommand(['create', 'a', '1', '2'])).resolves.toBe(0);
+            expect(h['create-photo-pool']).toHaveBeenCalledWith(null, 'a', ['1', '2']);
+            expect(text('success')).toContain('Created the pool "a" (2 photo(s)).');
+            // Create never replaces: it does not go through the upsert.
+            expect(h['set-photo-pool']).not.toHaveBeenCalled();
+            h['create-photo-pool'].mockResolvedValue(invalid({ success: false, error: 'exists' }));
+            await expect(cmd.photoPoolCommand(['create', 'a', '1'])).resolves.toBe(1);
+            expect(text('error')).toContain('Could not create the pool: a pool with that name exists');
+        });
+
+        test('a refusal exits 1 with its reason', async () => {
+            h['set-photo-pool'].mockResolvedValue(invalid({ success: false, error: 'cap' }));
+            await expect(cmd.photoPoolCommand(['save', 'a', '1'])).resolves.toBe(1);
+            expect(text('error')).toContain('Could not save the pool: the account is at its pool limit');
+            h['delete-photo-pool'].mockResolvedValue(invalid({ success: false, error: 'unresolved-work' }));
+            await expect(cmd.photoPoolCommand(['delete', 'a'])).resolves.toBe(1);
+            h['rename-photo-pool'].mockResolvedValue(invalid({ success: false, error: 'exists' }));
+            await expect(cmd.photoPoolCommand(['rename', 'a', 'b'])).resolves.toBe(1);
+            expect(text('error')).toContain('a pool with that name exists');
+        });
+
+        test('an unknown action, and missing or extra arguments, fail plainly', async () => {
+            for (const argv of [
+                [],
+                ['other'],
+                ['list', 'x'],
+                ['save'],
+                ['save', 'a'],
+                ['create'],
+                ['create', 'a'],
+                ['delete'],
+                ['delete', 'a', 'b'],
+                ['rename', 'a'],
+                ['rename', 'a', 'b', 'c'],
+                ['list', '--x'],
+            ]) {
+                logger.__calls.length = 0;
+                await expect(cmd.photoPoolCommand(argv)).resolves.toBe(1);
+                wrong();
+            }
+            expect(h['set-photo-pool']).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('scenario-snapshot', () => {
+        const base = (over: object = {}) => ({
+            success: true,
+            subject: '12',
+            assignment: 'Plan',
+            corrupt: false,
+            paused: null,
+            generation: 3,
+            withdrawn: false,
+            base: {
+                a: { state: 'known', value: { kind: 'number', value: 1, quantity: 'count' } },
+                b: { state: 'known', value: { kind: 'number', value: 2, quantity: 'count' } },
+                c: { state: 'unknown', reason: 'x', dependencies: [] },
+            },
+            effective: {
+                a: { state: 'known', value: { kind: 'number', value: 1, quantity: 'count' } },
+                b: { state: 'known', value: { kind: 'number', value: 5, quantity: 'count' } },
+                c: { state: 'unknown', reason: 'no-publication', dependencies: [] },
+                d: { state: 'absent', reason: 'not-present' },
+            },
+            overlay: null,
+            publication: { revision: 2, observedAt: 100, validUntil: null, profile: null },
+            schedules: null,
+            pins: { effective: { boost: '9', turbo: null }, stored: { boost: null, turbo: null } },
+            pool: { name: 'p', only: true, inOrder: false, ids: ['1', '2'], block: null },
+            ...over,
+        });
+
+        test('a challenge: its scenario, generation, what differs from the saved settings, what is unavailable, its pins and pool', async () => {
+            h['get-scenario-snapshot'].mockResolvedValue(invalid(base()));
+            await expect(cmd.scenarioSnapshotCommand(['12'])).resolves.toBe(0);
+            expect(h['get-scenario-snapshot']).toHaveBeenCalledWith(null, '12');
+            const out = text('info');
+            expect(out).toContain('Challenge 12: scenario "Plan", generation 3.');
+            expect(out).toContain('Not paused.');
+            expect(out).toContain('b: 2 → 5');
+            expect(out).toContain('c: not available (no-publication)');
+            expect(out).toContain('d: not available (not-present)');
+            expect(out).toContain('Boost pin: 9');
+            expect(out).toContain('Turbo pin: none');
+            expect(out).toContain('Photo pool "p": 2 photo(s)');
+            expect(out).toContain('Settings published (revision 2).');
+        });
+
+        test('a list value, an unreadable saved value, a missing one, a pause with no reason and a Boost pin of none', async () => {
+            h['get-scenario-snapshot'].mockResolvedValue(
+                invalid(
+                    base({
+                        paused: { at: 100, reason: '' },
+                        base: { l: { state: 'unknown', reason: 'x', dependencies: [] } },
+                        effective: {
+                            l: { state: 'known', value: { kind: 'list', value: ['a', 'b'] } },
+                            m: { state: 'known', value: { kind: 'string', value: 'v' } },
+                        },
+                        pins: { effective: { boost: null, turbo: '4' }, stored: { boost: null, turbo: null } },
+                    }),
+                ),
+            );
+            await cmd.scenarioSnapshotCommand(['12']);
+            const out = text('info');
+            expect(out).toContain('l: (unknown) → a, b');
+            expect(out).toContain('m: (absent) → v');
+            expect(out).toMatch(/^Paused since .+\.$/m);
+            expect(out).toContain('Boost pin: none');
+            expect(out).toContain('Turbo pin: 4');
+        });
+
+        test('the installation, paused and withdrawn, with an unreadable progress record', async () => {
+            h['get-scenario-snapshot'].mockResolvedValue(
+                invalid(
+                    base({
+                        subject: '@installation',
+                        assignment: { scenario: 'Plan', executor: 'cli', generation: 4 },
+                        paused: { at: 100, reason: 'later' },
+                        withdrawn: true,
+                        pins: null,
+                        pool: null,
+                        publication: null,
+                    }),
+                ),
+            );
+            await expect(cmd.scenarioSnapshotCommand(['installation'])).resolves.toBe(0);
+            expect(h['get-scenario-snapshot']).toHaveBeenCalledWith(null, '@installation');
+            const out = text('info');
+            expect(out).toContain('The installation: scenario "Plan", run by cli, generation 3.');
+            expect(out).toContain('Paused');
+            expect(out).toContain('later');
+            expect(out).toContain('A full Stop withdrew its settings');
+            h['get-scenario-snapshot'].mockResolvedValue(
+                invalid(base({ corrupt: 'record', generation: null, assignment: null, pool: null, pins: null })),
+            );
+            logger.__calls.length = 0;
+            await cmd.scenarioSnapshotCommand(['12']);
+            expect(text('info')).toContain('Challenge 12: no scenario, generation unknown.');
+            expect(text('warning')).toContain('The saved progress cannot be read.');
+        });
+
+        test('a failure exits 1, and the arguments are checked', async () => {
+            h['get-scenario-snapshot'].mockResolvedValue(invalid(failure));
+            await expect(cmd.scenarioSnapshotCommand(['12'])).resolves.toBe(1);
+            for (const argv of [[], ['12', '13'], ['12', '--x']]) {
+                logger.__calls.length = 0;
+                await expect(cmd.scenarioSnapshotCommand(argv)).resolves.toBe(1);
+                wrong();
+            }
+        });
+    });
+
+    describe('stop-status', () => {
+        test('says whether the fence is blocked, whether the last Stop is durable and whether the owner acknowledged it', async () => {
+            h['get-stop-status'].mockResolvedValue(
+                invalid({
+                    success: true,
+                    fence: {
+                        state: 'ok',
+                        stopEpoch: 2,
+                        blocked: true,
+                        lastStop: { requestId: 'r', at: 100, durable: true },
+                        lastArm: null,
+                    },
+                    durable: true,
+                    ownerAcknowledged: true,
+                }),
+            );
+            await expect(cmd.stopStatusCommand([])).resolves.toBe(0);
+            const out = text('info');
+            expect(out).toContain('Stop fence: epoch 2, blocked.');
+            expect(out).toContain('saved for every runtime');
+            expect(out).toContain('The installation owner has acknowledged it.');
+        });
+
+        test('open, not durable and not acknowledged; missing; unreadable', async () => {
+            h['get-stop-status'].mockResolvedValue(
+                invalid({
+                    success: true,
+                    fence: {
+                        state: 'ok',
+                        stopEpoch: 3,
+                        blocked: false,
+                        lastStop: { requestId: 'r', at: 100, durable: false },
+                        lastArm: null,
+                    },
+                    durable: false,
+                    ownerAcknowledged: false,
+                }),
+            );
+            await cmd.stopStatusCommand([]);
+            expect(text('info')).toContain('Stop fence: epoch 3, open.');
+            expect(text('info')).toContain('only this runtime stopped');
+            expect(text('info')).toContain('has not acknowledged it');
+            h['get-stop-status'].mockResolvedValue(
+                invalid({
+                    success: true,
+                    fence: { state: 'ok', stopEpoch: 0, blocked: false, lastStop: null, lastArm: null },
+                    durable: null,
+                    ownerAcknowledged: null,
+                }),
+            );
+            logger.__calls.length = 0;
+            await cmd.stopStatusCommand([]);
+            expect(text('info')).toContain('No Stop has been recorded.');
+            expect(text('info')).toContain('not known whether the installation owner');
+            h['get-stop-status'].mockResolvedValue(
+                invalid({ success: true, fence: { state: 'missing' }, durable: null, ownerAcknowledged: null }),
+            );
+            logger.__calls.length = 0;
+            await cmd.stopStatusCommand([]);
+            expect(text('info')).toContain('Stop fence: not created yet.');
+            h['get-stop-status'].mockResolvedValue(
+                invalid({
+                    success: true,
+                    fence: { state: 'unreadable', reason: 'malformed' },
+                    durable: null,
+                    ownerAcknowledged: null,
+                }),
+            );
+            logger.__calls.length = 0;
+            await expect(cmd.stopStatusCommand([])).resolves.toBe(1);
+            expect(text('error')).toContain('Stop fence cannot be read (malformed)');
+        });
+
+        test('a failure exits 1 and extra arguments fail plainly', async () => {
+            h['get-stop-status'].mockResolvedValue(invalid(failure));
+            await expect(cmd.stopStatusCommand([])).resolves.toBe(1);
+            logger.__calls.length = 0;
+            await expect(cmd.stopStatusCommand(['now'])).resolves.toBe(1);
+            wrong();
+        });
     });
 });

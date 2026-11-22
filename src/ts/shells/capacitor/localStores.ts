@@ -22,6 +22,8 @@ import { initializeSwapBackAsync, flushSwapBackWrites } from '../../core/swapBac
 import { initializeAutoSpendAsync, flushAutoSpendWrites } from '../../core/currencyAutoStore';
 import { initializeEntryAgesAsync, flushEntryAgeWrites } from '../../core/entryAgeStore';
 import { initializeScenarioStateAsync, flushScenarioStateWrites } from '../../core/scenarioStateStore';
+import { initializeStopFenceAsync, flushStopFenceWrites } from '../../core/settings/scenarioLifecycle';
+import { initializeScenarioControlsAsync, flushScenarioControlsWrites } from '../../core/settings/scenarioControls';
 import { initializeDiagnosticsAsync, flushDiagnosticsWrites } from '../../core/services/semantic/diagnostics';
 import { initializePhotoStatsAsync, flushPhotoStatsWrites } from '../../core/services/photoStats';
 import { withCategory } from '../../core/logger';
@@ -69,6 +71,20 @@ const LOCAL_STORES = [
         flush: () =>
             void flushScenarioStateWrites().catch((err) =>
                 withCategory('general').error('Scenario state not persisted', err),
+            ),
+    },
+    {
+        // The priority Stop fence (epoch and block of full Stops): hydrated so a relaunch reads it, never as epoch 0.
+        initialize: initializeStopFenceAsync,
+        flush: () =>
+            void flushStopFenceWrites().catch((err) => withCategory('general').error('Stop fence not persisted', err)),
+    },
+    {
+        // The ordinary control inbox (requests and their recorded results): hydrated so a relaunch reads what is pending.
+        initialize: initializeScenarioControlsAsync,
+        flush: () =>
+            void flushScenarioControlsWrites().catch((err) =>
+                withCategory('general').error('Scenario controls not persisted', err),
             ),
     },
     {

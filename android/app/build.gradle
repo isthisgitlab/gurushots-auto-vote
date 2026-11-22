@@ -2,6 +2,19 @@ apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 apply plugin: 'jacoco'
 
+// Robolectric 4.17 SDKs for robolectric.properties and @Config(sdk = [30]).
+def robolectricSdks = [
+    'org.robolectric:android-all-instrumented:11-robolectric-6757853-i7',
+    'org.robolectric:android-all-instrumented:16-robolectric-13921718-i7',
+].collect { coordinate ->
+    configurations.detachedConfiguration(dependencies.create(coordinate)).tap { transitive = false }
+}
+def robolectricSdkDir = layout.buildDirectory.dir('robolectric-sdks')
+def prepareRobolectricSdks = tasks.register('prepareRobolectricSdks', Sync) {
+    from robolectricSdks
+    into robolectricSdkDir
+}
+
 android {
     namespace = "com.isthisgitlab.gurushotsautovote"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -40,6 +53,9 @@ android {
             // paths, launcher activity, notification icons).
             includeAndroidResources = true
             all {
+                dependsOn prepareRobolectricSdks
+                inputs.dir(robolectricSdkDir)
+                systemProperty 'robolectric.dependency.dir', robolectricSdkDir.get().asFile.absolutePath
                 // Robolectric's FileDescriptor interceptor reaches into JDK
                 // internals that JDK 17+ no longer exports by default.
                 jvmArgs '--add-exports', 'java.base/jdk.internal.access=ALL-UNNAMED'

@@ -136,7 +136,7 @@ describe('the state inventory', () => {
     });
 
     test('the mock missions classify, while DISABLED, as turbo, boost and vote, and exactly one is claimable', async () => {
-        const missions = await getMyMissions('token');
+        const missions = (await getMyMissions('token')) ?? [];
         const disabledKinds = missions
             .filter((mission) => mission.claim_state === 'DISABLED')
             .map((mission) => classifyMission(mission));

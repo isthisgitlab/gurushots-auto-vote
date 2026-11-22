@@ -69,6 +69,7 @@ describe('NativeAutovoteBridge', () => {
             stop: jest.fn().mockResolvedValue({ running: false }),
             getStatus: jest.fn().mockResolvedValue({ running: true, nextDelayMs: 180000 }),
             compareAndWrite: jest.fn(),
+            stopAll: jest.fn(),
             wipeLocalData: jest.fn(),
         };
         g.Capacitor = { isNativePlatform: () => true, Plugins: { AutoVoteBackground: plugin } };
@@ -86,6 +87,7 @@ describe('NativeAutovoteBridge', () => {
             stop: jest.fn().mockRejectedValue(new Error('stop boom')),
             getStatus: jest.fn().mockRejectedValue(new Error('status boom')),
             compareAndWrite: jest.fn(),
+            stopAll: jest.fn(),
             wipeLocalData: jest.fn(),
         };
         g.Capacitor = { isNativePlatform: () => true, Plugins: { AutoVoteBackground: plugin } };
@@ -108,6 +110,7 @@ describe('NativeAutovoteBridge', () => {
             stop: jest.fn().mockRejectedValue(stopFailure),
             getStatus: jest.fn().mockRejectedValue(new Error('status boom')),
             compareAndWrite: jest.fn(),
+            stopAll: jest.fn(),
             wipeLocalData: jest.fn(),
         };
         g.Capacitor = { isNativePlatform: () => true, Plugins: { AutoVoteBackground: plugin } };
@@ -167,6 +170,72 @@ describe('NativeAutovoteBridge', () => {
                 Plugins: { AutoVoteBackground: invalid({ compareAndWrite }) },
             };
             await expect(loadBridge().compareAndWrite('gs_join_state', null, '{}')).rejects.toThrow('not saved');
+        });
+    });
+
+    describe("stopAll (the user's full Stop, straight to the native service)", () => {
+        // The bridge keeps the plugin it first finds: each call starts from a fresh module.
+        const withPlugin = (stopAll: jest.Mock<Promise<unknown>, [{ requestId: string; at: number }]>) => {
+            jest.resetModules();
+            g.Capacitor = { isNativePlatform: () => true, Plugins: { AutoVoteBackground: invalid({ stopAll }) } };
+            return loadBridge();
+        };
+
+        test("is null where there is no plugin: the caller's own record is the whole Stop", async () => {
+            g.Capacitor = { isNativePlatform: () => true, Plugins: {} };
+            await expect(loadBridge().stopAll('stop-a', 1)).resolves.toBeNull();
+        });
+
+        test('sends the request id and the time, and answers the epoch the native fence holds', async () => {
+            const stopAll = jest.fn<Promise<unknown>, [{ requestId: string; at: number }]>().mockResolvedValue({
+                stopped: true,
+                durable: true,
+                epoch: 4,
+            });
+            await expect(withPlugin(stopAll).stopAll('stop-a', 1700)).resolves.toEqual({ durable: true, epoch: 4 });
+            expect(stopAll).toHaveBeenCalledWith({ requestId: 'stop-a', at: 1700 });
+        });
+
+        test('a Stop the fence did not take says why, and the cancellation is not undone', async () => {
+            for (const reason of ['unreadable', 'oversize', 'not-saved'] as const) {
+                const stopAll = jest
+                    .fn<Promise<unknown>, [{ requestId: string; at: number }]>()
+                    .mockResolvedValue({ stopped: true, durable: false, reason });
+                await expect(withPlugin(stopAll).stopAll('stop-a', 1)).resolves.toEqual({ durable: false, reason });
+            }
+        });
+
+        test("an answer that is not the plugin's shape is a Stop that is not durable", async () => {
+            for (const answer of [
+                null,
+                'ok',
+                { stopped: true, durable: true },
+                { stopped: true, durable: true, epoch: 1.5 },
+                { stopped: true, durable: false, reason: 'weird' },
+                { stopped: true, durable: false },
+            ]) {
+                const stopAll = jest
+                    .fn<Promise<unknown>, [{ requestId: string; at: number }]>()
+                    .mockResolvedValue(answer);
+                await expect(withPlugin(stopAll).stopAll('stop-a', 1)).resolves.toEqual({
+                    durable: false,
+                    reason: 'not-saved',
+                });
+            }
+        });
+
+        test('a call the plugin rejects is logged and is a Stop that is not durable', async () => {
+            const error = jest.fn();
+            const failure = new Error('invalid stop');
+            const bridge = withPlugin(
+                jest.fn<Promise<unknown>, [{ requestId: string; at: number }]>().mockRejectedValue(failure),
+            );
+            // After the fresh module: the logger the bridge loaded is the one to stand in for.
+            jest.mocked(
+                require('../../src/ts/core/logger') as typeof import('../../src/ts/core/logger'),
+            ).withCategory.mockReturnValue(invalid({ error }));
+            await expect(bridge.stopAll('stop-a', 1)).resolves.toEqual({ durable: false, reason: 'not-saved' });
+            expect(error).toHaveBeenCalledWith('AutoVoteBackground.stopAll failed', failure);
         });
     });
 });

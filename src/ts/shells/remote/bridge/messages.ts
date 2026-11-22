@@ -75,12 +75,14 @@ const handleResult = (message: ResultMessage, peerId: string, watch: MessageWatc
     if (!invoke) return;
     if (!message.ok && message.error === REMOTE_SAY_HELLO_FIRST) {
         // The desktop dropped this phone without the phone knowing (its bye was lost): the connection was lost, so
-        // every invoke in flight is settled as for a lost connection — a spend may have run on the desktop
+        // every invoke in flight is settled as for a lost connection — an effect may have run on the desktop
         // before the drop, and is unclear — and the phone says hello again to be taken back.
         watch.reconnect(peerId);
         return;
     }
     ctx.pending.delete(message.id);
+    // The desktop's control inbox says where the change's target stands now: the next change to it expects that revision.
+    if (message.control) ctx.controlRevisions.set(message.control.target, message.control.revision);
     if (message.ok) invoke.resolve(message.result);
     else if (message.error.startsWith(REMOTE_REFUSAL_PREFIX)) {
         // A channel the desktop does not serve a phone: the answer a handler would give, in the
@@ -95,12 +97,12 @@ const handleResult = (message: ResultMessage, peerId: string, watch: MessageWatc
         const errorKey: RemoteRefusalKey = offered ? 'errors.remoteUpdateComputer' : 'errors.remoteRefused';
         invoke.resolve({ success: false, error: rendererTranslator.t(errorKey), errorKey });
     } else if (message.reason === 'unsendable') {
-        // The invoke ran; its answer just could not come back. A spend may have landed:
+        // The invoke ran; its answer just could not come back. An effect may have landed:
         // unclear, never a plain failure.
-        if (invoke.spend) invoke.resolve(pipeline.lostSpendAnswer());
+        if (invoke.effect) invoke.resolve(pipeline.lostEffectAnswer(invoke.requestId));
         else invoke.reject(new Error(rendererTranslator.t('errors.remoteAnswerUnsendable')));
     } else if (message.reason === 'too-large') {
-        if (invoke.spend) invoke.resolve(pipeline.lostSpendAnswer());
+        if (invoke.effect) invoke.resolve(pipeline.lostEffectAnswer(invoke.requestId));
         else invoke.reject(new Error(rendererTranslator.t('errors.remoteResultTooLarge')));
     } else invoke.reject(new Error(message.error));
 };
@@ -109,6 +111,13 @@ const handleEvent = (message: EventMessage, peerId: string, watch: MessageWatch)
     if (peerId !== watch.ctx.hostPeerId) return;
     // The desktop's settings reach the phone's listeners with the phone's own four view keys in
     // place (viewPrefs.ts): a desktop change to any of them never changes the phone.
+    // The host's effective projections reach them the same way — the phone's own four preferences in place, a stale
+    // revision dropped (viewPrefsHost.ts).
+    if (message.channel === 'effective-settings-changed' || message.channel === 'effective-presentation-changed') {
+        const heard = watch.viewPrefs.ingestEffective(message.channel, message.payload);
+        if (heard !== null) dispatchEvent(watch.ctx, message.channel, heard);
+        return;
+    }
     const payload =
         message.channel === 'settings-changed' ? watch.viewPrefs.ingestSettings(message.payload) : message.payload;
     dispatchEvent(watch.ctx, message.channel, payload);

@@ -16,10 +16,16 @@ const translator = createTranslator();
 const translationManager = {
     ...translator,
 
-    /** Adopt the language saved in settings; on failure keep the current one. */
+    /**
+     * Adopt the installation's effective language (the saved one, or a running scenario's published one over it; the native menu
+     * follows what the windows paint). A language that cannot be read keeps the current one, as does a failure.
+     */
     async loadLanguageFromSettings() {
         try {
-            translator.setCurrentLanguage(settings.getSetting('language'));
+            const effective = settings.readInstallationSetting('language');
+            if (effective.state === 'known' && effective.value.kind === 'string') {
+                translator.setCurrentLanguage(effective.value.value);
+            }
         } catch (error) {
             logger.withCategory('translation').warning('Could not load language from settings:', error);
         }

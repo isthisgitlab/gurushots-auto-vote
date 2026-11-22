@@ -55,13 +55,16 @@ export const handleMessage = (ctx: HostContext, peerId: string, raw: unknown): v
             // The channel name only, never the arguments: an invoke's arguments can name
             // anything, and the log is not the place for them.
             ctx.deps.logInfo(`Remote invoke: ${clippedId(message.channel)}`);
-            void answerInvoke(ctx, peerId, message.id, message.channel, restoreInvokeArgs(message));
+            void answerInvoke(ctx, peerId, message.id, message.channel, restoreInvokeArgs(message), {
+                ...(message.requestId === undefined ? {} : { requestId: message.requestId }),
+                ...(message.expectedRevision === undefined ? {} : { expectedRevision: message.expectedRevision }),
+            });
             return;
         }
         case 'autovote-command': {
             if (!ctx.peers.has(peerId)) return;
             ctx.deps.logInfo(`Remote auto-vote command: ${message.command}`);
-            void runCommand(ctx, message.command);
+            void runCommand(ctx, peerId, message);
             return;
         }
         case 'bye': {

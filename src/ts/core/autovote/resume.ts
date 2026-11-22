@@ -9,6 +9,8 @@ import { errorMessage } from '../errorMessage';
 import { ACTIONS } from './state';
 
 import type { TimerHandle } from '../scheduling/cadenceChain';
+import type { RunCapture } from '../scheduling/cadenceChain/types';
+import type { RunGate } from './runGate';
 import type { ControllerCore } from './types';
 
 // The hold timer re-arms in chunks this long: a renderer timer is monotonic and
@@ -33,8 +35,9 @@ export const createResumeHold = ({
     host,
     apply,
     flags,
+    gate,
     start,
-}: ControllerCore & { start: () => Promise<void> }): ResumeHold => {
+}: ControllerCore & { gate: RunGate; start: (request: RunCapture) => Promise<void> }): ResumeHold => {
     const resumeTimer: { current: TimerHandle | null } = { current: null };
 
     const clearResumeTimer = (): void => {
@@ -61,13 +64,17 @@ export const createResumeHold = ({
      */
     const maybeResume = async (): Promise<void> => {
         try {
+            // The request is created here: it carries the Stop generation now and the epoch the fence holds. A fence that cannot
+            // be read arms nothing, and a Stop that lands while this waits makes the request obsolete.
+            const request = await gate.captureFresh();
+            if (!request) return;
             const wasRunning = await host.getSetting('autovoteRunning');
             if (!wasRunning) return;
             const settings = await host.getSettings();
             if (!settings?.hasToken) return;
             const native = await host.background.status();
             if (native.running) {
-                if (!flags.disposed()) await start();
+                if (!flags.disposed()) await start(request);
                 return;
             }
             // An unreadable delay or launch time still holds the session back
@@ -80,7 +87,7 @@ export const createResumeHold = ({
             const resumeAt = startupResumeAt(finiteOr(env?.launchedAt, Date.now()), delay);
             const waitMs = resumeAt - Date.now();
             if (waitMs <= 0) {
-                await start();
+                await start(request);
                 return;
             }
             apply({ type: ACTIONS.SET_PENDING_START, payload: resumeAt });
@@ -93,7 +100,7 @@ export const createResumeHold = ({
                     return;
                 }
                 void host.logRendererDebug('Auto-resume hold over — starting');
-                start().catch((err) => host.logRendererError(`Auto-resume failed: ${errorMessage(err) || err}`));
+                start(request).catch((err) => host.logRendererError(`Auto-resume failed: ${errorMessage(err) || err}`));
             };
             resumeTimer.current = host.setTimeout(tick, Math.min(waitMs, HOLD_CHUNK_MS));
         } catch {

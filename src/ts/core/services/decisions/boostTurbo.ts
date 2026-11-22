@@ -151,13 +151,15 @@ const isBoostDueForMission = (challenge: Challenge, now: number, boostNeed: numb
 /**
  * Decides whether to play the Turbo mini-game on a challenge.
  * @param now - Unix timestamp in seconds
+ * @param options.direct - the game is asked for directly (a scenario's `earnTurbo`): the Auto-Play Turbo enable switch is
+ *   not required. Every other condition (the mode, the Snap cooldown, the turbo's state and timer) still holds.
  */
-const shouldPlayAutoTurbo = (challenge: Challenge, now: number): boolean => {
+const shouldPlayAutoTurbo = (challenge: Challenge, now: number, options: { direct?: boolean } = {}): boolean => {
     if (!challenge) return false;
     if (challenge.close_time <= now) return false;
 
     const challengeId = challenge.id?.toString?.() || '';
-    if (!settings.getEffectiveSetting('autoTurbo', challengeId)) return false;
+    if (options.direct !== true && !settings.getEffectiveSetting('autoTurbo', challengeId)) return false;
 
     // Classic and Snap each have a runner; a turbo without a mode is unknown and never played. A challenge
     // whose Snap game failed (marked Snap-unavailable) is left alone for the rest of the process.

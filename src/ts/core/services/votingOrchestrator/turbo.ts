@@ -73,7 +73,7 @@ const logTurboWithoutTarget = (challenge: Challenge) => {
     );
 };
 
-const applyTurboToEntry = async ({ challenge, token, api }: ActionContext, imageId: string) => {
+const applyTurboToEntry = async ({ challenge, token, api }: ActionContext, imageId: string): Promise<boolean> => {
     logger
         .withCategory('turbo')
         .startOperation(`turbo-apply-${challenge.id}`, `Applying turbo to entry ${imageId} on ${challenge.title}`);
@@ -85,17 +85,21 @@ const applyTurboToEntry = async ({ challenge, token, api }: ActionContext, image
             logger
                 .withCategory('turbo')
                 .endOperation(`turbo-apply-${challenge.id}`, `Turbo applied to entry ${imageId}`);
-        } else {
-            logger
-                .withCategory('turbo')
-                .endOperation(`turbo-apply-${challenge.id}`, null, 'Apply request returned ok=false');
+            return true;
         }
+        logger
+            .withCategory('turbo')
+            .endOperation(`turbo-apply-${challenge.id}`, null, 'Apply request returned ok=false');
     } catch (error) {
         logger.withCategory('turbo').endOperation(`turbo-apply-${challenge.id}`, null, failureText(error));
     }
+    return false;
 };
 
-export const runTurboApply = async (ctx: ActionContext) => {
+/**
+ * @returns whether the turbo landed (what the pass's operation record keeps)
+ */
+export const runTurboApply = async (ctx: ActionContext): Promise<boolean> => {
     const { challenge, now } = ctx;
     // Auto-apply a won turbo when eligible. emergency:true lets
     // shouldApplyTurbo apply a won turbo near the deadline even if
@@ -113,7 +117,7 @@ export const runTurboApply = async (ctx: ActionContext) => {
                     null,
                 );
         }
-        return;
+        return false;
     }
 
     // Surface the override so an applied turbo on a challenge with
@@ -132,10 +136,10 @@ export const runTurboApply = async (ctx: ActionContext) => {
     const target = turboApply.fillNew
         ? await resolveFillNewTurboTarget(ctx, turboApply.imageId)
         : { skipped: false, imageId: turboApply.imageId };
-    if (target.skipped) return;
+    if (target.skipped) return false;
     if (!target.imageId) {
         logTurboWithoutTarget(challenge);
-        return;
+        return false;
     }
     if (
         !turboApply.pinned &&
@@ -149,9 +153,9 @@ export const runTurboApply = async (ctx: ActionContext) => {
                 `${logger.challengeTag(challenge)} auto-Turbo skipped for uncertain auto-submitted photo ${oneLine(target.imageId)}`,
                 null,
             );
-        return;
+        return false;
     }
-    await applyTurboToEntry(ctx, target.imageId);
+    return applyTurboToEntry(ctx, target.imageId);
 };
 
 // Snap answers are paced at seconds each, so a pass plays one game and the rest wait for the next pass.
@@ -169,6 +173,14 @@ const turboGameSummary = (result: TurboGameResult): string =>
         ? `answered=${result.answered}/${result.total} meanAgreement=${result.meanAgreement === null ? 'n/a' : `${result.meanAgreement.toFixed(0)}%`} stopReason=${result.stopReason} won=${result.won}`
         : `played=${result.played} correct=${result.correct} flipped=${result.flipped} doubleFailed=${result.doubleFailed} won=${result.won}`;
 
+/** What one try at the Turbo mini-game came to: not played (with why), played (and whether it won), or a game that failed. */
+export type TurboEarnOutcome =
+    | { kind: 'refused'; reason: string }
+    | { kind: 'played'; won: boolean }
+    | { kind: 'failed' };
+
+const refused = (reason: string): TurboEarnOutcome => ({ kind: 'refused', reason });
+
 /**
  * Auto-earn turbo by playing the mini-game when eligible. No game has a
  * close-time threshold (it plays whenever a turbo is winnable); a Snap game is
@@ -180,19 +192,26 @@ const turboGameSummary = (result: TurboGameResult): string =>
  * unless a "Win Turbo" mission still needs wins; a game already in progress is
  * never held for a mission (the Snap gates above still apply). Every win counts
  * down that mission.
+ *
+ * With `direct` (a scenario's `earnTurbo`) the Auto-Play Turbo switch is not required; the mode, the Snap rules and cooldown,
+ * the vision model, the mission hold and cancellation all still apply.
+ *
+ * It answers what came of the try (the `earnTurbo` scenario action reads it), and records a game it played in the pass's
+ * operation record, so the same game is not tried twice for one challenge in a pass.
  */
 export const playAutoTurbo = async (
     challenge: Challenge,
     now: number,
-    { api, token, missions, refreshMissionNeeds, turboSnapshot, snapGames }: PassContext,
-) => {
-    if (!votingLogic.shouldPlayAutoTurbo(challenge, now)) return;
+    { api, token, missions, refreshMissionNeeds, turboSnapshot, snapGames, operations }: PassContext,
+    options: { direct?: boolean } = {},
+): Promise<TurboEarnOutcome> => {
+    if (!votingLogic.shouldPlayAutoTurbo(challenge, now, options)) return refused('the turbo cannot be played now');
     const isSnap = challenge.member?.turbo?.mode === 'snap';
     if (isSnap && snapGames.played >= MAX_SNAP_GAMES_PER_PASS) {
         logger
             .withCategory('turbo')
             .debug(`${logger.challengeTag(challenge)} Snap turbo left for a later pass (one Snap game per pass)`, null);
-        return;
+        return refused('a Snap turbo is played once a pass');
     }
     // The Android headless cycle is capped at 120 s; Snap plays from the app, the desktop and the CLI.
     if (isSnap && !platform().capabilities.snapAllowed) {
@@ -202,7 +221,7 @@ export const playAutoTurbo = async (
                 `${logger.challengeTag(challenge)} Snap turbo skipped: the background service cycle is too short`,
                 null,
             );
-        return;
+        return refused('a Snap turbo is not played in the background service');
     }
     // Without the vision model a Snap turbo is played only with `snapYesWithoutModel` on; otherwise it is left alone
     // here, with no claim and no operation line on every pass.
@@ -219,29 +238,31 @@ export const playAutoTurbo = async (
                 null,
             );
         }
-        return;
+        return refused('a Snap turbo needs the vision model');
     }
     const savedForMission = votingLogic.isTurboEarnSaved(challenge, now);
     const inProgress = challenge.member?.turbo?.state === 'IN_PROGRESS';
     if ((savedForMission || inProgress) && missions && missions.turbo > 0 && refreshMissionNeeds) {
         const fresh = await refreshMissionNeeds();
         // A saved turbo waits on a fresh count; a game already in progress is finished with the count it has.
-        if (!fresh && !inProgress) return;
+        if (!fresh && !inProgress) return refused('the mission need cannot be read');
         if (fresh) missions.turbo = Math.min(missions.turbo, fresh.turbo);
     }
-    if (wasManualTurboRunSince(challenge.id, turboSnapshot)) return;
+    if (wasManualTurboRunSince(challenge.id, turboSnapshot)) return refused('the turbo was played by hand just now');
     const missionWants = (missions?.turbo ?? 0) > 0;
     if (!missionWants && savedForMission) {
         logger.withCategory('turbo').debug(`${logger.challengeTag(challenge)} Turbo saved for a mission`, null);
-        return;
+        return refused('the turbo is saved for a mission');
     }
-    if (!claimTurboRun(challenge.id)) return;
+    if (!claimTurboRun(challenge.id)) return refused('a turbo game is already running for this challenge');
     const purpose = missionWants ? ` for the turbo mission (${missions?.turbo} to go)` : '';
     logger
         .withCategory('turbo')
         .startOperation(`turbo-earn-${challenge.id}`, `Playing turbo mini-game on ${challenge.title}${purpose}`);
     try {
         const result = await api.runTurboGame(challenge, token, { isCancelled });
+        // The game was played: this pass does not try it again for the challenge.
+        operations?.mark('earn', String(challenge.id));
         // Only a game that landed an answer, or may have (an unclear one), takes the pass's Snap slot: one that fails
         // first leaves it to the rest.
         if (result.kind === 'snap' && (result.answered > 0 || result.stopReason === 'vote-unclear')) {
@@ -253,8 +274,10 @@ export const playAutoTurbo = async (
             if (challenge.member?.turbo) challenge.member.turbo.state = 'WON';
         }
         logger.withCategory('turbo').endOperation(`turbo-earn-${challenge.id}`, turboGameSummary(result));
+        return { kind: 'played', won: result.won === true };
     } catch (error) {
         logger.withCategory('turbo').endOperation(`turbo-earn-${challenge.id}`, null, failureText(error));
+        return { kind: 'failed' };
     } finally {
         releaseTurboRun(challenge.id, 'automatic');
     }

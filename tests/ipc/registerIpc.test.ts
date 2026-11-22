@@ -62,6 +62,9 @@ describe('registerIpc', () => {
             scenariosIpc.buildHandlers(),
         ].flatMap((handlers) => Object.keys(handlers));
         expect([...channels.keys()]).toEqual(expected);
+        for (const channel of ['get-photo-pools', 'arm-autovote', 'record-full-stop', 'get-stop-status']) {
+            expect(channels.has(channel)).toBe(true);
+        }
     });
 
     test('the pairing store reads the launcher arguments and ignores the dev origin when packaged', () => {
@@ -74,6 +77,16 @@ describe('registerIpc', () => {
         } finally {
             process.argv = saved;
         }
+    });
+
+    test('registers where the scenario facts read the remote-access switch: the pairing store, enabled flag only', async () => {
+        const hostStatus =
+            require('../../src/ts/shells/electron/remote/hostStatus') as typeof import('../../src/ts/shells/electron/remote/hostStatus');
+        hostStatus.setHostStatusSource(null);
+        registerIpc(invalid<IpcMain>({ handle: () => undefined }), deps);
+        const status = await hostStatus.readHostStatus();
+        expect(status).toEqual({ supported: true, remoteEnabled: expect.any(Boolean), remoteConnected: null });
+        hostStatus.setHostStatusSource(null);
     });
 
     test('installs the log fan-out hook on the global the logger reads', () => {

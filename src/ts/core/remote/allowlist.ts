@@ -31,8 +31,11 @@ export const ALLOWED = [
     'check-for-updates',
     'check-scenario',
     'cleanup-stale-challenge-setting',
+    'clear-scenario-assignment',
     'clear-skip-version',
+    'create-photo-pool',
     'delete-challenge-profile',
+    'delete-photo-pool',
     'delete-scenario',
     'dry-run-scenario',
     'export-scenario',
@@ -47,43 +50,58 @@ export const ALLOWED = [
     'get-challenge-overrides',
     'get-challenge-profiles',
     'get-deadline-actions',
+    'get-effective-entry-pins',
+    'get-effective-installation-settings',
+    'get-effective-presentation',
     'get-effective-setting',
     'get-entry-pins',
     'get-environment-info',
     'get-global-default',
     'get-import-report',
+    'get-installation-scenario',
     'get-library-photos',
     'get-log-backlog',
     'get-member-challenges',
     'get-open-chosen-annotations',
+    'get-phase-profiles',
+    'get-photo-pools',
     'get-photo-stats',
     'get-releases-url',
+    'get-scenario-capabilities',
+    'get-scenario-request-status',
+    'get-scenario-snapshot',
     'get-scenario-status',
     'get-scenarios',
     'get-setting',
     'get-settings',
     'get-settings-recovery',
     'get-settings-schema',
+    'get-stop-status',
     'get-swap-backs',
     'get-third-party-notices',
     'get-title-profile',
     'get-title-rules',
     'get-validation-error',
     'gui-vote',
+    'handoff-scenario',
     'is-global-default-modified',
     'is-setting-modified',
     'join-challenge',
     'key-unlock-boost',
+    'list-simulation-subjects',
+    'pause-scenario',
     'play-auto-turbo',
     'preview-scenario-import',
     'preview-swap-photo',
     'refresh-api',
     'remove-challenge-override',
+    'rename-photo-pool',
     'rename-scenario',
     'replace-challenge-overrides',
     'reset-global-default',
     'reset-scenario-state',
     'reset-setting',
+    'resume-scenario',
     'run-voting-cycle-for-challenge',
     'save-challenge-profile',
     'save-scenario',
@@ -93,6 +111,8 @@ export const ALLOWED = [
     'set-challenge-overrides',
     'set-entry-pin',
     'set-global-default',
+    'set-installation-scenario',
+    'set-photo-pool',
     'set-setting',
     'set-title-rules',
     'should-cancel-voting',
@@ -106,6 +126,9 @@ export const ALLOWED = [
     'vote-on-challenge',
     'vote-on-challenge-manual',
 ] as const;
+
+/** What a phone is told when it would change the installation scenario's owner. */
+export const OWNER_TRANSFER_REFUSAL = 'Owner transfer is done on the selected computer.';
 
 /** The refused channels, each with the reason the refusal names. */
 export const REFUSED: Record<string, string> = {
@@ -123,6 +146,23 @@ export const REFUSED: Record<string, string> = {
     'update-error': 'Events flow from the computer to the phone only.',
     'log-message': 'Events flow from the computer to the phone only.',
     'settings-changed': 'Events flow from the computer to the phone only.',
+    // The installation scenario's owner: a paired phone chooses a scenario on its current computer, it never moves the
+    // installation to another one.
+    'transfer-installation-scenario-owner': OWNER_TRANSFER_REFUSAL,
+    // The controller's own routes (fence, arming, withdrawal, wake) and the control inbox's host routes: the phone's Start and
+    // Stop go through autovote-command, and the host records a phone's scenario change in its inbox itself.
+    'scenario-stop-fence': 'This is done on the computer.',
+    'record-full-stop': 'This is done on the computer.',
+    'arm-autovote': 'This is done on the computer.',
+    'arm-if-allowed': 'This is done on the computer.',
+    'withdraw-installation': 'This is done on the computer.',
+    'rearm-installation': 'This is done on the computer.',
+    'get-account-wake': 'This is done on the computer.',
+    'begin-scenario-request': 'This is done on the computer.',
+    'finish-scenario-request': 'This is done on the computer.',
+    // The host's effective projections reach a phone as events only.
+    'effective-settings-changed': 'Events flow from the computer to the phone only.',
+    'effective-presentation-changed': 'Events flow from the computer to the phone only.',
     // Local data and log files: a leaked link must not wipe anything, and the phone writes no
     // lines into the desktop's logs — the host logs remote activity itself.
     'wipe-local-data': 'Local data is deleted on the computer.',
@@ -201,6 +241,171 @@ export const SPEND_REMOTE_CHANNELS: ReadonlySet<string> = new Set([
     'run-voting-cycle-for-challenge',
     'vote-all-challenges-manual',
 ]);
+
+/**
+ * The channels that only read: the host changes nothing for them, so a lost one is only a failed read, and it may be asked
+ * again. These (and the host-answered channels, which change nothing on the account) may wait in the initial read queue before
+ * the host says hello. Every other channel is an effect, a spend, or refused.
+ */
+export const READ_REMOTE_CHANNELS: ReadonlySet<string> = new Set([
+    'can-auto-update',
+    'check-for-updates',
+    'check-scenario',
+    'cleanup-stale-metadata',
+    'dry-run-scenario',
+    'export-scenario',
+    'get-active-challenges',
+    'get-auto-claim-status',
+    'get-auto-join-active',
+    'get-bankroll',
+    'get-challenge-override',
+    'get-challenge-overrides',
+    'get-challenge-profiles',
+    'get-deadline-actions',
+    'get-effective-entry-pins',
+    'get-effective-installation-settings',
+    'get-effective-presentation',
+    'get-effective-setting',
+    'get-entry-pins',
+    'get-environment-info',
+    'get-global-default',
+    'get-import-report',
+    'get-installation-scenario',
+    'get-library-photos',
+    'get-log-backlog',
+    'get-member-challenges',
+    'get-open-chosen-annotations',
+    'get-phase-profiles',
+    'get-photo-pools',
+    'get-photo-stats',
+    'get-releases-url',
+    'get-scenario-capabilities',
+    'get-scenario-request-status',
+    'get-scenario-snapshot',
+    'get-scenario-status',
+    'get-scenarios',
+    'get-setting',
+    'get-settings',
+    'get-settings-recovery',
+    'get-settings-schema',
+    'get-stop-status',
+    'get-swap-backs',
+    'get-third-party-notices',
+    'get-title-profile',
+    'get-title-rules',
+    'get-validation-error',
+    'is-global-default-modified',
+    'is-setting-modified',
+    'list-simulation-subjects',
+    'preview-scenario-import',
+    'preview-swap-photo',
+    'refresh-api',
+    'search-photo-tags',
+    'should-cancel-voting',
+    'simulate-scenario',
+    'start-log-stream',
+    'stop-log-stream',
+    'suggest-photos',
+]);
+
+/**
+ * How a remote operation behaves when the connection drops, one classification for every current-version client:
+ *   - `read`: may wait for the host's hello and may be asked again; a failed read is a failure, never an empty answer;
+ *   - `effect`: changes the host's data or controller (every allowed channel that is not a read or a spend): refused before
+ *     the host's hello, never queued, never sent again; a loss after the send is reported as unclear;
+ *   - `spend`: an effect that can spend account currency (SPEND_REMOTE_CHANNELS): the same, by the `postOnce` rule;
+ *   - `priority-stop`: a full Stop, answered ahead of any other work and never through the control inbox; a lost reply never
+ *     reads as stopped.
+ * A refused or unknown channel is an effect: it is not worth waiting for, and nothing about it is repeated.
+ */
+export type RemoteOperationClass = 'read' | 'effect' | 'spend' | 'priority-stop';
+
+export const classifyRemoteOperation = (channel: string): RemoteOperationClass => {
+    if (SPEND_REMOTE_CHANNELS.has(channel)) return 'spend';
+    return READ_REMOTE_CHANNELS.has(channel) ? 'read' : 'effect';
+};
+
+/** The class of an `autovote-command`: a Stop is the priority operation; a Start and a re-arm are effects. */
+export const classifyRemoteCommand = (command: 'start' | 'stop' | 'rearm'): 'effect' | 'priority-stop' =>
+    command === 'stop' ? 'priority-stop' : 'effect';
+
+/** The setting key that assigns a scenario: a write that carries it changes which scenario runs. */
+const SCENARIO_KEY = 'scenario';
+
+/** The deepest an argument is searched for the scenario key; anything deeper is treated as carrying it. */
+const MAX_SEARCH_DEPTH = 8;
+
+const mentionsScenarioKey = (value: unknown, depth = 0): boolean => {
+    if (value === null || typeof value !== 'object') return false;
+    if (depth >= MAX_SEARCH_DEPTH) return true;
+    if (Array.isArray(value)) return value.some((item) => mentionsScenarioKey(item, depth + 1));
+    return Object.entries(value).some(([key, item]) => key === SCENARIO_KEY || mentionsScenarioKey(item, depth + 1));
+};
+
+/** A subject argument as a target name: its text when it is a challenge id or the installation, else a name no subject has. */
+const subjectTarget = (value: unknown): string => {
+    const text = typeof value === 'string' || typeof value === 'number' ? String(value) : '';
+    return /^[A-Za-z0-9@:._-]{1,64}$/.test(text) ? text : 'subject';
+};
+
+/** The lifecycle channels whose target is the subject they name (their first argument). */
+const SUBJECT_CONTROL_CHANNELS: ReadonlySet<string> = new Set([
+    'pause-scenario',
+    'resume-scenario',
+    'handoff-scenario',
+    'clear-scenario-assignment',
+    'reset-scenario-state',
+]);
+
+/** The generic writes that carry a setting key first: they change an assignment only for the scenario key. */
+const KEYED_SCENARIO_WRITES: ReadonlySet<string> = new Set([
+    'set-setting',
+    'reset-setting',
+    'set-global-default',
+    'reset-global-default',
+    'set-challenge-override',
+    'remove-challenge-override',
+]);
+
+/** The bulk writes that may carry a scenario assignment inside their arguments (found by searching them). */
+const BULK_SCENARIO_WRITES: ReadonlySet<string> = new Set([
+    'save-settings',
+    'set-challenge-overrides',
+    'replace-challenge-overrides',
+]);
+
+/** The writes whose reach (profiles and title rules hold settings) is not told by their arguments: always a scenario change. */
+const ALWAYS_SCENARIO_WRITES: ReadonlySet<string> = new Set([
+    'apply-challenge-profile',
+    'save-challenge-profile',
+    'delete-challenge-profile',
+    'set-title-rules',
+]);
+
+/**
+ * Whether this call changes a scenario (an assignment, a definition, a pool, a pin or a pause), and the target of the change:
+ * a call that does needs a request identity and is recorded in the host's control inbox; null for every other call. The
+ * decision reads the arguments, so a generic or bulk write that carries the scenario key cannot pass as an ordinary one.
+ */
+export const scenarioControlTarget = (channel: string, args: unknown[]): string | null => {
+    if (channel === 'set-installation-scenario') return '@installation';
+    if (SUBJECT_CONTROL_CHANNELS.has(channel)) return subjectTarget(args[0]);
+    if (channel === 'save-scenario' || channel === 'rename-scenario' || channel === 'delete-scenario') {
+        return 'definitions';
+    }
+    if (
+        channel === 'set-photo-pool' ||
+        channel === 'create-photo-pool' ||
+        channel === 'delete-photo-pool' ||
+        channel === 'rename-photo-pool'
+    ) {
+        return 'pools';
+    }
+    if (channel === 'set-entry-pin') return 'pins';
+    if (KEYED_SCENARIO_WRITES.has(channel)) return args[0] === SCENARIO_KEY ? 'assignments' : null;
+    if (BULK_SCENARIO_WRITES.has(channel)) return mentionsScenarioKey(args) ? 'assignments' : null;
+    return ALWAYS_SCENARIO_WRITES.has(channel) ? 'assignments' : null;
+};
 
 /**
  * The setting key a remote peer may never write on any write path, whatever the running

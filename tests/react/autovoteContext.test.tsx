@@ -123,8 +123,11 @@ describe('AutovoteContext', () => {
         jest.mocked(window.api.getSetting).mockResolvedValue(null);
         jest.mocked(window.api.setSetting).mockResolvedValue(invalid(undefined));
         jest.mocked(window.api.getActiveChallenges).mockResolvedValue({ challenges: far });
+        // The cadence settings are the installation's effective values: with no scenario, the saved ones.
         jest.mocked(window.api.getEffectiveSetting).mockImplementation((key) =>
-            Promise.resolve(key === 'lastMinuteCheckFrequency' ? 1 : 10),
+            key === 'checkFrequencyMin' || key === 'checkFrequencyMax'
+                ? Promise.resolve(5)
+                : Promise.resolve(key === 'lastMinuteCheckFrequency' ? 1 : 10),
         );
         jest.mocked(window.api.runVotingCycle).mockResolvedValue(invalid({ success: true, challenges: far }));
         jest.mocked(window.api.getEnvironmentInfo).mockResolvedValue(invalid({ launchedAt: Date.now() - 600_000 }));
@@ -188,17 +191,178 @@ describe('AutovoteContext', () => {
         expect(ctx.running).toBe(true);
     });
 
-    it('toggle flips between start and stop', async () => {
+    it('start and stop move the mode between stopped and voting, and the computer itself never waits for an answer', async () => {
         makeStartable();
         renderProvider();
+        expect(ctx.executionMode).toBe('stopped');
         await act(async () => {
-            await ctx.toggle();
+            await ctx.start();
         });
-        expect(ctx.running).toBe(true);
+        expect(ctx.executionMode).toBe('voting');
+        expect(ctx.startPending).toBe(false);
         await act(async () => {
-            await ctx.toggle();
+            await ctx.stop();
         });
+        expect(ctx.executionMode).toBe('stopped');
         expect(ctx.running).toBe(false);
+        expect(ctx.startPending).toBe(false);
+    });
+
+    describe("the controller's routes to the host", () => {
+        /** A host fence that keeps its state, as the main process does: a Stop advances the epoch and blocks. */
+        const statefulFence = () => {
+            const fence = {
+                stopEpoch: 0,
+                blocked: false,
+                lastStop: null as null | object,
+                lastArm: null as null | object,
+            };
+            jest.mocked(window.api.scenarioStopFence).mockImplementation((options) =>
+                Promise.resolve(
+                    invalid({
+                        success: true,
+                        fence: { state: 'ok', fence: { ...fence } },
+                        ...(options?.initialize ? { created: false } : {}),
+                        ...(options?.armEpoch === undefined
+                            ? {}
+                            : { armAllowed: !fence.blocked && fence.stopEpoch === options.armEpoch }),
+                    }),
+                ),
+            );
+            jest.mocked(window.api.recordFullStop).mockImplementation((requestId, at) => {
+                fence.stopEpoch += 1;
+                fence.blocked = true;
+                fence.lastStop = { requestId, at, durable: true };
+                return Promise.resolve(invalid({ success: true, epoch: fence.stopEpoch }));
+            });
+            jest.mocked(window.api.armAutovote).mockImplementation((epoch) => {
+                if (epoch !== fence.stopEpoch)
+                    return Promise.resolve(invalid({ success: false, error: 'stale-epoch' }));
+                fence.blocked = false;
+                return Promise.resolve(invalid({ success: true }));
+            });
+            jest.mocked(window.api.armIfAllowed).mockImplementation((epoch) =>
+                Promise.resolve(
+                    invalid(
+                        fence.blocked || fence.stopEpoch !== epoch
+                            ? { success: false, error: fence.blocked ? 'blocked' : 'stale-epoch' }
+                            : { success: true },
+                    ),
+                ),
+            );
+            return fence;
+        };
+
+        it('on Electron the controller gets all of them, and its Stop records the fence durably', async () => {
+            makeStartable();
+            const fence = statefulFence();
+            renderProvider();
+            await act(async () => {
+                await ctx.start();
+            });
+            expect(ctx.running).toBe(true);
+            // Nothing is blocked yet, so nothing is lifted: the arm is the compare-and-set alone.
+            expect(window.api.armIfAllowed).toHaveBeenCalledWith(0);
+            expect(window.api.armAutovote).not.toHaveBeenCalled();
+            await act(async () => {
+                await ctx.stop();
+            });
+            expect(window.api.recordFullStop).toHaveBeenCalledTimes(1);
+            expect(window.api.withdrawInstallation).toHaveBeenCalledWith(1);
+            expect(fence).toMatchObject({ stopEpoch: 1, blocked: true });
+            expect(ctx.running).toBe(false);
+        });
+
+        it("a Run after that Stop is the user's own: it lifts the block through arm-autovote, then runs and lifts the withdrawal", async () => {
+            makeStartable();
+            const fence = statefulFence();
+            renderProvider();
+            await act(async () => {
+                await ctx.start();
+            });
+            await act(async () => {
+                await ctx.stop();
+            });
+            expect(fence.blocked).toBe(true);
+            await act(async () => {
+                await ctx.start();
+            });
+            expect(fence.blocked).toBe(false);
+            expect(ctx.running).toBe(true);
+            expect(window.api.armAutovote).toHaveBeenLastCalledWith(1);
+            expect(window.api.rearmInstallation).toHaveBeenCalled();
+        });
+
+        it('a fence the host cannot read refuses the Run instead of running unfenced', async () => {
+            makeStartable();
+            jest.mocked(window.api.scenarioStopFence).mockResolvedValue(
+                invalid({ success: true, fence: { state: 'unreadable', reason: 'malformed' } }),
+            );
+            renderProvider();
+            await act(async () => {
+                await ctx.start();
+            });
+            expect(ctx.running).toBe(false);
+            expect(window.api.runVotingCycle).not.toHaveBeenCalled();
+        });
+
+        it('a Run awaiting the fence admission keeps Stop all automation offered (startPending covers the window)', async () => {
+            makeStartable();
+            statefulFence();
+            // The fence read the admission awaits, held back until the test releases it.
+            const realRead = jest.mocked(window.api.scenarioStopFence).getMockImplementation()!;
+            let release!: (value: void) => void;
+            const held = new Promise<void>((resolve) => {
+                release = resolve;
+            });
+            jest.mocked(window.api.scenarioStopFence).mockImplementation(async (...args) => {
+                await held;
+                return realRead(...args);
+            });
+            renderProvider();
+            let starting: Promise<void> = Promise.resolve();
+            await act(async () => {
+                starting = ctx.start();
+            });
+            // The admission has not answered: the mode is still stopped, and the Run is on its way — Stop stays offered.
+            expect(ctx.startPending).toBe(true);
+            expect(ctx.executionMode).toBe('stopped');
+            await act(async () => {
+                release();
+                await starting;
+            });
+            expect(ctx.startPending).toBe(false);
+            expect(ctx.executionMode).toBe('voting');
+        });
+
+        it('the web shell is wired the same way', async () => {
+            markPlatformKind('web');
+            makeStartable();
+            statefulFence();
+            renderProvider();
+            await act(async () => {
+                await ctx.start();
+            });
+            expect(window.api.armIfAllowed).toHaveBeenCalledWith(0);
+        });
+
+        it('the Android app is wired the same way: its Run is armed through the fence and its Stop is recorded there', async () => {
+            markPlatformKind('capacitor');
+            makeStartable();
+            statefulFence();
+            renderProvider();
+            await act(async () => {
+                await ctx.start();
+            });
+            expect(ctx.running).toBe(true);
+            expect(window.api.armIfAllowed).toHaveBeenCalledWith(0);
+            await act(async () => {
+                await ctx.stop();
+            });
+            // The Capacitor bridge answers this channel through the native Stop first (tests/bridge/capacitor-bridge.test.ts).
+            expect(window.api.recordFullStop).toHaveBeenCalledTimes(1);
+            expect(window.api.withdrawInstallation).toHaveBeenCalledTimes(1);
+        });
     });
 
     describe('dispose on unmount', () => {
@@ -306,8 +470,9 @@ describe('AutovoteContext', () => {
             expect(captured.chainDeps!.onCycleChallenges).toEqual(expect.any(Function));
             const deps = captured.notifierDeps!;
 
+            // the installation's effective value, not the saved default
             await deps.getSetting('notifyOnBoost');
-            expect(window.api.getGlobalDefault).toHaveBeenCalledWith('notifyOnBoost');
+            expect(window.api.getEffectiveSetting).toHaveBeenCalledWith('notifyOnBoost', null);
             await deps.getDeadlineActions(invalid({ id: 7 }));
             expect(window.api.getDeadlineActions).toHaveBeenCalledWith({ id: 7 });
             deps.log!('note');
@@ -320,8 +485,12 @@ describe('AutovoteContext', () => {
             expect(deps.translate('app.timeLeft', { time: '5m' })).toBe('5m left');
             expect(deps.translate('app.timeLeft')).toBe('{time} left');
             expect(mockTranslator.t).toHaveBeenCalledWith('app.timeLeft', { time: '5m' });
-            // The same shared translate reaches the scenario notifier.
+            // The same shared translate reaches the scenario notifier, which reads the same effective switch and the status IPC.
             expect(captured.scenarioDeps!.translate('app.timeLeft', { time: '5m' })).toBe('5m left');
+            await captured.scenarioDeps!.getSetting('notifyOnScenario');
+            expect(window.api.getEffectiveSetting).toHaveBeenCalledWith('notifyOnScenario', null);
+            await captured.scenarioDeps!.getScenarioStatus(5);
+            expect(window.api.getScenarioStatus).toHaveBeenCalledWith(5);
             mockTranslator.t.mockImplementation((k) => k);
 
             const savedLog = window.api.logDebug;
@@ -331,6 +500,14 @@ describe('AutovoteContext', () => {
             } finally {
                 window.api.logDebug = savedLog;
             }
+        });
+
+        it('the per-cycle notifier runs the deadline and the scenario notifiers together', async () => {
+            makeStartable();
+            renderProvider();
+            await expect(
+                captured.chainDeps!.onCycleChallenges!([], Math.floor(Date.now() / 1000)),
+            ).resolves.toHaveLength(2);
         });
 
         it('is not wired on native Android (the foreground service owns notifications)', () => {

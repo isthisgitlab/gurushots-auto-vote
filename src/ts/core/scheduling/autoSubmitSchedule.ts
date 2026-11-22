@@ -1,14 +1,17 @@
 /** Cadence-side boundaries for relative Auto-Submit schedules. */
 
-import { getNextScheduleThresholdSec } from '../services/autoFill/schedule';
+import { getNextScheduleThresholdSec, nextSubmitThresholdSec } from '../services/autoFill/schedule';
 
 import type { FillSchedule } from '../services/scheduleRemap';
+import type { ResolvedSubmitSchedule } from '../types/autoFill';
 import type { Challenge } from '../types/gurushots';
 
 export type AutoSubmitScheduleConfig = {
     enabled: boolean;
     manualPhotosOnly: boolean;
     schedule: FillSchedule;
+    /** A scenario phase's dynamic schedule, resolved: it replaces `schedule` while the phase holds it. */
+    resolved?: ResolvedSubmitSchedule;
 };
 
 export type ResolveAutoSubmitSchedule = (
@@ -62,7 +65,9 @@ export const soonestAutoSubmitScheduleBoundary = async (
         if (!config) continue;
         if (config.enabled !== true || config.manualPhotosOnly === true) continue;
 
-        const thresholdSec = getNextScheduleThresholdSec(config.schedule, entryCount, challenge.max_photo_submits);
+        const thresholdSec = config.resolved
+            ? nextSubmitThresholdSec(config.resolved, entryCount, challenge.max_photo_submits, closeTime)
+            : getNextScheduleThresholdSec(config.schedule, entryCount, challenge.max_photo_submits);
         if (!(thresholdSec > 0)) continue;
 
         const candidate = {

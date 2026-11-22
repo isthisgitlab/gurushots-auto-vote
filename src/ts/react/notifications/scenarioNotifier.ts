@@ -34,7 +34,8 @@ export function createRendererScenarioNotifier({
     log?: (message: string) => void;
 }): (challenges: readonly Challenge[]) => Promise<void> {
     return createScenarioNotifier({
-        isEnabled: async () => (await getSetting('notifyOnScenario')) !== false,
+        // The effective switch: null while the installation's phase overlays it with no valid publication, which is off.
+        isEnabled: async () => (await getSetting('notifyOnScenario')) === true,
         readOutbox: async (challenge) => {
             const status = await getScenarioStatus(challenge.id);
             return status?.success ? status.state?.outbox : null;

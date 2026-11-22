@@ -9,6 +9,7 @@
 import * as path from 'node:path';
 import * as logger from '../logger';
 import { installedPlatform, platform } from '../platform/port';
+import { refuseInSimulation } from '../simulationScope';
 import { getSettingsPath } from './userDataPaths';
 import type { JsonStoreTransport, SettingsStoreRef } from '../platform/port';
 import type { ThroughResult } from '../types/stores';
@@ -128,6 +129,7 @@ const createJsonStore = ({
          * Sync on Electron/CLI; cache + ordered write-behind on Capacitor; native keyed bridge on headless.
          */
         writeRaw: (data: string) => {
+            refuseInSimulation('a store write');
             if (writesRefused) return;
             of().writeRaw(data);
         },
@@ -148,11 +150,13 @@ const createJsonStore = ({
          * Android app window): use `updateThrough`.
          */
         updateNow: (update: (current: string | null) => string | null): ThroughResult | null => {
+            refuseInSimulation('a store write');
             if (writesRefused) return 'failed';
             return of().updateNow(update);
         },
         /** Writes a value made from the current one that nothing reads before it is saved (see RawJsonStore). */
         updateThrough: (update: (current: string | null) => string | null): Promise<ThroughResult> => {
+            refuseInSimulation('a store write');
             if (writesRefused) return Promise.resolve('failed');
             const now = of().updateNow(update);
             return now === null ? of().updateThrough(update) : Promise.resolve(now);

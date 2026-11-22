@@ -176,7 +176,9 @@ const noPhotoOutcome = (reason: JoinPick['reason'], owedClaim: Claim | null): Jo
             ? pendingOutcome(owedClaim, 0)
             : { status: 'charged-pending-submit', charged: 0, reason: 'no-photo' };
     }
-    return { status: reason === 'no-chosen' ? 'skipped-no-chosen' : 'skipped-no-photo', charged: 0 };
+    // Nothing chosen could be entered (Submit Only, or a photo pool with nothing left): no photo was picked on purpose.
+    const onPurpose = reason === 'no-chosen' || reason === 'pool-unbound' || reason === 'pool-exhausted';
+    return { status: onPurpose ? 'skipped-no-chosen' : 'skipped-no-photo', charged: 0 };
 };
 
 /**
@@ -184,8 +186,9 @@ const noPhotoOutcome = (reason: JoinPick['reason'], owedClaim: Claim | null): Jo
  * for paid, the consent/affordability) has already been made by the caller.
  *
  * @param needsCoins paid cost (0 = free)
- * @param options.manual the user asked for this join: Submit Only Chosen Photos
- *   does not apply (the call site says so, never the renderer)
+ * @param options.manual The join call site sets this flag for a user-requested join.
+ *   The flag never comes from the renderer. The picker can keep its ranking when the
+ *   visual check abstains. Submit Only Chosen Photos does not apply.
  * @param options.coinsBefore the balance the caller already had, kept in the claim for the user to compare with
  *   GuruShots if the unlock gets no answer; nothing decides on it, and it costs no request
  * @param options.priceCeiling the price the decision to join used (the automatic pass): the open list is read again
@@ -224,10 +227,8 @@ const performJoin = async (
     }
     inFlight.add(key);
     try {
-        // The unlock claim is read BEFORE picking: a join whose coins are already
-        // spent must submit something, so Submit Only Chosen Photos is lifted for
-        // it — stranding paid coins behind a skipped pick would be worse than an
-        // automatic photo.
+        // Read the claim before picking. A paid claim lifts Submit Only
+        // Chosen Photos. If the picker returns no photo, the claim stays pending.
         if (needsCoins > 0 && (await claimsStale(challenge, deps, 'joining a paid challenge'))) return failedNoCharge();
         const claim = claimOf(deps.joinStateStore, id);
         const joined = needsCoins > 0 ? alreadyJoined(challenge, claim) : null;
@@ -244,6 +245,7 @@ const performJoin = async (
         // 1. Photo first — no photo, no spend.
         const pick = await pickJoinPhoto(challenge, token, deps, {
             ignoreChosenOnly: manual || (unlock.alreadyUnlocked && needsCoins > 0),
+            manual,
         });
         const imageId = pick.id;
         if (!imageId) return noPhotoOutcome(pick.reason, needsCoins > 0 ? unlock.claim : null);

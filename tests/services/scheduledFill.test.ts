@@ -14,6 +14,8 @@
 
 import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
+import { answerInstallationReadFromSaved } from '../helpers/savedInstallationRead';
+answerInstallationReadFromSaved(settings);
 import VotingLogic = require('../../src/ts/core/services/VotingLogic');
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import { invalid } from '../helpers/invalid';
@@ -55,6 +57,24 @@ const mockSettings = (overrides = {}) => {
 };
 
 beforeEach(() => jest.clearAllMocks());
+
+describe('getScheduledFillState — a zone the installation cannot read', () => {
+    test('opens no window, and the saved zone never takes its place', () => {
+        mockSettings({ useScheduledFill: true, scheduledFillTime: ['12:00'], scheduledFillBeforeEnd: [] });
+        expect(VotingLogic.getScheduledFillState(buildChallenge(), '777', NOW).inWindow).toBe(true);
+        settings.captureInstallationSettings = invalid(
+            jest.fn(() => ({ ok: false, key: 'timezone', reason: 'the published settings have expired' })),
+        );
+        try {
+            expect(VotingLogic.getScheduledFillState(buildChallenge(), '777', NOW)).toMatchObject({
+                active: false,
+                inWindow: false,
+            });
+        } finally {
+            answerInstallationReadFromSaved(settings);
+        }
+    });
+});
 
 describe('getScheduledFillState — active semantics', () => {
     test('inactive when useScheduledFill is off, even with times configured', () => {
@@ -409,5 +429,72 @@ describe('scheduled rule — manual voting decisions', () => {
         expect(result.errorMessage).toBe(
             'Challenge "Scheduled Fill Challenge" already has 100% exposure (scheduled fill window)',
         );
+    });
+});
+
+describe('a scenario phase’s dynamic scheduled-voting windows', () => {
+    type Row = { state: 'known'; start: number; end: number } | { state: 'absent' | 'unknown'; reason: string };
+    const read = (rows: Row[]) =>
+        invalid<ReturnType<typeof settingsModule.getPhaseSchedules>>({
+            kind: 'resolved',
+            schedules: { vote: { rows } },
+        });
+    const open: Row = { state: 'known', start: NOW - 60, end: NOW + 60 };
+    const shut: Row = { state: 'known', start: NOW - 7200, end: NOW - 3600 };
+    const unknown: Row = { state: 'unknown', reason: 'boost-timeout-malformed' };
+
+    const decide = (rows: Row[], overrides: Record<string, unknown> = {}) => {
+        mockSettings({ useScheduledFill: true, scheduledFillReplaces: false, exposure: 100, ...overrides });
+        settings.getPhaseSchedules.mockReturnValue(read(rows));
+        return VotingLogic.evaluateVotingDecision(buildChallenge({ exposureFactor: 90 }), NOW);
+    };
+
+    test('the state: known windows are active, an unknown one is unproven, an unreadable phase is unproven', () => {
+        mockSettings({ useScheduledFill: true });
+        settings.getPhaseSchedules.mockReturnValue(read([open, unknown]));
+        expect(VotingLogic.getScheduledFillState(buildChallenge(), '777', NOW)).toEqual({
+            active: true,
+            inWindow: true,
+            replaces: false,
+            unproven: true,
+        });
+        settings.getPhaseSchedules.mockReturnValue(read([unknown]));
+        expect(VotingLogic.getScheduledFillState(buildChallenge(), '777', NOW)).toEqual({
+            active: false,
+            inWindow: false,
+            replaces: false,
+            unproven: true,
+        });
+        settings.getPhaseSchedules.mockReturnValue(invalid({ kind: 'unavailable', reason: 'expired' }));
+        expect(VotingLogic.getScheduledFillState(buildChallenge(), '777', NOW)).toMatchObject({ unproven: true });
+    });
+
+    test('one known open window proves scheduled voting, even beside an unknown one and in replace mode', () => {
+        for (const replaces of [false, true]) {
+            const decision = decide([open, unknown], { scheduledFillReplaces: replaces });
+            expect(decision).toMatchObject({ shouldVote: true });
+            expect(decision.voteReason).toMatch(/scheduled fill/);
+        }
+    });
+
+    test('an unknown window alone cannot authorize voting; a non-replacing schedule leaves the ordinary rules alone', () => {
+        const decision = decide([unknown]);
+        // exposure 90% against the 100% threshold: the normal rule votes, labelled as such
+        expect(decision.shouldVote).toBe(true);
+        expect(decision.voteReason).not.toMatch(/scheduled fill/);
+    });
+
+    test('an unreadable replacing schedule does not fall through to ordinary voting', () => {
+        expect(decide([unknown], { scheduledFillReplaces: true })).toMatchObject({
+            shouldVote: false,
+            blocked: true,
+            voteReason: expect.stringMatching(/scheduled-fill-only/),
+        });
+        expect(decide([shut, unknown], { scheduledFillReplaces: true })).toMatchObject({ shouldVote: false });
+    });
+
+    test('a known shut window keeps the replace behaviour it always had', () => {
+        expect(decide([shut], { scheduledFillReplaces: true })).toMatchObject({ shouldVote: false, blocked: true });
+        expect(decide([shut], { scheduledFillReplaces: false }).shouldVote).toBe(true);
     });
 });

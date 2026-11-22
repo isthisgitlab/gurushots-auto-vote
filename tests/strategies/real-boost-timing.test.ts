@@ -16,6 +16,8 @@ type LoggerMock = typeof loggerModule & {
 
 // Mock the settings module
 const mockSettings = {
+    scenarioSubjectAvailable: jest.fn(() => true),
+    scenarioSubjectReason: jest.fn(() => null),
     getEffectiveSetting: jest.fn(),
     getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
     SETTINGS_SCHEMA: {

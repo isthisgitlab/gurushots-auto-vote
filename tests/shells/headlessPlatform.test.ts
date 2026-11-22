@@ -22,7 +22,12 @@ const installed: Platform = platform();
 describe('the headless shell platform module', () => {
     test('the module installs the platform, with the family the service runs', () => {
         expect(installed).toBeDefined();
-        expect(installed.native).toEqual({ autovote: null, foregroundService: null, apkInstaller: null });
+        expect(installed.native).toEqual({
+            autovote: null,
+            foregroundService: null,
+            apkInstaller: null,
+            readScenarioHostStatus: expect.any(Function),
+        });
     });
 
     test('the capabilities answer the headless values', () => {
@@ -30,6 +35,7 @@ describe('the headless shell platform module', () => {
         // The headless cycle has no pass-scoped fetch, and Snap is skipped
         // there; recovery names the store to clear; the log context answers
         // CLI without Electron and the hourly cleanup is not armed.
+        expect(capabilities.executor).toBe('android-service');
         expect(capabilities.refreshMissionNeeds).toBe(true);
         expect(capabilities.snapAllowed).toBe(false);
         expect(capabilities.backgroundServiceOwnsScenarios()).toBe(false);
@@ -40,7 +46,12 @@ describe('the headless shell platform module', () => {
 
     test('the windows are the explicit no-ops', () => {
         expect(() => installed.windows.broadcastSettingsChanged({})).not.toThrow();
+        expect(() => installed.windows.broadcastEvent('effective-presentation-changed', {})).not.toThrow();
         expect(() => installed.windows.afterWipe()).not.toThrow();
+    });
+
+    test('the service has no pairing to observe', async () => {
+        await expect(installed.native.readScenarioHostStatus()).resolves.toEqual({ supported: false });
     });
 });
 

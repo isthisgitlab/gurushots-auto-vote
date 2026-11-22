@@ -104,8 +104,24 @@ describe('run-voting-cycle and run-voting-cycle-for-challenge', () => {
         const runVotingCycle = jest.fn().mockResolvedValue({ success: true });
         apiFactory.getMiddleware = jest.fn().mockReturnValue({ runVotingCycle });
         const handlers = buildHandlers();
-        await handlers['run-voting-cycle']();
-        expect(runVotingCycle).toHaveBeenCalledWith(null);
+        await handlers['run-voting-cycle'](null);
+        expect(runVotingCycle).toHaveBeenCalledWith(null, 'full');
+    });
+
+    test('run-voting-cycle passes the armed mode on, and refuses a mode it does not know', async () => {
+        const runVotingCycle = jest.fn().mockResolvedValue({ success: true });
+        apiFactory.getMiddleware = jest.fn().mockReturnValue({ runVotingCycle });
+        const handlers = buildHandlers();
+        await handlers['run-voting-cycle'](null, 'armed');
+        expect(runVotingCycle).toHaveBeenCalledWith(null, 'armed');
+        await handlers['run-voting-cycle'](null, 'full');
+        expect(runVotingCycle).toHaveBeenLastCalledWith(null, 'full');
+        runVotingCycle.mockClear();
+        await expect(handlers['run-voting-cycle'](null, invalid<'full'>('everything'))).resolves.toEqual({
+            success: false,
+            error: 'Unknown cycle mode',
+        });
+        expect(runVotingCycle).not.toHaveBeenCalled();
     });
 
     test('run-voting-cycle-for-challenge rejects empty challengeId', async () => {
@@ -129,7 +145,7 @@ describe('run-voting-cycle and run-voting-cycle-for-challenge', () => {
         apiFactory.getMiddleware = jest.fn().mockReturnValue({ runVotingCycle });
         const handlers = buildHandlers();
         await handlers['run-voting-cycle-for-challenge']({}, 42);
-        expect(runVotingCycle).toHaveBeenCalledWith(42);
+        expect(runVotingCycle).toHaveBeenCalledWith(42, 'full');
     });
 });
 
@@ -195,6 +211,18 @@ describe('vote-on-challenge — full flow outcomes', () => {
         const handlers = buildHandlers();
         const result = await handlers['vote-on-challenge']({}, '123', 'Missing');
         expect(result).toEqual({ success: false, error: 'Challenge "Missing" not found' });
+    });
+
+    test('refuses a challenge whose scenario settings are unavailable, with the fixed code', async () => {
+        setToken('tok');
+        stubStrategy([buildChallenge({ id: 123, title: 'C' })]);
+        settings.scenarioSubjectAvailable.mockReturnValueOnce(false);
+        const handlers = buildHandlers();
+        await expect(handlers['vote-on-challenge-manual']({}, '123', 'C')).resolves.toEqual({
+            success: false,
+            error: 'scenario-settings-unavailable',
+        });
+        expect(manualVote.submitVotesForChallenge).not.toHaveBeenCalled();
     });
 
     test('returns "not started" when challenge start_time is in future', async () => {
@@ -368,7 +396,7 @@ describe('error envelopes — handlers never throw to the renderer', () => {
         ['the generic fallback for a null rejection', null, 'Failed to run voting cycle'],
     ])('run-voting-cycle returns %s when the middleware rejects', async (_label, err, expected) => {
         throwingMiddleware(err);
-        await expect(buildHandlers()['run-voting-cycle']()).resolves.toEqual({ success: false, error: expected });
+        await expect(buildHandlers()['run-voting-cycle'](null)).resolves.toEqual({ success: false, error: expected });
     });
 
     test.each([

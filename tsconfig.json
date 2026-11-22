@@ -4,7 +4,7 @@
     // directly. Every file under src/ts is TypeScript and strictly checked;
     // the type-only modules under src/ts/core/types carry the shared shapes.
     "compilerOptions": {
-        "target": "es2025",
+        "target": "esnext",
         // One program covers the core and the renderer: the renderer bundles
         // pull shared core modules into the browser, so both halves see the
         // DOM and Node typings.

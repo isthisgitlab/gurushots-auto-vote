@@ -1,10 +1,11 @@
 /**
  * Local image/text check for the highest-ranked fill candidates of ANY
- * challenge. The prompts come from the challenge itself — its title subject
- * and the opening of its description — so no theme is hardcoded. The model is
+ * challenge. Prompts use the title subject and opening description, except for
+ * the shared eye-contact interpretation. The model is
  * downloaded and checksummed by the build, then shipped with the application.
  *
- * The check only reorders, and never empties a pick. Photos the model finds
+ * The check normally reorders candidates. On a scored abstention it can return
+ * no photo when the caller requests it. Photos the model finds
  * clearly off-theme move behind the ones it accepts (the rejected ones in
  * order of fit). Among the accepted photos the tag ranking, the model's fit and
  * the photos' votes are weighed together (photoPicker/jointRank.ts) inside each
@@ -18,7 +19,7 @@
 import { platform } from '../platform/port';
 import { entryPhotoUrl } from '../format/photoUrl';
 import { oneLine } from '../format/logSafe';
-import { OFF_THEME_MARGIN, jointOrder, stripTags, visualSubjectWords } from './photoPicker';
+import { OFF_THEME_MARGIN, jointOrder, readChallengeTheme, stripTags, visualSubjectWords } from './photoPicker';
 import * as lexicon from './semantic/lexicon';
 
 import type { JointBreakdown, JointInput, VoteStat } from './photoPicker/jointRank';
@@ -115,12 +116,14 @@ const descriptionLead = (message: string | undefined): string => {
 };
 
 /**
- * Text prompts for a challenge: its title subject, plus the description lead
+ * Text prompts for a challenge: its eye-contact interpretation, or its title subject plus the description lead
  * when there is one. Empty when the title names nothing visual — the
  * description of a meta challenge ("Photo of the Day") is about the contest,
  * not the picture, so it is never used alone.
  */
 const challengePrompts = (challenge: ChallengeText | null | undefined, ignoreWords: IgnoreWords = null): string[] => {
+    if (readChallengeTheme(challenge, ignoreWords).kind === 'eye-contact')
+        return ['a portrait with the subject looking directly at the viewer and making eye contact'];
     const subject = visualSubjectWords(challenge, ignoreWords);
     if (subject.length === 0) return [];
     const lead = descriptionLead(challenge?.welcome_message);
@@ -228,7 +231,7 @@ const orderByVisualFit = async (
  * @param eligible - photo records (id + member_id) for the ids
  * @param jointInputs - the tier values of the ranked photos, by id (jointInputsOf)
  * @param loadVotes - the votes of the photos the model accepted, asked only when it accepted two or more
- * @returns wantCount ids (fewer only if rankedIds is shorter)
+ * @returns up to wantCount ids, or none on abstention when requested
  */
 const rankVisually = async (
     challenge: ChallengeText | null | undefined,
@@ -239,12 +242,14 @@ const rankVisually = async (
         logger,
         ignoreWords = null,
         onVisualEvidence,
+        skipOnAbstain = false,
         jointInputs,
         loadVotes,
     }: {
         logger: FillLogger;
         ignoreWords?: IgnoreWords;
         onVisualEvidence?: (acceptedIds: Set<string>) => void;
+        skipOnAbstain?: boolean;
         jointInputs: ReadonlyMap<string, JointInput>;
         loadVotes: (ids: string[]) => Promise<Map<string, VoteStat>>;
     },
@@ -298,7 +303,11 @@ const rankVisually = async (
             },
         });
         const detail = { prompts, scores: scored };
-        if (order === null) return keepOriginal('abstained', detail);
+        if (order === null) {
+            if (!skipOnAbstain) return keepOriginal('abstained', detail);
+            log.info(`Visual check abstained for ${logger.challengeTag(challenge)}. No photo selected.`, detail);
+            return [];
+        }
         const picked = [...order, ...rankedIds.slice(shortlist.length)].slice(0, wantCount);
         const changed = picked.some((id, index) => id !== original[index]);
         const outcome = changed

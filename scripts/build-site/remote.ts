@@ -1,5 +1,5 @@
 // The current remote-access site tree. The local renderer build stages the only supported phone
-// page at /remote/v2/; /remote/ carries its launcher and shared current assets.
+// page at /remote/v3/; /remote/ carries its launcher and shared current assets.
 
 import fs from 'node:fs';
 import path from 'node:path';

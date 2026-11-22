@@ -4,7 +4,7 @@
  * letter challenges ("Begins With L").
  */
 
-import { MAX_TOKENISE_CHARS, stem, tokenise, matches } from './stemming';
+import { MAX_TOKENISE_CHARS, stem, stripTags, tokenise, matches } from './stemming';
 import { STOPWORDS } from './stopwords';
 import { SERIES_SEPARATOR_RE, parseNegation } from './titleNegation';
 import * as lexicon from '../semantic/lexicon';
@@ -224,12 +224,42 @@ const detectLetterPrefix = (title: string | null | undefined): string | null => 
     return letter.toLowerCase();
 };
 
+const DESCRIPTION_LETTER_PHRASE_RE =
+    /\b(?:begin(?:s|ning)?|start(?:s|ing)?)\s+with\s+(?:the\s+)?letter\s+(?:([a-z])(?![\w-])|['"‘“]\s*([a-z])\s*['"’”](?![\w-]))/gi;
+// Require an explicit rule at the start of a sentence or after a rule lead-in.
+const DESCRIPTION_LETTER_RE = new RegExp(
+    String.raw`(?:^|(\bthat)\s+|\b(?:must|should)\s+)${DESCRIPTION_LETTER_PHRASE_RE.source}`,
+    'gi',
+);
+const DESCRIPTION_EXCLUSION_RE =
+    /\b(?:no|not|never|without|avoid(?:s|ed|ing)?|exclud(?:e|es|ed|ing)|reject(?:s|ed|ing)?|\w+n['’]t)\b/i;
+const DESCRIPTION_REQUEST_RE = /\b(?:share|show|submit|enter)\b/i;
+const DESCRIPTION_REJECTION_RE =
+    /^(?:\s+|,\s*)(?:(?:they|these|those)\s+)?(?:(?:will|shall|can|may)\s+be\s+|(?:is|are|was|were)\s+)(?:rejected|excluded|prohibited|disqualified|forbidden)\b|^(?:\s+|,\s*)(?:(?:they|these|those)\s+)?(?:(?:is|are|was|were)\s+not\s+|(?:must|will|shall|can|may)\s+not\s+be\s+)(?:allowed|accepted|eligible|permitted|welcome|submitted)\b/i;
+
+const readChallengeLetter = (challenge: ChallengeText | null | undefined): string | null => {
+    const titleLetter = detectLetterPrefix(challenge?.title);
+    if (titleLetter) return titleLetter;
+    const message = challenge?.welcome_message;
+    if (typeof message !== 'string') return null;
+    for (const sentence of stripTags(message).split(/[.!?]/)) {
+        const text = sentence.trimStart();
+        for (const match of text.matchAll(DESCRIPTION_LETTER_RE)) {
+            const before = text.slice(0, match.index);
+            if (DESCRIPTION_EXCLUSION_RE.test(before)) continue;
+            if (match[1] && !DESCRIPTION_REQUEST_RE.test(before)) continue;
+            if (DESCRIPTION_REJECTION_RE.test(text.slice(match.index + match[0].length))) continue;
+            return (match[2] ?? match[3]).toLowerCase();
+        }
+    }
+    return null;
+};
+
 /**
  * `text` with every letter phrase ("The Letter S", "starts with 'S'", "C is
  * for") replaced by a space — a letter phrase names a challenge's RULE, never
  * its subject, in a title or in a description. Callers apply it only when
- * `detectLetterPrefix(challenge?.title)` is non-null, so a title over 200 chars
- * (detect returns null) is never stripped, and detect and strip agree at the cap.
+ * `readChallengeLetter(challenge)` is non-null.
  * The input is cut to MAX_TOKENISE_CHARS, the cut `tokenise` already applies; a
  * non-string returns ''. The replacement must stay ' ': LETTER_IS_FOR_RE
  * consumes its leading whitespace, so '' would glue the neighbouring words
@@ -241,6 +271,9 @@ const withoutLetterPhrases = (text: string | null | undefined): string => {
     for (const re of LETTER_PATTERNS_GLOBAL) out = out.replace(re, ' ');
     return out;
 };
+
+const withoutDescriptionLetterPhrases = (text: string | null | undefined): string =>
+    typeof text === 'string' ? withoutLetterPhrases(stripTags(text).replace(DESCRIPTION_LETTER_PHRASE_RE, ' ')) : '';
 
 // Title words that name a challenge's FORMAT, never its subject: its length
 // ("10 Hours"), GuruShots' own features ("500 Guru's Picks", "Ultimate
@@ -269,10 +302,14 @@ const quotedPhraseRe = (phrase: string): RegExp => {
 const UNCONFIRMED: ChallengeTheme = Object.freeze({ kind: 'unconfirmed', subjects: Object.freeze([]) });
 const OPEN: ChallengeTheme = Object.freeze({ kind: 'open', subjects: Object.freeze([]) });
 
+const isThreeOfAKind = (title: string | null | undefined): boolean =>
+    typeof title === 'string' && /^\s*three\s+of\s+a\s+kind\s*$/i.test(title);
+
 /**
- * Whether a challenge has a subject to match, read from its title AND its
- * description rather than from a list of challenge names (GuruShots runs new
- * open-theme titles every day). Open when the description says so, or when no
+ * Whether a challenge has a subject to match, read from its title and its
+ * description. Explicit camera-facing titles produce an eye-contact theme with
+ * derived portrait labels. Three Of A Kind requires a deliberate photo choice.
+ * Open when the description says so, or when no
  * title word (nor, for an all-boilerplate title, slug word) is left once
  * boilerplate (STOPWORDS), the user's ignore words and format words are
  * removed. Otherwise a title word the description repeats is
@@ -289,8 +326,9 @@ const readChallengeTheme = (
     challenge: ChallengeText | null | undefined,
     ignoreWords: IgnoreWords = null,
 ): ChallengeTheme => {
+    if (isThreeOfAKind(challenge?.title)) return { kind: 'three-of-a-kind', subjects: [] };
     const title = typeof challenge?.title === 'string' ? challenge.title.slice(0, MAX_TOKENISE_CHARS) : '';
-    if (title.trim() === '' || detectLetterPrefix(title) || parseNegation(title, ignoreWords).active)
+    if (title.trim() === '' || readChallengeLetter(challenge) || parseNegation(title, ignoreWords).active)
         return UNCONFIRMED;
     const message = challenge?.welcome_message;
     const description =
@@ -302,6 +340,8 @@ const readChallengeTheme = (
             : '';
     if (OPEN_THEME_RE.test(title) || OPEN_THEME_RE.test(description)) return OPEN;
     const subject = titleSubject(title, ignoreWords);
+    if (/^(?:facing\s+the\s+camera|looking\s+(?:directly\s+)?(?:at|into)\s+the\s+camera)$/i.test(subject.trim()))
+        return { kind: 'eye-contact', subjects: ['portrait', 'face', 'person'] };
     const fromTitle = tokenise(subject, { ignoreWords, compounds: 'replace' });
     // A title of pure boilerplate ("Best of the Best") can still carry its
     // subject in the slug ("macro-insects4"), which buildThemeKeywords falls
@@ -323,8 +363,11 @@ export {
     withoutAbstract,
     titleSubject,
     detectLetterPrefix,
+    readChallengeLetter,
     withoutLetterPhrases,
+    withoutDescriptionLetterPhrases,
     readChallengeTheme,
+    isThreeOfAKind,
 };
 
 export { NEGATION_MARKER_STEMS, parseNegation, dropNegated } from './titleNegation';

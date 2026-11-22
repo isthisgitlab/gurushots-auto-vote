@@ -106,8 +106,9 @@ class AutoVoteServiceTest {
     private fun newService(): AutoVoteService =
         Robolectric.buildService(AutoVoteService::class.java).create().get()
 
-    private fun AutoVoteService.command(action: String?): Int =
-        onStartCommand(action?.let { Intent(it) }, 0, 1)
+    /** [stamp] is the Stop epoch an alarm carries (the epoch of a fence that was never created is 0). */
+    private fun AutoVoteService.command(action: String?, stamp: Long = 0L): Int =
+        onStartCommand(action?.let { Intent(it).putExtra(AutoVoteService.EXTRA_STOP_EPOCH, stamp) }, 0, 1)
 
     private fun AutoVoteService.webView(): WebView? =
         AutoVoteService::class.java.getDeclaredField("webView").apply { isAccessible = true }.get(this) as WebView?
@@ -1816,5 +1817,189 @@ class AutoVoteServiceTest {
         val svc = newService()
         svc.command(AutoVoteService.ACTION_START)
         assertEquals("Stop", shadowOf(svc).lastForegroundNotification.actions.single().title.toString())
+    }
+
+    // ---------- the Stop fence: alarm epochs, a start, a restart ----------
+
+    private fun storeFence(raw: String) =
+        app.getSharedPreferences(SideStores.PREFS_FILE, Context.MODE_PRIVATE).edit().putString(StopFence.KEY, raw).commit()
+
+    /** The Stop epoch the one pending alarm was scheduled under. */
+    @Suppress("DEPRECATION")
+    private fun alarmStamp(): Long =
+        shadowOf(nextAlarm()!!.operation).savedIntent.getLongExtra(AutoVoteService.EXTRA_STOP_EPOCH, AutoVoteService.NO_EPOCH)
+
+    private fun logs() = ShadowLog.getLogsForTag(AutoVoteService.TAG).map { it.msg }
+
+    @Test
+    fun aStopLatchesTheCancellationFlagOfTheCycleRunningInThePage() {
+        val svc = startedAndReady()
+        runCycle(svc)
+        shadowOf(svc.webView()!!).let { assertTrue(it.lastEvaluatedJavascript.contains("window.GS.runOneCycle()")) }
+
+        AutoVoteService.cancelCycle!!.invoke()
+        idle()
+
+        assertTrue(shadowOf(svc.webView()!!).lastEvaluatedJavascript.contains("window.GS.cancel()"))
+    }
+
+    @Test
+    fun aCancelAfterThePageIsGoneDoesNothingAndADestroyedServiceCannotBeAsked() {
+        val svc = newService()
+        AutoVoteService.cancelCycle!!.invoke()
+        idle()
+        assertNull(svc.webView())
+        svc.onDestroy()
+        assertNull(AutoVoteService.cancelCycle)
+    }
+
+    @Test
+    fun aStartStampsItsAlarmsWithTheEpochTheFenceIsAt() {
+        storeFence("""{"stopEpoch":6,"blocked":false,"lastStop":null,"lastArm":null}""")
+        val svc = newService()
+        svc.command(AutoVoteService.ACTION_START)
+        idle()
+        assertTrue(AutoVoteService.isRunning)
+        assertEquals(6L, alarmStamp())
+    }
+
+    @Test
+    fun aStartOnAFenceThatNeverExistedStampsEpochZero() {
+        newService().command(AutoVoteService.ACTION_START)
+        assertEquals(0L, alarmStamp())
+    }
+
+    @Test
+    fun aStartOnABlockedFenceBuildsNoWorkButAnswersTheForegroundRequest() {
+        assertTrue(StopFence.recordStop(app, "stop-a", 1L).durable)
+        ShadowLog.clear()
+        val svc = newService()
+        assertEquals(Service.START_STICKY, svc.command(AutoVoteService.ACTION_START))
+        idle()
+        assertEquals(listOf("START refused: the Stop fence blocks work"), logs())
+        assertEquals(AutoVoteService.NOTIFICATION_ID, shadowOf(svc).lastForegroundNotificationId)
+        assertTrue(shadowOf(svc).isForegroundStopped)
+        assertTrue(shadowOf(svc).isStoppedBySelf)
+        assertFalse(AutoVoteService.isRunning)
+        assertFalse(ServiceState.isEnabled(app))
+        assertNull(svc.webView())
+        assertNull(nextAlarm())
+    }
+
+    @Test
+    fun aStartOnAFenceThatCannotBeReadBuildsNoWork() {
+        storeFence("garbage")
+        val svc = newService()
+        svc.command(AutoVoteService.ACTION_START)
+        idle()
+        assertFalse(AutoVoteService.isRunning)
+        assertNull(svc.webView())
+        assertNull(nextAlarm())
+        assertTrue(shadowOf(svc).isStoppedBySelf)
+    }
+
+    @Test
+    fun anAlarmOfTheLiveEpochRunsTheCycleAndTheNextAlarmCarriesItToo() {
+        storeFence("""{"stopEpoch":3,"blocked":false,"lastStop":null,"lastArm":null}""")
+        ServiceState.setEnabled(app, true)
+        val svc = newService()
+        svc.command(AutoVoteService.ACTION_RUN_CYCLE, stamp = 3L)
+        idle()
+        assertTrue(AutoVoteService.isRunning)
+        assertNotNull(svc.webView())
+        assertAlarmIn(3_000L)
+        assertEquals(3L, alarmStamp())
+        assertFalse(shadowOf(svc).isStoppedBySelf)
+    }
+
+    @Test
+    fun anAlarmOfAnEarlierEpochBuildsNoWorkInTheService() {
+        // The service was started by an alarm a Stop had ended: the fence is at epoch 4 and open again (a newer Run).
+        storeFence("""{"stopEpoch":4,"blocked":false,"lastStop":null,"lastArm":null}""")
+        ServiceState.setEnabled(app, true)
+        ShadowLog.clear()
+        val svc = newService()
+        svc.command(AutoVoteService.ACTION_RUN_CYCLE, stamp = 3L)
+        idle()
+        assertEquals(listOf("RUN_CYCLE refused: its Stop epoch is not the live one"), logs())
+        assertEquals(AutoVoteService.NOTIFICATION_ID, shadowOf(svc).lastForegroundNotificationId)
+        assertTrue(shadowOf(svc).isForegroundStopped)
+        assertTrue(shadowOf(svc).isStoppedBySelf)
+        assertFalse(AutoVoteService.isRunning)
+        assertNull(svc.webView())
+        assertNull(nextAlarm())
+        assertNull(ShadowPowerManager.getLatestWakeLock())
+    }
+
+    @Test
+    fun anAlarmWithNoEpochBuildsNoWork() {
+        ServiceState.setEnabled(app, true)
+        val svc = newService()
+        svc.onStartCommand(Intent(AutoVoteService.ACTION_RUN_CYCLE), 0, 1)
+        idle()
+        assertTrue(shadowOf(svc).isStoppedBySelf)
+        assertNull(svc.webView())
+        assertNull(nextAlarm())
+    }
+
+    @Test
+    fun aServiceBuiltAgainWhileTheFenceBlocksBuildsNoWork() {
+        // The system restarted the killed service (no intent) after a Stop: the enabled flag is still set, the fence blocks.
+        ServiceState.setEnabled(app, true)
+        assertTrue(StopFence.recordStop(app, "stop-a", 1L).durable)
+        ShadowLog.clear()
+        val svc = newService()
+        assertEquals(Service.START_STICKY, svc.command(null))
+        idle()
+        assertEquals(listOf("Service restarted while the Stop fence blocks work — stopping"), logs())
+        assertTrue(shadowOf(svc).isStoppedBySelf)
+        assertNull(svc.webView())
+        assertNull(nextAlarm())
+        assertNull(ShadowPowerManager.getLatestWakeLock())
+    }
+
+    @Test
+    fun aServiceBuiltAgainOnAFenceThatCannotBeReadBuildsNoWork() {
+        storeFence("garbage")
+        val svc = newService()
+        svc.command(null)
+        assertTrue(shadowOf(svc).isStoppedBySelf)
+    }
+
+    @Test
+    fun aServiceBuiltAgainOnAnOpenFenceLeavesItAlone() {
+        storeFence("""{"stopEpoch":1,"blocked":false,"lastStop":null,"lastArm":null}""")
+        val svc = newService()
+        svc.command(null)
+        assertFalse(shadowOf(svc).isStoppedBySelf)
+    }
+
+    @Test
+    fun aStopThatLandsDuringACycleLetsItFinishButSchedulesNoContinuation() {
+        val svc = startedAndReady()
+        runCycle(svc)
+        // Another executor's Stop (the fence moves under the run; nothing told this service).
+        assertTrue(StopFence.recordStop(app, "stop-x", 1L).durable)
+        ShadowLog.clear()
+
+        svc.HeadlessBridge().onCycleComplete("""{"ok":true,"nextDelayMs":$MINUTE}""")
+        idle()
+
+        assertNull(nextAlarm())
+        assertTrue(logs().contains("Not scheduling the next alarm: the Stop fence does not allow this run to continue"))
+        assertFalse(AutoVoteService.isRunning)
+        assertFalse(ServiceState.isEnabled(app))
+        assertTrue(shadowOf(svc).isStoppedBySelf)
+    }
+
+    @Test
+    fun aRestartAfterAStopAndANewRunBeginsUnderTheNewEpoch() {
+        assertTrue(StopFence.recordStop(app, "stop-a", 1L).durable)
+        // The user's Run lifted the block (the window did, through compare-and-set), at the epoch it acknowledged.
+        storeFence("""{"stopEpoch":1,"blocked":false,"lastStop":{"requestId":"stop-a","at":1,"durable":true},"lastArm":null}""")
+        val svc = newService()
+        svc.command(AutoVoteService.ACTION_START)
+        assertEquals(1L, alarmStamp())
+        assertTrue(ServiceState.isEnabled(app))
     }
 }

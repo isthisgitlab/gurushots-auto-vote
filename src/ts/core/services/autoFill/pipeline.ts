@@ -6,5 +6,5 @@
  */
 
 export { rankCandidatesForChallenge } from './pipeline/rank';
-export { runFillAttempt } from './pipeline/attempt';
+export { runFillAttempt, scanFillCandidates } from './pipeline/attempt';
 export { suggestFillPhotos } from './pipeline/suggest';

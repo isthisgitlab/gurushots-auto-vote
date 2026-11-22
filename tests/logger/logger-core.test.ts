@@ -77,6 +77,7 @@ const loadLogger = ({
             installTestPlatform({
                 paths,
                 capabilities: {
+                    executor: electron ? 'electron' : 'cli',
                     refreshMissionNeeds: false,
                     snapAllowed: true,
                     backgroundServiceOwnsScenarios: () => false,

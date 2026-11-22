@@ -10,5 +10,5 @@ void (() => {
         mountRemoteNotice();
         return;
     }
-    globalThis.location.replace(`./v2/index.html#k=${encodeURIComponent(key)}`);
+    globalThis.location.replace(`./v3/index.html#k=${encodeURIComponent(key)}`);
 })();

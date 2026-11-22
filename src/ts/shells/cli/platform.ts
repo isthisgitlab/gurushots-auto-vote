@@ -29,10 +29,11 @@ const videoDecoderCliAssets = (): VideoDecoderCliAssetsModule =>
 // The CLI has no windows to broadcast to or relaunch.
 const windows: PlatformWindows = {
     broadcastSettingsChanged: () => undefined,
+    broadcastEvent: () => undefined,
     afterWipe: () => undefined,
 };
 
-const cliPlatform = createNodePlatform(windows, {
+const cliPlatform = createNodePlatform(windows, 'cli', {
     extractVisionCliAssets: () => visionCliAssets().extractVisionCliAssets(),
     extractVideoDecoderCliAssets: () => videoDecoderCliAssets().extractVideoDecoderCliAssets(),
 });

@@ -1,4 +1,5 @@
 import * as logger from '../../logger';
+import { clockSec } from '../../simulationScope';
 import * as votingLogic from '../VotingLogic';
 import { isMissionVoteCandidate, missionVoteQuota } from '../missions';
 
@@ -67,7 +68,7 @@ export const planMissionVotes = (
         voteStallReported = false;
         return 0;
     }
-    const nowSec = Math.floor(Date.now() / 1000);
+    const nowSec = clockSec();
     let coveredByNormalVoting = false;
     const quota = missionVoteQuota(votesLeft, allChallenges, nowSec, (challenge) => {
         const decision = votingLogic.evaluateVotingDecision(challenge, nowSec);

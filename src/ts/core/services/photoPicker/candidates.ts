@@ -5,7 +5,7 @@
  */
 
 import { MIN_USER_TAG_STEM_LENGTH, tokeniseTagList } from './stemming';
-import { detectLetterPrefix, excludedSubjectOf, photoShowsExcluded } from './title';
+import { readChallengeLetter, excludedSubjectOf, photoShowsExcluded, isThreeOfAKind } from './title';
 import { buildChallengeKeywords } from './keywords';
 import { wholeLabelStems, labelWordStems, photoMatchesAllStems, countShouldMatches, scorePhoto } from './labels';
 import {
@@ -193,7 +193,12 @@ const buildScoredCandidates = (
 ): ScoredCandidate[] => {
     if (!Array.isArray(eligiblePhotos) || eligiblePhotos.length === 0) return [];
 
-    const allowed = eligiblePhotos.filter((p) => p && p.permission && p.permission.allowed === true && p.id);
+    const requiresChoice = isThreeOfAKind(challenge?.title);
+    const chosenIds = requiresChoice ? new Set((opts.chosen?.ids ?? []).map(String)) : null;
+    const allowed = eligiblePhotos.filter(
+        (p) =>
+            p && p.permission && p.permission.allowed === true && p.id && (!chosenIds || chosenIds.has(String(p.id))),
+    );
     if (allowed.length === 0) return [];
 
     const mustStems = tokeniseTagList(opts.mustIncludeTags);
@@ -204,7 +209,7 @@ const buildScoredCandidates = (
     // stops generic 2-char vision labels ("in", "at", "on") from spuriously
     // satisfying an I/A/O challenge. Multi-word labels match on the first char of
     // the whole label string — the natural reading of "begins with".
-    const letterPrefix = detectLetterPrefix(challenge?.title);
+    const letterPrefix = readChallengeLetter(challenge);
 
     // Stem each photo's labels once, in BOTH representations, and carry them
     // through the filters and the scoring rather than recomputing.
@@ -226,7 +231,7 @@ const buildScoredCandidates = (
     // Optional semantic tiers — see semanticTiersOf. No map (the default) → both
     // are 0 for every photo → they are inert and the sort is identical to the
     // lexical-only behavior.
-    const semanticScores = opts.semanticScores instanceof Map ? opts.semanticScores : null;
+    const semanticScores = !requiresChoice && opts.semanticScores instanceof Map ? opts.semanticScores : null;
 
     const keywords = buildChallengeKeywords(challenge, opts.ignoreWords || null);
     // GuruShots' suggested library photos for this challenge — tier 5 in
@@ -258,11 +263,9 @@ const buildScoredCandidates = (
  * The hard filters, the negated-subject filter and the submitWithoutTagMatch
  * relaxation still apply to chosen photos like to every photo: they are about
  * the challenge, not the photo's owner. Ids already entered are removed from
- * the pool as a set. Without `only` the whole pool is scored once and the
- * result is split afterwards, so a relaxation is judged on the whole pool the
- * way it always was. With `only` just the chosen photos are scored, so the
- * relaxation is judged on them alone — whether a chosen photo is used must
- * never depend on unrelated photos in the library.
+ * the pool as a set. The eligible pool is scored once and split afterwards.
+ * With `only` or for Three Of A Kind, the filters and their relaxation apply
+ * only to chosen photos.
  *
  * @returns the scored pool; `chosenIds` names the chosen block inside it, or is
  *   null when none was asked for or none is in the pool (then nothing differs

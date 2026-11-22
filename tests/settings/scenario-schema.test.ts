@@ -148,6 +148,350 @@ describe('validateScenario — accepted documents', () => {
     });
 });
 
+describe('validateScenario — expressions and expression conditions', () => {
+    const hours = (value: number) => ({ kind: 'literal', value, quantity: 'duration', unit: 'hours' });
+    const instant = (value: number) => ({ kind: 'literal', value, quantity: 'instant' });
+    const count = (value: number, quantity = 'keys') => ({ kind: 'literal', value, quantity });
+    const fact = (name: string, extra: Record<string, unknown> = {}) => ({ kind: 'fact', name, ...extra });
+    const setting = (key: string, view = 'base') => ({ kind: 'setting', key, view });
+    const compare = (left: unknown, right: unknown, op = '<') => ({ type: 'compare', left, op, right });
+    const ruleWith = (condition: unknown) => withRule({ if: [condition] });
+    const IF = 'phases.main.rules[0].if[0]';
+
+    const issue94 = {
+        kind: 'earlier',
+        of: [
+            { kind: 'offset', from: fact('challenge.end'), by: hours(10), direction: 'before' },
+            { kind: 'offset', from: fact('boost.freeExpiry'), by: hours(1), direction: 'before' },
+        ],
+    };
+
+    test('every new condition form and expression kind is accepted', () => {
+        const conditions = [
+            compare(issue94, fact('clock.now')),
+            compare(fact('challenge.timeLeft'), hours(2), '<='),
+            compare(setting('boostTime', 'effective'), hours(1), '>'),
+            compare(fact('boost.state'), { kind: 'literal', value: 'AVAILABLE' }, '='),
+            compare(fact('challenge.tags'), { kind: 'literal', value: ['a'] }, '!='),
+            compare({ kind: 'literal', value: true }, setting('autoBoost'), '='),
+            compare({ kind: 'difference', from: fact('clock.now'), to: fact('challenge.end') }, hours(1)),
+            compare({ kind: 'add', left: count(1), right: count(2) }, { kind: 'max', of: [count(1), count(2)] }),
+            compare(
+                { kind: 'subtract', left: fact('challenge.end'), right: hours(1) },
+                { kind: 'later', of: [instant(1), instant(2)] },
+            ),
+            compare({ kind: 'min', of: [fact('balance.keys'), count(5)] }, count(3)),
+            compare(
+                fact('entry.votesPerHour', { select: { by: 'fastest', window: '2h' }, window: '2h' }),
+                { kind: 'literal', value: 3, quantity: 'votesPerHour' },
+                '>=',
+            ),
+            { type: 'present', value: fact('boost.freeExpiry') },
+            { type: 'absent', value: fact('boost.freeExpiry') },
+            { type: 'contains', list: fact('challenge.tags'), value: { kind: 'literal', value: 'sea' } },
+            { type: 'containsAny', list: fact('challenge.tags'), value: { kind: 'literal', value: ['sea'] } },
+            { type: 'containsAll', list: setting('mustIncludeTags'), value: { kind: 'literal', value: ['sea'] } },
+            {
+                type: 'entriesWhere',
+                quantifier: 'any',
+                where: [{ field: 'rank', op: '<=', value: 3 }],
+            },
+            {
+                type: 'entryCount',
+                where: [
+                    { field: 'votes', op: '>=', value: 10 },
+                    { field: 'boosted', op: '=', value: true },
+                ],
+                op: '>=',
+                value: 1,
+            },
+            { type: 'not', condition: { type: 'present', value: fact('boost.freeExpiry') } },
+        ];
+        for (const condition of conditions)
+            expect(validate(ruleWith(condition))).toEqual(expect.objectContaining({ ok: true }));
+    });
+
+    test('a document with a new condition keeps the condition as written', () => {
+        const result = validate(ruleWith(compare(issue94, fact('clock.now')))) as Accepted;
+        expect(result.scenario.phases.main.rules![0].if).toEqual([compare(issue94, fact('clock.now'))]);
+    });
+
+    test('a duration literal needs a unit, and a unit belongs to a duration only', () => {
+        expectIssue(
+            ruleWith(compare(fact('challenge.timeLeft'), { kind: 'literal', value: 1, quantity: 'duration' })),
+            `${IF}.right`,
+            'A duration needs a unit',
+        );
+        expectIssue(
+            ruleWith(
+                compare(fact('challenge.timeLeft'), { kind: 'literal', value: 1, quantity: 'keys', unit: 'hours' }),
+            ),
+            `${IF}.right`,
+            'Only a duration has a unit',
+        );
+        expectIssue(
+            ruleWith(
+                compare(fact('challenge.timeLeft'), { kind: 'literal', value: 1, quantity: 'duration', unit: 'weeks' }),
+            ),
+            `${IF}.right`,
+            'Not a valid expression',
+        );
+    });
+
+    test('only a literal number has a quantity', () => {
+        expectIssue(
+            ruleWith(compare(fact('challenge.timeLeft'), { kind: 'literal', value: 'x', quantity: 'keys' })),
+            `${IF}.right`,
+            'Unrecognized key',
+        );
+        expectIssue(
+            ruleWith(compare(fact('challenge.timeLeft'), { kind: 'literal', value: 5 })),
+            `${IF}.right`,
+            'Not a valid expression',
+        );
+    });
+
+    test('unknown fact names and unknown expression kinds are refused', () => {
+        expectIssue(ruleWith(compare(fact('challenge.nonsense'), hours(1))), `${IF}.left`, 'Not a valid expression');
+        expectIssue(
+            ruleWith(compare({ kind: 'script', code: '1+1' }, hours(1))),
+            `${IF}.left`,
+            'Not a valid expression',
+        );
+        expectIssue(ruleWith(compare({ kind: 'fact', name: 'clock.now', extra: 1 }, hours(1))), `${IF}.left`, '');
+    });
+
+    test('a select belongs to entry facts only, and entry facts need one', () => {
+        expectIssue(
+            ruleWith(compare(fact('entry.votes'), count(1, 'votes'))),
+            `${IF}.left`,
+            'entry.votes needs a select',
+        );
+        expectIssue(
+            ruleWith(compare(fact('challenge.end', { select: { by: 'mostVotes' } }), instant(1))),
+            `${IF}.left`,
+            'challenge.end does not take a select',
+        );
+        expectIssue(
+            ruleWith(compare(fact('challenge.end', { window: '1h' }), instant(1))),
+            `${IF}.left`,
+            'challenge.end does not take a window',
+        );
+    });
+
+    test('a fact whose stage list holds the active stage is accepted; the reward facts are refused until a rule can run in their stage', () => {
+        const count0 = count(0, 'count');
+        for (const name of [
+            'missions.voteNeed',
+            'photos.eligibleAtLeast',
+            'challenge.players',
+            'challenge.maxPlayers',
+        ]) {
+            expect(validate(ruleWith(compare(fact(name), count0, '>'))).ok).toBe(true);
+        }
+        expect(validate(ruleWith(compare(fact('challenge.joinPrice'), count(1, 'coins'), '<='))).ok).toBe(true);
+        expect(validate(ruleWith(compare(fact('boost.open'), { kind: 'literal', value: true }, '='))).ok).toBe(true);
+        expect(
+            validate(ruleWith(compare(fact('entry.minAge', { select: { by: 'mostVotes' } }), hours(1), '>'))).ok,
+        ).toBe(true);
+        expectIssue(
+            ruleWith(compare(fact('rewards.claimable'), { kind: 'literal', value: true }, '=')),
+            `${IF}.left`,
+            'rewards.claimable is not available while a challenge is active',
+        );
+        expectIssue(
+            ruleWith(compare(fact('rewards.claimableCount'), count0, '>')),
+            `${IF}.left`,
+            'rewards.claimableCount is not available while a challenge is active',
+        );
+    });
+
+    test('a setting must be readable by value and usable in an expression', () => {
+        expectIssue(
+            ruleWith(compare(setting('windowBounds'), hours(1))),
+            `${IF}.left`,
+            'cannot be read in an expression',
+        );
+        expectIssue(
+            ruleWith(compare(setting('autovoteRunning'), { kind: 'literal', value: true }, '=')),
+            `${IF}.left`,
+            'cannot be read in an expression',
+        );
+        expectIssue(ruleWith(compare(setting('nonsense'), hours(1))), `${IF}.left`, 'is not a configuration setting');
+        expectIssue(
+            ruleWith(compare(setting('autoSubmitSchedule'), hours(1))),
+            `${IF}.left`,
+            'has no value an expression can use',
+        );
+        expectIssue(ruleWith(compare(setting('boostTime', 'later'), hours(1))), `${IF}.left`, 'Not a valid expression');
+    });
+
+    test('incompatible quantities are refused for ordered operators, equality and arithmetic', () => {
+        expectIssue(
+            ruleWith(compare(fact('challenge.timeLeft'), fact('challenge.end'))),
+            IF,
+            'Cannot compare duration with instant',
+        );
+        expectIssue(
+            ruleWith(compare(fact('boost.state'), { kind: 'literal', value: 'a' }, '<')),
+            IF,
+            '< compares numbers only',
+        );
+        expectIssue(ruleWith(compare(fact('boost.state'), hours(1), '=')), IF, 'Cannot compare a string with a number');
+        expectIssue(
+            ruleWith(compare({ kind: 'add', left: count(1), right: count(1, 'swaps') }, count(1))),
+            `${IF}.left`,
+            'add needs two values of one quantity',
+        );
+        expectIssue(
+            ruleWith(compare({ kind: 'offset', from: hours(1), by: hours(1), direction: 'before' }, instant(1))),
+            `${IF}.left`,
+            'offset moves an instant by a duration',
+        );
+        expectIssue(
+            ruleWith(compare({ kind: 'earlier', of: [instant(1), hours(1)] }, instant(1))),
+            `${IF}.left`,
+            'earlier needs instants',
+        );
+        expectIssue(
+            ruleWith(compare({ kind: 'min', of: [count(1), count(1, 'swaps')] }, count(1))),
+            `${IF}.left`,
+            'min needs numbers of one quantity',
+        );
+    });
+
+    test('list conditions need the right kinds', () => {
+        expectIssue(
+            ruleWith({ type: 'contains', list: fact('boost.state'), value: { kind: 'literal', value: 'a' } }),
+            IF,
+            'contains needs a list',
+        );
+        expectIssue(
+            ruleWith({ type: 'containsAny', list: fact('challenge.tags'), value: { kind: 'literal', value: 'a' } }),
+            IF,
+            'containsAny needs a list to look for',
+        );
+        expectIssue(
+            ruleWith({ type: 'contains', list: fact('challenge.tags'), value: { kind: 'literal', value: ['a'] } }),
+            IF,
+            'contains needs a string to look for',
+        );
+    });
+
+    test('a list condition reports an expression of its own that is wrong, and does not also relate it', () => {
+        const lookup = { type: 'contains', list: setting('nonsense'), value: { kind: 'literal', value: 'a' } };
+        expect(issuesOf(ruleWith(lookup))).toEqual([
+            { path: `${IF}.list`, message: '"nonsense" is not a configuration setting' },
+        ]);
+    });
+
+    test('the quantity of an expression inside a nested condition is checked too', () => {
+        const nested = {
+            type: 'any',
+            of: [{ type: 'not', condition: compare(fact('challenge.timeLeft'), fact('challenge.end')) }],
+        };
+        expectIssue(ruleWith(nested), `${IF}.of[0].condition`, 'Cannot compare');
+    });
+
+    test('expressions nest at most 8 levels deep', () => {
+        const nest = (levels: number): unknown => {
+            let expr: unknown = instant(1);
+            for (let level = 1; level < levels; level++)
+                expr = { kind: 'offset', from: expr, by: hours(1), direction: 'before' };
+            return expr;
+        };
+        expect(validate(ruleWith(compare(nest(8), instant(2)))).ok).toBe(true);
+        expectIssue(ruleWith(compare(nest(9), instant(2))), `${IF}.left`, 'nests deeper than 8 levels');
+    });
+
+    test('an aggregate has 2 to 8 operands', () => {
+        const of = (n: number) => Array.from({ length: n }, () => instant(1));
+        expect(validate(ruleWith(compare({ kind: 'later', of: of(8) }, instant(2)))).ok).toBe(true);
+        expectIssue(ruleWith(compare({ kind: 'later', of: of(9) }, instant(2))), `${IF}.left.of`, '');
+        expectIssue(ruleWith(compare({ kind: 'earlier', of: of(1) }, instant(2))), `${IF}.left.of`, '');
+        expectIssue(
+            ruleWith(compare({ kind: 'min', of: Array.from({ length: 9 }, () => count(1)) }, count(2))),
+            `${IF}.left.of`,
+            '',
+        );
+    });
+
+    test('entriesWhere has 1 to 8 predicates, a quantifier, and entry-typed values', () => {
+        const predicate = { field: 'votes', op: '>=', value: 1 };
+        const make = (where: unknown[], quantifier: unknown = 'all') =>
+            ruleWith({ type: 'entriesWhere', quantifier, where });
+        expect(validate(make(Array.from({ length: 8 }, () => predicate))).ok).toBe(true);
+        expectIssue(
+            make(Array.from({ length: 9 }, () => predicate)),
+            `${IF}.where`,
+            'entriesWhere takes 1 to 8 predicates',
+        );
+        expectIssue(make([]), `${IF}.where`, 'entriesWhere takes 1 to 8 predicates');
+        expectIssue(make([predicate], 'some'), `${IF}.quantifier`, 'Invalid option');
+        expectIssue(
+            make([{ field: 'boosted', op: '=', value: 3 }]),
+            `${IF}.where[0].value`,
+            'boosted compares with true or false',
+        );
+        expectIssue(make([{ field: 'nonsense', op: '=', value: 1 }]), `${IF}.where[0].field`, 'Invalid option');
+    });
+
+    test('an entry count has 1 to 8 predicates, each with a value of the right kind', () => {
+        const predicate = { field: 'votes', op: '>=', value: 1 };
+        expect(
+            validate(
+                ruleWith({ type: 'entryCount', where: Array.from({ length: 8 }, () => predicate), op: '>=', value: 1 }),
+            ).ok,
+        ).toBe(true);
+        expectIssue(
+            ruleWith({ type: 'entryCount', where: Array.from({ length: 9 }, () => predicate), op: '>=', value: 1 }),
+            `${IF}.where`,
+            '',
+        );
+        expectIssue(ruleWith({ type: 'entryCount', where: [], op: '>=', value: 1 }), `${IF}.where`, '');
+        expectIssue(
+            ruleWith({ type: 'entryCount', where: [{ field: 'boosted', op: '=', value: 3 }], op: '>=', value: 1 }),
+            `${IF}.where[0].value`,
+            'boosted compares with true or false',
+        );
+        expectIssue(
+            ruleWith({ type: 'entryCount', where: [{ field: 'boosted', op: '>', value: true }], op: '>=', value: 1 }),
+            `${IF}.where[0].op`,
+            'boosted only supports = and !=',
+        );
+        expectIssue(
+            ruleWith({ type: 'entryCount', where: [{ field: 'votes', op: '>', value: true }], op: '>=', value: 1 }),
+            `${IF}.where[0].value`,
+            'votes compares with a number',
+        );
+        expectIssue(
+            ruleWith({ type: 'entryCount', where: [{ field: 'nonsense', op: '>', value: 1 }], op: '>=', value: 1 }),
+            `${IF}.where[0].field`,
+            'Invalid option',
+        );
+        expectIssue(ruleWith({ type: 'entryCount', where: [predicate], op: '>=', value: 'x' }), `${IF}.value`, '');
+    });
+
+    test('a memory slot an expression reads must be remembered by some action', () => {
+        const reads = compare(fact('entry.votes', { select: { by: 'memory', slot: 'held' } }), count(1, 'votes'));
+        expectIssue(ruleWith(reads), 'phases.main.rules[0].if', 'Memory slot "held" is never remembered');
+        const remembered = withRule({
+            if: [reads],
+            do: [{ type: 'remember', slot: 'held', entry: { by: 'mostVotes' } }],
+        });
+        expect(validate(remembered).ok).toBe(true);
+    });
+
+    test('a scenario that validated before still validates: the old conditions are unchanged', () => {
+        const old = [
+            { type: 'entries', op: '<', value: 3 },
+            { type: 'entry', select: { by: 'slot', index: 0 }, field: 'votes', op: '>', value: 10 },
+            { type: 'not', condition: { type: 'exposure', op: '>', value: 90 } },
+        ];
+        expect(validate(withRule({ if: old })).ok).toBe(true);
+    });
+});
+
 describe('validateScenario — shape errors carry readable paths', () => {
     test('unknown keys are rejected at every level', () => {
         expectIssue(doc({ extra: 1 }), '', 'Unrecognized key');
@@ -353,6 +697,180 @@ describe('validateScenario — semantic checks', () => {
     });
 });
 
+describe('validateScenario — phase bindings and profile', () => {
+    const percent = (value: number) => ({ kind: 'literal', value, quantity: 'percent' });
+    const seconds = (value: number) => ({ kind: 'literal', value, quantity: 'duration', unit: 'seconds' });
+    const baseSetting = (key: string) => ({ kind: 'setting', key, view: 'base' });
+    const phaseDoc = (phase: Record<string, unknown>) => doc({ phases: { main: phase } });
+    const accepted = (phase: Record<string, unknown>) => {
+        const result = validate(phaseDoc(phase));
+        expect(result).toEqual(expect.objectContaining({ ok: true }));
+        return (result as Accepted).scenario.phases.main;
+    };
+
+    test('a binding is kept beside the literals, with a profile name', () => {
+        const phase = accepted({
+            settings: { autoBoost: true },
+            bindings: { boostFreshEntryWait: baseSetting('boostFreshEntryWait') },
+            profile: '  Tactic ',
+        });
+        expect(phase.bindings).toEqual({ boostFreshEntryWait: baseSetting('boostFreshEntryWait') });
+        expect(phase.profile).toBe('Tactic');
+    });
+
+    test('a binding may read raw facts and base settings in an expression', () => {
+        accepted({
+            bindings: {
+                boostTime: {
+                    kind: 'difference',
+                    from: { kind: 'fact', name: 'clock.now' },
+                    to: { kind: 'fact', name: 'challenge.end' },
+                },
+            },
+        });
+    });
+
+    test('a key set literally and bound is refused', () => {
+        expectIssue(
+            phaseDoc({ settings: { boostTime: 60 }, bindings: { boostTime: seconds(30) } }),
+            'phases.main.bindings.boostTime',
+            'set in settings and bound',
+        );
+    });
+
+    test.each([
+        ['a key no phase may write', 'manualPhotosOnly', { kind: 'literal', value: true }, 'Manual Only'],
+        ['the assignment', 'scenario', { kind: 'literal', value: 'x' }, 'scenario assignment'],
+        ['a key that is not a setting', 'bogus', { kind: 'literal', value: true }, 'Not a per-challenge setting'],
+        ['an installation setting', 'language', { kind: 'literal', value: 'en' }, 'Not a per-challenge setting'],
+    ])('%s cannot be bound', (label, key, expression, message) => {
+        expectIssue(phaseDoc({ bindings: { [key]: expression } }), `phases.main.bindings.${key}`, message);
+    });
+
+    test('a setting whose value has no expression form cannot be bound', () => {
+        expectIssue(
+            phaseDoc({ bindings: { chosenPhotos: baseSetting('chosenPhotos') } }),
+            'phases.main.bindings.chosenPhotos',
+            'no value an expression can set',
+        );
+    });
+
+    test.each([
+        ['another quantity', 'exposure', seconds(30), 'This gives a duration, but exposure takes a percent'],
+        ['another kind', 'autoBoost', percent(5), 'This gives a percent, but autoBoost takes a boolean'],
+        [
+            'a list for a boolean',
+            'autoBoost',
+            { kind: 'literal', value: ['a'] },
+            'a list, but autoBoost takes a boolean',
+        ],
+    ])('a binding of %s is refused', (label, key, expression, message) => {
+        expectIssue(phaseDoc({ bindings: { [key]: expression } }), `phases.main.bindings.${key}`, message);
+    });
+
+    test('an expression with a mistake reports it once, at the binding', () => {
+        expectIssue(
+            phaseDoc({
+                bindings: { boostTime: { kind: 'offset', from: percent(1), by: percent(2), direction: 'after' } },
+            }),
+            'phases.main.bindings.boostTime',
+            'offset moves an instant by a duration',
+        );
+    });
+
+    test('a binding cannot read a setting with the phase applied', () => {
+        expectIssue(
+            phaseDoc({ bindings: { boostTime: { kind: 'setting', key: 'boostTime', view: 'effective' } } }),
+            'phases.main.bindings.boostTime',
+            'a binding reads base settings only',
+        );
+    });
+
+    test('a binding cannot read a fact that depends on the effective settings', () => {
+        expectIssue(
+            phaseDoc({ bindings: { exposure: { kind: 'fact', name: 'photos.eligibleCount' } } }),
+            'phases.main.bindings.exposure',
+            'depends on the effective settings',
+        );
+    });
+
+    test('a binding reads only facts available while a challenge is active', () => {
+        expectIssue(
+            phaseDoc({ bindings: { autoBoost: { kind: 'fact', name: 'rewards.claimable' } } }),
+            'phases.main.bindings.autoBoost',
+            'is not available',
+        );
+    });
+
+    test('a memory slot a binding reads must be remembered by some action', () => {
+        const binding = {
+            boostTime: { kind: 'fact', name: 'entry.votes', select: { by: 'memory', slot: 'pick' } },
+        };
+        expect(issuesOf(phaseDoc({ bindings: binding }))).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ path: 'phases.main.bindings', message: expect.stringContaining('pick') }),
+            ]),
+        );
+    });
+
+    test('a pair must be supplied together across the literals and the bindings', () => {
+        accepted({ settings: { exposureTarget: 100 }, bindings: { exposure: baseSetting('exposure') } });
+        accepted({ settings: { exposure: 50 }, bindings: { exposureTarget: baseSetting('exposureTarget') } });
+        expectIssue(
+            phaseDoc({ bindings: { exposure: baseSetting('exposure') } }),
+            'phases.main.settings.exposureTarget',
+            'Set exposure and exposureTarget together',
+        );
+        expectIssue(
+            phaseDoc({ bindings: { finalWindowExposureTarget: baseSetting('finalWindowExposureTarget') } }),
+            'phases.main.settings.finalWindowExposure',
+            'together',
+        );
+    });
+
+    test('a bad profile name or a non-string profile is a shape error', () => {
+        expectIssue(phaseDoc({ profile: '' }), 'phases.main.profile', 'Name a profile');
+        expectIssue(phaseDoc({ profile: 'x'.repeat(61) }), 'phases.main.profile', '<=60 characters');
+        expect(validate(phaseDoc({ profile: 7 })).ok).toBe(false);
+    });
+
+    describe('the stored profile it names', () => {
+        const stored = (values: unknown) => ({ Tactic: values });
+        const check = (profiles: Record<string, unknown> | null, name = 'tactic') =>
+            validateScenario(phaseDoc({ profile: name }), globalDefaults, profiles);
+
+        test.each([
+            [
+                'the scenario assignment',
+                { scenario: 'Other' },
+                'sets scenario. A phase cannot change the scenario assignment itself',
+            ],
+            ['Manual Only', { manualPhotosOnly: true }, 'sets manualPhotosOnly. A phase cannot change Manual Only'],
+        ])('is refused when it sets %s, not left out silently', (label, values, message) => {
+            const result = check(stored(values));
+            expect(result.ok).toBe(false);
+            expect((result as Refused).issues).toEqual([
+                { path: 'phases.main.profile', message: `Profile "tactic" ${message}` },
+            ]);
+        });
+
+        test('is accepted when it sets only keys a phase may write', () => {
+            expect(check(stored({ autoBoost: true, boostTime: 60 })).ok).toBe(true);
+        });
+
+        test('may be saved after the scenario, and is not looked at when a stored scenario is read back', () => {
+            expect(check({}).ok).toBe(true);
+            expect(check(stored('not an object')).ok).toBe(true);
+            expect(check(null).ok).toBe(true);
+            expect(validate(phaseDoc({ profile: 'Tactic' })).ok).toBe(true);
+        });
+
+        test('a stale key outside the schema in it is not a refusal here', () => {
+            expect(check(stored({ retired: 1 })).ok).toBe(true);
+        });
+    });
+});
+
 describe('parseScenarioJson', () => {
     test('parses JSON text', () => {
         expect(parseScenarioJson('{"a":1}')).toEqual({ ok: true, value: { a: 1 } });
@@ -376,4 +894,406 @@ describe('parseScenarioJson', () => {
 test('formatPath joins keys and indexes', () => {
     expect(formatPath(['phases', 'a', 'rules', 1, 'do', 0, 'with'])).toBe('phases.a.rules[1].do[0].with');
     expect(formatPath([])).toBe('');
+});
+
+describe('validateScenario — the scope of a scenario', () => {
+    const installation = (phase: Record<string, unknown>, extra = {}) =>
+        doc({ scope: 'installation', phases: { main: phase }, ...extra });
+    const fact = (name: string) => ({ kind: 'fact', name });
+    const count = (value: number) => ({ kind: 'literal', value, quantity: 'count' });
+    const amount = (value: number, quantity: string) => ({ kind: 'literal', value, quantity });
+    const compare = (left: unknown, right: unknown) => ({ type: 'compare', left, op: '>', right });
+
+    test('an omitted scope is a challenge scenario, and a challenge scope may be written out', () => {
+        expect((validate(doc()) as Accepted).scenario.scope).toBeUndefined();
+        expect(validate(doc({ scope: 'challenge' })).ok).toBe(true);
+        expectIssue(doc({ scope: 'account' }), 'scope', 'expected one of');
+    });
+
+    test("a challenge scenario keeps today's rule: an account setting is not a per-challenge setting", () => {
+        expectIssue(
+            doc({ phases: { main: { settings: { autoClaimPrizes: true } } } }),
+            'phases.main.settings.autoClaimPrizes',
+            'Not a per-challenge setting',
+        );
+    });
+
+    test('an installation scenario writes installation settings, with no challenge setting among them', () => {
+        expect(validate(installation({ settings: { autoClaimPrizes: true, missionVote: false } })).ok).toBe(true);
+        expect(validate(installation({ settings: { currencyReserveKeys: 2 } })).ok).toBe(true);
+        expectIssue(
+            installation({ settings: { exposure: 10 } }),
+            'phases.main.settings.exposure',
+            'Not a setting an installation scenario can change',
+        );
+        expectIssue(
+            installation({ settings: { mock: true } }),
+            'phases.main.settings.mock',
+            'Only the user switches between real and mock mode',
+        );
+        expectIssue(
+            installation({ settings: { notASetting: 1 } }),
+            'phases.main.settings.notASetting',
+            'Not a setting an installation scenario can change',
+        );
+    });
+
+    test('an installation setting is checked like any value: by its schema, or by its descriptor outside it', () => {
+        expectIssue(
+            installation({ settings: { currencyReserveKeys: -3 } }),
+            'phases.main.settings.currencyReserveKeys',
+            '',
+        );
+        expect(validate(installation({ settings: { theme: 'light', customTimezones: ['Europe/Riga'] } })).ok).toBe(
+            true,
+        );
+        expectIssue(
+            installation({ settings: { theme: 'neon' } }),
+            'phases.main.settings.theme',
+            'does not take this value',
+        );
+        expectIssue(
+            installation({ settings: { customTimezones: [1] } }),
+            'phases.main.settings.customTimezones',
+            'does not take',
+        );
+        expectIssue(installation({ settings: { language: 5 } }), 'phases.main.settings.language', 'does not take');
+        expectIssue(
+            installation({ settings: { checkFrequencyMin: 'x' } }),
+            'phases.main.settings.checkFrequencyMin',
+            '',
+        );
+        expect(validate(installation({ settings: { apiTimeout: 30 } })).ok).toBe(true);
+        expectIssue(
+            installation({ settings: { apiTimeout: '30' } }),
+            'phases.main.settings.apiTimeout',
+            'does not take',
+        );
+        expect(validate(installation({ settings: { stayLoggedIn: true } })).ok).toBe(false);
+    });
+
+    test('a pair that only challenge scenarios share (exposure and its target) is not asked of an installation', () => {
+        expectIssue(
+            installation({ settings: { exposure: 10, exposureTarget: 12 } }),
+            'phases.main.settings.exposure',
+            'Not a setting',
+        );
+    });
+
+    test('bindings: an installation key bound from account facts, never a challenge key or a challenge fact', () => {
+        expect(validate(installation({ bindings: { missionVote: { kind: 'literal', value: true } } })).ok).toBe(true);
+        expectIssue(
+            installation({ bindings: { exposure: count(3) } }),
+            'phases.main.bindings.exposure',
+            'Not a setting an installation scenario can change',
+        );
+        expectIssue(
+            installation({ bindings: { currencyReserveKeys: fact('challenge.entries') } }),
+            'phases.main.bindings.currencyReserveKeys',
+            'not available outside a challenge',
+        );
+        expect(validate(installation({ bindings: { currencyReserveKeys: fact('balance.keys') } })).ok).toBe(true);
+    });
+
+    test('conditions: account facts are readable, a challenge fact is not, and the challenge conditions are refused', () => {
+        const rule = (condition: unknown) =>
+            installation({ rules: [{ if: [condition], do: [{ type: 'notify', message: 'x' }] }] });
+        expect(validate(rule(compare(fact('balance.keys'), amount(1, 'keys')))).ok).toBe(true);
+        expect(validate(rule({ type: 'dailyWindow', from: '01:00', to: '02:00' })).ok).toBe(true);
+        expect(validate(rule({ type: 'balance', currency: 'keys', op: '>', value: 1 })).ok).toBe(true);
+        expect(validate(rule({ type: 'inPhaseFor', min: '1h' })).ok).toBe(true);
+        expectIssue(
+            rule(compare(fact('challenge.exposure'), amount(1, 'percent'))),
+            'phases.main.rules[0].if[0].left',
+            'not available outside a challenge',
+        );
+        for (const challengeOnly of [
+            { type: 'beforeEnd', max: '1d' },
+            { type: 'afterStart', min: '1d' },
+            { type: 'elapsedPercent', min: 10 },
+            { type: 'entries', op: '>', value: 1 },
+            { type: 'freeSlots', op: '>', value: 1 },
+            { type: 'exposure', op: '>', value: 1 },
+            { type: 'challengeRank', op: '>', value: 1 },
+            { type: 'challengeVotes', op: '>', value: 1 },
+            { type: 'boostState', in: ['AVAILABLE'] },
+            { type: 'turboState', in: ['WON'] },
+            { type: 'entry', select: { by: 'slot', index: 0 }, field: 'votes', op: '>', value: 1 },
+            { type: 'entriesWhere', quantifier: 'any', where: [{ field: 'votes', op: '>', value: 1 }] },
+            { type: 'entryCount', where: [{ field: 'votes', op: '>', value: 1 }], op: '>', value: 1 },
+        ]) {
+            expectIssue(
+                rule(challengeOnly),
+                'phases.main.rules[0].if[0]',
+                `${challengeOnly.type} reads a challenge: an installation scenario cannot use it`,
+            );
+        }
+        // Nested too: a challenge condition under all / any / not.
+        expectIssue(
+            rule({ type: 'not', condition: { type: 'any', of: [{ type: 'exposure', op: '>', value: 1 }] } }),
+            'phases.main.rules[0].if[0].condition.of[0]',
+            'reads a challenge',
+        );
+    });
+
+    test('the same challenge conditions stay valid in a challenge scenario', () => {
+        const rule = (condition: unknown) => withRule({ if: [condition] });
+        expect(validate(rule({ type: 'beforeEnd', max: '1d' })).ok).toBe(true);
+        expect(validate(rule(compare(fact('challenge.exposure'), amount(1, 'percent')))).ok).toBe(true);
+    });
+});
+
+describe('validateScenario — an installation setting outside the schema, by its descriptor', () => {
+    test('a flag takes a flag, and a value with no form to write takes nothing', () => {
+        jest.isolateModules(() => {
+            jest.doMock('../../src/ts/core/settings/scenarioCapabilities', () => {
+                const actual = jest.requireActual<typeof import('../../src/ts/core/settings/scenarioCapabilities')>(
+                    '../../src/ts/core/settings/scenarioCapabilities',
+                );
+                const writable = (value: { kind: 'boolean' } | { kind: 'other' }) => ({
+                    disposition: 'appPreference' as const,
+                    read: 'value' as const,
+                    phaseWrite: ['installation' as const],
+                    owner: 'installation' as const,
+                    value,
+                });
+                return {
+                    ...actual,
+                    scenarioCapability: (key: string) =>
+                        key === 'testFlag'
+                            ? writable({ kind: 'boolean' })
+                            : key === 'testBlob'
+                              ? writable({ kind: 'other' })
+                              : actual.scenarioCapability(key),
+                };
+            });
+            const isolated = require('../../src/ts/core/settings/scenarioSchema') as typeof scenarioSchemaModule;
+            const installation = (settings: Record<string, unknown>) =>
+                doc({ scope: 'installation', phases: { main: { settings } } });
+            expect(isolated.validateScenario(installation({ testFlag: true }), globalDefaults).ok).toBe(true);
+            const refused = isolated.validateScenario(installation({ testFlag: 'yes', testBlob: 1 }), globalDefaults);
+            expect((refused as Refused).issues).toEqual([
+                { path: 'phases.main.settings.testFlag', message: 'testFlag does not take this value' },
+                { path: 'phases.main.settings.testBlob', message: 'testBlob does not take this value' },
+            ]);
+        });
+        jest.dontMock('../../src/ts/core/settings/scenarioCapabilities');
+    });
+});
+
+describe('validateScenario — a phase’s dynamic schedules', () => {
+    const instant = { kind: 'fact', name: 'challenge.end' };
+    const duration = { kind: 'literal', value: 1, quantity: 'duration', unit: 'hours' };
+    const submitRows = (count: number) =>
+        Array.from({ length: count }, (_unused, index) => ({ count: Math.min(index + 1, 4), at: instant }));
+    const windowRows = (count: number) => Array.from({ length: count }, () => ({ at: instant, duration }));
+    const withSchedules = (schedules: unknown) => doc({ phases: { main: { schedules } } });
+
+    test('a submit, a vote and a pause schedule validate, and are kept as written', () => {
+        const schedules = {
+            submit: {
+                alignment: 'end',
+                rows: [
+                    { count: 2, at: instant },
+                    { count: 4, at: instant },
+                ],
+            },
+            vote: { rows: windowRows(1) },
+            pause: { rows: windowRows(6) },
+        };
+        const result = validate(withSchedules(schedules));
+        expect(result.ok).toBe(true);
+        expect((result as Accepted).scenario.phases.main.schedules).toEqual(schedules);
+    });
+
+    test('a phase may carry any one of them, or an empty set', () => {
+        for (const schedules of [{}, { submit: { alignment: 'absolute', rows: submitRows(1) } }]) {
+            expect(validate(withSchedules(schedules)).ok).toBe(true);
+        }
+    });
+
+    test('a count is a whole number from 1 to 4, and a submit schedule has 1 to 4 rows', () => {
+        for (const rows of [
+            [{ count: 0, at: instant }],
+            [{ count: 5, at: instant }],
+            [{ count: 1.5, at: instant }],
+            [],
+            submitRows(5),
+        ]) {
+            expect(validate(withSchedules({ submit: { alignment: 'end', rows } })).ok).toBe(false);
+        }
+        expect(validate(withSchedules({ submit: { alignment: 'end', rows: submitRows(4) } })).ok).toBe(true);
+    });
+
+    test('a window schedule has 1 to 6 rows, each with an instant and a duration', () => {
+        for (const kind of ['vote', 'pause']) {
+            expect(validate(withSchedules({ [kind]: { rows: [] } })).ok).toBe(false);
+            expect(validate(withSchedules({ [kind]: { rows: windowRows(7) } })).ok).toBe(false);
+            expect(validate(withSchedules({ [kind]: { rows: [{ at: instant }] } })).ok).toBe(false);
+            expect(validate(withSchedules({ [kind]: { rows: [{ duration }] } })).ok).toBe(false);
+        }
+    });
+
+    test('every object is strict, and the alignment is one of the two', () => {
+        for (const schedules of [
+            { other: { rows: windowRows(1) } },
+            { submit: { alignment: 'start', rows: submitRows(1) } },
+            { submit: { rows: submitRows(1) } },
+            { submit: { alignment: 'end', rows: submitRows(1), extra: 1 } },
+            { submit: { alignment: 'end', rows: [{ count: 2, at: instant, extra: 1 }] } },
+            { vote: { rows: windowRows(1), extra: 1 } },
+        ]) {
+            expect(validate(withSchedules(schedules)).ok).toBe(false);
+        }
+    });
+
+    test('an expression that is not one is refused with its path', () => {
+        const refused = issuesOf(
+            withSchedules({ submit: { alignment: 'end', rows: [{ count: 2, at: { kind: 'nope' } }] } }),
+        );
+        expect(refused.some((issue) => issue.path.startsWith('phases.main.schedules.submit.rows'))).toBe(true);
+    });
+
+    describe('what a schedule may be set beside, and what its expressions may be', () => {
+        const submit = { alignment: 'end', rows: [{ count: 2, at: instant }] };
+        const issueAt = (input: unknown, path: string) => issuesOf(input).filter((issue) => issue.path === path);
+
+        test.each([
+            ['submit', { submit }, 'autoSubmitSchedule', [{ count: 2, seconds: 600 }]],
+            ['vote', { vote: { rows: windowRows(1) } }, 'scheduledFillTime', ['12:00']],
+            ['vote', { vote: { rows: windowRows(1) } }, 'scheduledFillBeforeEnd', [600]],
+            ['vote', { vote: { rows: windowRows(1) } }, 'scheduledFillWindowMinutes', 30],
+            ['pause', { pause: { rows: windowRows(1) } }, 'votingPauseTime', ['01:00']],
+            ['pause', { pause: { rows: windowRows(1) } }, 'votingPauseBeforeEnd', [600]],
+            ['pause', { pause: { rows: windowRows(1) } }, 'votingPauseDurationMinutes', 60],
+        ])('a %s schedule and a literal %s are refused together', (_kind, schedules, key, value) => {
+            expect(
+                issueAt(
+                    doc({ phases: { main: { schedules, settings: { [key]: value } } } }),
+                    `phases.main.settings.${key}`,
+                ),
+            ).toEqual([
+                {
+                    path: `phases.main.settings.${key}`,
+                    message: `A phase schedule replaces ${key}: remove one of them`,
+                },
+            ]);
+        });
+
+        test('a schedule and a binding of the setting it replaces are refused together', () => {
+            const bound = { kind: 'literal', value: 600, quantity: 'duration', unit: 'seconds' };
+            expect(
+                issueAt(
+                    doc({ phases: { main: { schedules: { submit }, bindings: { autoSubmitSchedule: bound } } } }),
+                    'phases.main.bindings.autoSubmitSchedule',
+                ),
+            ).toContainEqual({
+                path: 'phases.main.bindings.autoSubmitSchedule',
+                message: 'A phase schedule replaces autoSubmitSchedule: remove one of them',
+            });
+        });
+
+        test('a schedule beside settings it does not replace is accepted', () => {
+            expect(
+                validate(
+                    doc({ phases: { main: { schedules: { submit }, settings: { scheduledFillTime: ['12:00'] } } } }),
+                ).ok,
+            ).toBe(true);
+        });
+
+        test('a submit count appears once; equal deadlines are fine', () => {
+            const twice = {
+                alignment: 'end',
+                rows: [
+                    { count: 2, at: instant },
+                    { count: 2, at: instant },
+                ],
+            };
+            expect(issueAt(withSchedules({ submit: twice }), 'phases.main.schedules.submit.rows')).toEqual([
+                { path: 'phases.main.schedules.submit.rows', message: 'Each submit count can appear only once' },
+            ]);
+            const equal = {
+                alignment: 'end',
+                rows: [
+                    { count: 2, at: instant },
+                    { count: 3, at: instant },
+                ],
+            };
+            expect(validate(withSchedules({ submit: equal })).ok).toBe(true);
+        });
+
+        test('an instant is required for `at`, a duration for `duration`', () => {
+            const wrongAt = { kind: 'literal', value: 5, quantity: 'duration', unit: 'hours' };
+            const wrongDuration = { kind: 'literal', value: 5, quantity: 'instant' };
+            expect(
+                issueAt(
+                    withSchedules({ submit: { alignment: 'end', rows: [{ count: 2, at: wrongAt }] } }),
+                    'phases.main.schedules.submit.rows[0].at',
+                ),
+            ).toEqual([{ path: 'phases.main.schedules.submit.rows[0].at', message: 'at needs an instant' }]);
+            for (const kind of ['vote', 'pause']) {
+                const refused = issuesOf(
+                    withSchedules({ [kind]: { rows: [{ at: wrongAt, duration: wrongDuration }] } }),
+                );
+                expect(refused).toEqual([
+                    { path: `phases.main.schedules.${kind}.rows[0].at`, message: 'at needs an instant' },
+                    { path: `phases.main.schedules.${kind}.rows[0].duration`, message: 'duration needs a duration' },
+                ]);
+            }
+        });
+
+        test('an expression that is itself unsound is refused for that, not as a wrong type', () => {
+            const unsound = { kind: 'offset', from: instant, by: instant, direction: 'before' };
+            const refused = issuesOf(
+                withSchedules({ submit: { alignment: 'end', rows: [{ count: 2, at: unsound }] } }),
+            );
+            expect(refused.length).toBeGreaterThan(0);
+            expect(refused.some((issue) => issue.message === 'at needs an instant')).toBe(false);
+        });
+
+        test('a policy fact or an effective-view setting is refused with the bindings’ own message', () => {
+            const messagesAt = (expr: unknown) =>
+                issueAt(
+                    withSchedules({ submit: { alignment: 'end', rows: [{ count: 2, at: expr }] } }),
+                    'phases.main.schedules.submit.rows[0].at',
+                ).map((issue) => issue.message);
+            expect(messagesAt({ kind: 'fact', name: 'photos.hasEligible' })).toEqual(
+                expect.arrayContaining([
+                    'photos.hasEligible depends on the effective settings: a binding cannot read it',
+                ]),
+            );
+            expect(messagesAt({ kind: 'setting', key: 'exposure', view: 'effective' })).toEqual(
+                expect.arrayContaining(['exposure is read with the phase applied: a binding reads base settings only']),
+            );
+            // the base view is allowed
+            expect(messagesAt({ kind: 'setting', key: 'exposure', view: 'base' })).not.toEqual(
+                expect.arrayContaining([expect.stringContaining('base settings only')]),
+            );
+        });
+
+        test('a memory slot a schedule reads must be remembered by some action', () => {
+            const fromMemory = { kind: 'fact', name: 'entry.age', select: { by: 'memory', slot: 'kept' } };
+            expect(
+                issuesOf(withSchedules({ pause: { rows: [{ at: instant, duration: fromMemory }] } })).some(
+                    (issue) => issue.message === 'Memory slot "kept" is never remembered by any action',
+                ),
+            ).toBe(true);
+            // ... and a submit row's instant is read the same way
+            const instantFromMemory = { kind: 'offset', from: instant, by: fromMemory, direction: 'before' };
+            expect(
+                issuesOf(
+                    withSchedules({ submit: { alignment: 'end', rows: [{ count: 2, at: instantFromMemory }] } }),
+                ).some((issue) => issue.message === 'Memory slot "kept" is never remembered by any action'),
+            ).toBe(true);
+        });
+
+        test('an installation scenario takes no schedules', () => {
+            expect(
+                issueAt(
+                    doc({ scope: 'installation', phases: { main: { schedules: { submit } } } }),
+                    'phases.main.schedules',
+                ),
+            ).toEqual([{ path: 'phases.main.schedules', message: 'schedules is for a challenge scenario' }]);
+        });
+    });
 });

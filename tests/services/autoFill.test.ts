@@ -4,6 +4,11 @@
  */
 
 import type * as autoFillModule from '../../src/ts/core/services/autoFill';
+import type * as scheduleModule from '../../src/ts/core/services/autoFill/schedule';
+import type * as valueStateModule from '../../src/ts/core/scenarios/valueState';
+import type * as staggeredFillModule from '../../src/ts/core/services/autoFill/staggeredFill';
+import type { ResolvedSubmitSchedule } from '../../src/ts/core/types/autoFill';
+import type { ScenarioExpr } from '../../src/ts/core/types/scenario';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import type * as lexiconModule from '../../src/ts/core/services/semantic/lexicon';
 import type * as photoStatsModule from '../../src/ts/core/services/photoStats';
@@ -55,6 +60,8 @@ const {
     getNextScheduleThresholdSec,
     refreshChallengeState,
 } = require('../../src/ts/core/services/autoFill') as typeof autoFillModule;
+const { resolveAutoSubmitTrigger } =
+    require('../../src/ts/core/services/autoFill/staggeredFill') as typeof staggeredFillModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 const { createMemoryEntryAgeLedger } = require('../../src/ts/core/entryAgeStore') as typeof entryAgeStoreModule;
 
@@ -1802,7 +1809,7 @@ describe('resolveAutoSubmitDue — is an Auto-Submit due now', () => {
         submitToChallenge: jest.fn(),
     });
 
-    test('due: carries the trigger, the schedule, the target and the free slots, and touches nothing', () => {
+    test('due: carries the trigger, the resolved schedule, the target and the free slots, and touches nothing', () => {
         const challenge = dueChallenge();
         const result = resolveAutoSubmitDue(challenge, NOW, deps());
 
@@ -1811,7 +1818,15 @@ describe('resolveAutoSubmitDue — is an Auto-Submit due now', () => {
             authorization: {
                 trigger: expect.objectContaining({ relativeTarget: 3, clockTarget: 0, desired: 3 }),
                 authorizer: 'relative',
-                schedule: DEFAULT_SCHEDULE,
+                // the literal schedule, lowered against the challenge's close time (15 minutes after NOW)
+                resolved: {
+                    alignment: 'end',
+                    rows: [
+                        { count: 2, state: 'known', at: NOW + 900 - 1800 },
+                        { count: 3, state: 'known', at: NOW + 900 - 1200 },
+                        { count: 4, state: 'known', at: NOW + 900 - 600 },
+                    ],
+                },
                 desired: 3,
                 slotsRemaining: 2,
             },
@@ -3355,6 +3370,30 @@ describe('reflect-on-submit — auto-fill consumes the slot it just used', () =>
 });
 
 describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
+    test('searches portrait terms instead of camera equipment for eye contact', async () => {
+        const getEligiblePhotos = jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) => {
+            if (/camera|lens/i.test(opts.search ?? ''))
+                return [allowedPhoto('equipment', ['Camera', 'Camera Lens', 'Electronics'], 17000)];
+            if (opts.search === 'portrait') return [allowedPhoto('portrait', ['Portrait', 'Person', 'Face'], 100)];
+            return [];
+        });
+        const out = await fetchCandidatesForChallenge(
+            invalid({
+                id: 'c1',
+                title: 'Facing The Camera',
+                url: 'facing-the-camera2',
+                welcome_message:
+                    'For this challenge share your best photos where the subject is looking at the camera. I think that the most powerful photos are those where the viewer has direct eye-contact with the subject.',
+            }),
+            'tok',
+            {},
+            { getEligiblePhotos, logger: makeLogger() },
+        );
+        expect(out.map((p) => p.id)).toEqual(['portrait']);
+        const searches = getEligiblePhotos.mock.calls.map(([, , opts]) => opts.search);
+        expect(searches).toEqual(expect.arrayContaining(['portrait', 'face', 'person']));
+        expect(searches.join(' ')).not.toMatch(/camera|lens/i);
+    });
     test('tries the API default order when vote-sorted photos are all ineligible', async () => {
         const getEligiblePhotos = jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) =>
             opts.order === 'default'
@@ -5151,5 +5190,383 @@ describe('photo-stats enrichment in the fill pipeline', () => {
         const parsed: unknown = JSON.parse(raw);
         const photos = isPlainObject(parsed) && isPlainObject(parsed.photos) ? parsed.photos : {};
         expect(Object.keys(photos).sort()).toEqual(['portfolio', 'soccer']);
+    });
+});
+
+describe('the resolved submit schedule — literal and dynamic rows in one form', () => {
+    const schedule = require('../../src/ts/core/services/autoFill/schedule') as typeof scheduleModule;
+    const { known, absent, unknownOf } = require('../../src/ts/core/scenarios/valueState') as typeof valueStateModule;
+    type Rows = ResolvedSubmitSchedule['rows'];
+
+    const knownRow = (count: number, at: number): ResolvedSubmitSchedule['rows'][number] => ({
+        count,
+        state: 'known',
+        at,
+    });
+    const absentRow = (count: number, reason = 'not-present'): ResolvedSubmitSchedule['rows'][number] => ({
+        count,
+        state: 'absent',
+        reason,
+    });
+    const unknownRow = (count: number, reason = 'boost-timeout-malformed'): ResolvedSubmitSchedule['rows'][number] => ({
+        count,
+        state: 'unknown',
+        reason,
+    });
+    const end = (rows: Rows): ResolvedSubmitSchedule => ({ alignment: 'end', rows });
+    const absolute = (rows: Rows): ResolvedSubmitSchedule => ({ alignment: 'absolute', rows });
+
+    describe('lowering the literal schedule', () => {
+        test('each row becomes the instant its seconds before close name', () => {
+            expect(schedule.lowerSubmitSchedule(DEFAULT_SCHEDULE, 10_000)).toEqual(
+                end([knownRow(2, 8200), knownRow(3, 8800), knownRow(4, 9400)]),
+            );
+        });
+
+        test('an off row (0 seconds) is checked before lowering: inactive, with the reason', () => {
+            expect(schedule.lowerSubmitSchedule([{ count: 3, seconds: 0 }], 10_000)).toEqual(
+                end([absentRow(3, 'off')]),
+            );
+        });
+
+        test('a close time that cannot be read leaves no rows', () => {
+            expect(schedule.lowerSubmitSchedule(DEFAULT_SCHEDULE, NaN)).toEqual(end([]));
+        });
+    });
+
+    describe('the effective rows of one challenge', () => {
+        const three = end([knownRow(2, 1), knownRow(3, 2), knownRow(4, 3)]);
+
+        test('an end-aligned schedule shifts toward the end for a challenge with fewer photos', () => {
+            expect(schedule.submitShift(three, 3)).toBe(1);
+            expect(schedule.effectiveSubmitRows(three, 3)).toEqual([knownRow(2, 2), knownRow(3, 3)]);
+            expect(schedule.effectiveSubmitRows(three, 4)).toEqual(three.rows);
+        });
+
+        test('an off literal row does not extend the span, a confirmed-absent dynamic row does', () => {
+            expect(schedule.submitShift(end([knownRow(2, 1), knownRow(3, 2), absentRow(4, 'off')]), 3)).toBe(0);
+            expect(schedule.submitShift(end([knownRow(2, 1), knownRow(3, 2), absentRow(4)]), 3)).toBe(1);
+        });
+
+        test('an absolute schedule keeps every count and ignores the rows above the capacity', () => {
+            const rows = absolute([knownRow(1, 0), knownRow(2, 1), knownRow(3, 2), knownRow(4, 3)]);
+            expect(schedule.submitShift(rows, 3)).toBe(0);
+            expect(schedule.effectiveSubmitRows(rows, 3)).toEqual(rows.rows.slice(0, 3));
+            expect(schedule.effectiveSubmitRows(rows, 4)).toEqual(rows.rows);
+            expect(schedule.effectiveSubmitRows(rows, undefined)).toEqual([]);
+        });
+    });
+
+    describe('what a schedule authorizes', () => {
+        test('each known row that is due authorizes its count, and the largest wins whatever the order', () => {
+            const rows = end([knownRow(4, 30), knownRow(2, 10), knownRow(3, 20)]);
+            expect(schedule.authorizeSubmit(rows, 5, 1, 4)).toMatchObject({ authorizedCount: 0, exactTarget: 0 });
+            expect(schedule.authorizeSubmit(rows, 10, 1, 4)).toMatchObject({ authorizedCount: 2 });
+            expect(schedule.authorizeSubmit(rows, 25, 1, 4)).toMatchObject({ authorizedCount: 3 });
+            expect(schedule.authorizeSubmit(rows, 99, 1, 4)).toMatchObject({ authorizedCount: 4 });
+        });
+
+        test('an unknown row cannot raise the count and does not cancel another row, but the exact target is unknown', () => {
+            const rows = end([unknownRow(2), knownRow(3, 20)]);
+            expect(schedule.authorizeSubmit(rows, 25, 1, 4)).toEqual({
+                authorizedCount: 3,
+                exactTarget: null,
+                unknownReason: 'boost-timeout-malformed',
+            });
+            expect(schedule.authorizeSubmit(end([knownRow(2, 20), unknownRow(3)]), 25, 1, 4)).toMatchObject({
+                authorizedCount: 2,
+                exactTarget: null,
+            });
+        });
+
+        test('a row the entries already satisfy needs no evidence', () => {
+            const rows = end([unknownRow(2), knownRow(4, 50)]);
+            expect(schedule.authorizeSubmit(rows, 25, 3, 4)).toEqual({
+                authorizedCount: 0,
+                exactTarget: 0,
+                unknownReason: null,
+            });
+        });
+
+        test('the first unsatisfied unknown row gives the reason', () => {
+            const rows = end([unknownRow(2, 'first'), unknownRow(3, 'second')]);
+            expect(schedule.authorizeSubmit(rows, 25, 1, 4).unknownReason).toBe('first');
+        });
+
+        test('an absent row is inactive', () => {
+            expect(schedule.authorizeSubmit(end([absentRow(2)]), 25, 1, 4)).toEqual({
+                authorizedCount: 0,
+                exactTarget: 0,
+                unknownReason: null,
+            });
+        });
+
+        test('the count stays within the challenge’s photo limit, and a photo limit that is not a number authorizes nothing', () => {
+            expect(schedule.authorizeSubmit(absolute([knownRow(4, 1)]), 5, 1, 3).authorizedCount).toBe(0);
+            expect(schedule.authorizeSubmit(end([knownRow(2, 1)]), 5, 1, NaN).authorizedCount).toBe(0);
+            expect(schedule.authorizeSubmit(end([knownRow(2, 1)]), 5, NaN, 4).authorizedCount).toBe(2);
+        });
+    });
+
+    describe('the ceiling and the next threshold', () => {
+        test('the ceiling is the highest count of a row that is known or an off literal row', () => {
+            expect(schedule.submitCeiling(end([knownRow(2, 1), knownRow(3, 2)]), 4)).toBe(3);
+            expect(schedule.submitCeiling(end([knownRow(2, 1), absentRow(4, 'off')]), 4)).toBe(4);
+            expect(schedule.submitCeiling(end([knownRow(2, 1), absentRow(3), unknownRow(4)]), 4)).toBe(2);
+        });
+
+        test('the next threshold is the earliest unsatisfied known row, measured back from close', () => {
+            const rows = end([knownRow(2, 8200), knownRow(3, 8800), unknownRow(4)]);
+            expect(schedule.nextSubmitThresholdSec(rows, 1, 4, 10_000)).toBe(1800);
+            expect(schedule.nextSubmitThresholdSec(rows, 2, 4, 10_000)).toBe(1200);
+            // an unknown row supplies no deadline; every known row satisfied: none
+            expect(schedule.nextSubmitThresholdSec(rows, 3, 4, 10_000)).toBe(0);
+        });
+    });
+
+    describe('working a phase’s schedules out from evidence', () => {
+        const ctx = {
+            state: { phaseEnteredAt: 0, memory: {} },
+            now: 1000,
+            timezone: 'UTC',
+            readSetting: (key: string) =>
+                key === 'gone'
+                    ? absent('not-present')
+                    : key === 'broken'
+                      ? unknownOf('broken-read', [])
+                      : known(invalid({ kind: 'string', value: 'x' })),
+        };
+        const instant = (value: number) => invalid<ScenarioExpr>({ kind: 'literal', value, quantity: 'instant' });
+        const duration = (value: number) => invalid<ScenarioExpr>({ kind: 'literal', value, quantity: 'duration' });
+        const setting = (key: string) => invalid<ScenarioExpr>({ kind: 'setting', key, view: 'base' });
+
+        test('a phase with no schedules resolves to none', () => {
+            expect(schedule.evaluateSchedules({}, invalid(ctx))).toEqual({});
+        });
+
+        test('submit rows are known, absent or unknown, and an expression that is not an instant is unknown', () => {
+            expect(
+                schedule.evaluateSchedules(
+                    {
+                        submit: {
+                            alignment: 'absolute',
+                            rows: [
+                                { count: 1, at: instant(500) },
+                                { count: 2, at: setting('gone') },
+                                { count: 3, at: setting('broken') },
+                                { count: 4, at: duration(60) },
+                            ],
+                        },
+                    },
+                    invalid(ctx),
+                ),
+            ).toEqual({
+                submit: {
+                    alignment: 'absolute',
+                    rows: [
+                        knownRow(1, 500),
+                        absentRow(2),
+                        unknownRow(3, 'broken-read'),
+                        unknownRow(4, 'not-an-instant'),
+                    ],
+                },
+            });
+        });
+
+        test('a window needs both its instant and its duration: unknown wins over absent, absent over known', () => {
+            const rows = schedule.evaluateSchedules(
+                {
+                    vote: {
+                        rows: [
+                            { at: instant(100), duration: duration(60) },
+                            { at: instant(100), duration: duration(0) },
+                            { at: instant(100), duration: duration(-5) },
+                            { at: setting('gone'), duration: duration(60) },
+                            { at: setting('gone'), duration: setting('broken') },
+                            { at: instant(100), duration: instant(5) },
+                            { at: setting('broken'), duration: duration(60) },
+                        ],
+                    },
+                },
+                invalid(ctx),
+            ).vote?.rows;
+            expect(rows).toEqual([
+                { state: 'known', start: 100, end: 160 },
+                { state: 'absent', reason: 'off' },
+                { state: 'absent', reason: 'off' },
+                { state: 'absent', reason: 'absent: not-present' },
+                { state: 'unknown', reason: 'absent: not-present; broken-read' },
+                { state: 'unknown', reason: 'not-a-duration' },
+                { state: 'unknown', reason: 'broken-read' },
+            ]);
+        });
+
+        test('a pause is capped at the longest pause a user may set; a vote window is not', () => {
+            const rows = [{ at: instant(100), duration: duration(24 * 3600) }];
+            expect(schedule.evaluateSchedules({ pause: { rows } }, invalid(ctx)).pause?.rows).toEqual([
+                { state: 'known', start: 100, end: 100 + 720 * 60 },
+            ]);
+            expect(schedule.evaluateSchedules({ vote: { rows } }, invalid(ctx)).vote?.rows).toEqual([
+                { state: 'known', start: 100, end: 100 + 24 * 3600 },
+            ]);
+        });
+    });
+
+    describe('the instants a published schedule can change at', () => {
+        test('a known deadline, a known window start and the second after its end — and nothing for the rest', () => {
+            expect(
+                schedule.scheduleInstants({
+                    submit: end([knownRow(2, 50), unknownRow(3), absentRow(4)]),
+                    vote: {
+                        rows: [
+                            { state: 'known', start: 100, end: 160 },
+                            { state: 'unknown', reason: 'r' },
+                        ],
+                    },
+                    pause: {
+                        rows: [
+                            { state: 'absent', reason: 'off' },
+                            { state: 'known', start: 200, end: 260 },
+                        ],
+                    },
+                }),
+            ).toEqual([50, 100, 161, 200, 261]);
+            expect(schedule.scheduleInstants(undefined)).toEqual([]);
+        });
+    });
+});
+
+describe('a scenario phase’s dynamic submit schedule at the Auto-Submit trigger', () => {
+    const dynamic = (rows: ResolvedSubmitSchedule['rows'], alignment: 'end' | 'absolute' = 'end') =>
+        ({ kind: 'resolved', schedules: { submit: { alignment, rows } } }) as const;
+    const withPhase = (
+        read: ReturnType<NonNullable<FillSettings['getPhaseSchedules']>>,
+        schedule = DEFAULT_SCHEDULE,
+    ) => {
+        const settings = makeSettings({ autoSubmit: true, schedule });
+        settings.getPhaseSchedules = jest.fn(() => read);
+        return settings;
+    };
+    const depsOf = (settings: FillSettings, logger = makeLogger()) => ({
+        settings,
+        logger,
+        getEligiblePhotos: jest.fn(),
+        submitToChallenge: jest.fn(),
+    });
+    const challengeWith = (entries: number) =>
+        makeChallenge({
+            maxSubmits: 4,
+            closeIn: 1000,
+            entries: Array.from({ length: entries }, (_unused, i) => ({ id: `e${i}` })),
+        });
+    const warnings = (logger: MockFillLogger) =>
+        logger.withCategory.mock.results.flatMap(({ value }) =>
+            (value as jest.MockedObject<CategoryLogger>).warning.mock.calls.map(([message]) => message),
+        );
+
+    test('it replaces the literal schedule: a due known row is due even where the literal one is not', () => {
+        const settings = withPhase(dynamic([{ count: 2, state: 'known', at: NOW - 1 }]), []);
+        const result = resolveAutoSubmitDue(challengeWith(1), NOW, depsOf(settings));
+        expect(result).toMatchObject({ due: true, authorization: { desired: 2, authorizer: 'relative' } });
+        // the literal setting is not read while the phase holds a dynamic schedule
+        expect(settings.getEffectiveSetting).not.toHaveBeenCalledWith('autoSubmitSchedule', expect.anything());
+    });
+
+    test('an unknown row beside a known due one: the due row is authorized, the exact target is not known', () => {
+        const settings = withPhase(
+            dynamic([
+                { count: 2, state: 'unknown', reason: 'boost-timeout-malformed' },
+                { count: 3, state: 'known', at: NOW - 1 },
+            ]),
+        );
+        const trigger = resolveAutoSubmitTrigger(challengeWith(1), 'c1', NOW, settings);
+        expect(trigger).toMatchObject({ relativeTarget: 3, desired: 3, exactTarget: null, hasSchedule: true });
+    });
+
+    test('with no known row due, an unknown row alone is not due', () => {
+        const settings = withPhase(dynamic([{ count: 2, state: 'unknown', reason: 'r' }]));
+        expect(resolveAutoSubmitDue(challengeWith(1), NOW, depsOf(settings))).toEqual({
+            due: false,
+            status: 'skipped',
+        });
+    });
+
+    test('a phase whose published settings cannot be read authorizes nothing: no schedule', () => {
+        const settings = withPhase({ kind: 'unavailable', reason: 'expired' });
+        expect(resolveAutoSubmitDue(challengeWith(1), NOW, depsOf(settings))).toEqual({
+            due: false,
+            status: 'no-schedule',
+        });
+    });
+
+    test('a phase with no submit schedule of its own keeps the literal setting', () => {
+        for (const read of [{ kind: 'none' }, { kind: 'resolved', schedules: {} }] as const) {
+            const settings = withPhase(read);
+            expect(resolveAutoSubmitDue(challengeWith(2), NOW, depsOf(settings))).toMatchObject({
+                due: true,
+                authorization: { desired: 3 },
+            });
+        }
+    });
+
+    test('a schedule with a row still to be told is not known to top out; one without is', () => {
+        const topOut = (rows: ResolvedSubmitSchedule['rows']) => {
+            const logger = makeLogger();
+            const result = resolveAutoSubmitDue(challengeWith(2), NOW, depsOf(withPhase(dynamic(rows)), logger));
+            expect(result).toEqual({ due: false, status: 'skipped' });
+            return warnings(logger);
+        };
+        expect(topOut([{ count: 2, state: 'known', at: NOW - 1 }])).toEqual([
+            expect.stringContaining('schedule tops out at 2 entries'),
+        ]);
+        expect(
+            topOut([
+                { count: 2, state: 'known', at: NOW - 1 },
+                { count: 3, state: 'unknown', reason: 'r' },
+            ]),
+        ).toEqual([]);
+    });
+
+    test('the emergency gate reads the same: a known top-out stands the probe down, an unknown row does not', () => {
+        const gate = (rows: ResolvedSubmitSchedule['rows']) =>
+            evaluateEmergencyFill(challengeWith(2), 'c1', withPhase(dynamic(rows)), NOW);
+        expect(gate([{ count: 2, state: 'known', at: NOW - 1 }])).toMatchObject({ desired: 2, probeApplies: false });
+        expect(
+            gate([
+                { count: 2, state: 'known', at: NOW - 1 },
+                { count: 3, state: 'unknown', reason: 'r' },
+            ]),
+        ).toMatchObject({ desired: 2, probeApplies: true });
+    });
+
+    test('the shift note names the image of the end-aligned row; an absolute schedule has none', async () => {
+        for (const [alignment, note] of [
+            ['end', 'follows the Image'],
+            ['absolute', undefined],
+        ] as const) {
+            const logger = makeLogger();
+            const settings = withPhase(
+                dynamic(
+                    [
+                        { count: 2, state: 'known', at: NOW - 3 },
+                        { count: 3, state: 'known', at: NOW - 2 },
+                        { count: 4, state: 'known', at: NOW - 1 },
+                    ],
+                    alignment,
+                ),
+            );
+            const challenge = makeChallenge({ maxSubmits: 3, entries: [{ id: 'e1' }] });
+            const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+                ...depsOf(settings, logger),
+                getEligiblePhotos: jest.fn(async () => [allowedPhoto('photo')]),
+                submitToChallenge: jest.fn(async () => invalid({ ok: true, raw: { success: true } })),
+                rankVisually: jest.fn(async (_challenge, ids, _eligible, wantCount) => ids.slice(0, wantCount)),
+            });
+            expect(result).toBe('submitted');
+            const successes = logger.withCategory.mock.results.flatMap(({ value }) =>
+                (value as jest.MockedObject<CategoryLogger>).success.mock.calls.map(([message]) => String(message)),
+            );
+            expect(successes.some((message) => message.includes('follows the Image'))).toBe(note !== undefined);
+        }
     });
 });

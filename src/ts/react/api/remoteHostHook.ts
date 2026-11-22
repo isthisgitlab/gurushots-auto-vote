@@ -36,6 +36,8 @@ type BridgeEventSubscriber = (
 /** The manifest's event channel → the typed window.api subscriber (settings-changed → onSettingsChanged, …). */
 const SUBSCRIBER_BY_EVENT_CHANNEL = {
     'settings-changed': ipc.onSettingsChanged,
+    'effective-settings-changed': ipc.onEffectiveSettingsChanged,
+    'effective-presentation-changed': ipc.onEffectivePresentationChanged,
     'update-checking': ipc.onUpdateChecking,
     'update-available': ipc.onUpdateAvailable,
     'update-not-available': ipc.onUpdateNotAvailable,

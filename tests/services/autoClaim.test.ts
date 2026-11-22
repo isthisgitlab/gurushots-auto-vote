@@ -9,7 +9,7 @@ jest.mock('../../src/ts/core/logger', () => {
     return { withCategory: jest.fn(() => level), __level: level };
 });
 jest.mock('../../src/ts/core/voting/cancellation', () => ({ isCancelled: jest.fn(() => false) }));
-jest.mock('../../src/ts/core/settings', () => ({ getEffectiveSetting: jest.fn() }));
+jest.mock('../../src/ts/core/settings', () => ({ captureInstallationSettings: jest.fn() }));
 
 import loggerModule = require('../../src/ts/core/logger');
 const logger = jest.mocked(loggerModule);
@@ -56,10 +56,14 @@ type LevelLogger = { __level: Record<'info' | 'success' | 'warning', jest.Mock<v
 const successMessages = () => invalid<LevelLogger>(logger).__level.success.mock.calls.map((c) => c[0]);
 const warningMessages = () => invalid<LevelLogger>(logger).__level.warning.mock.calls.map((c) => c[0]);
 
+// The installation's prize-claim switch as the facade captures it.
+const claimSwitch = (on: boolean) =>
+    settings.captureInstallationSettings.mockReturnValue({ ok: true, values: { autoClaimPrizes: on } });
+
 beforeEach(() => {
     jest.clearAllMocks();
     resetClaimThrottle();
-    settings.getEffectiveSetting.mockImplementation((key) => (key === 'autoClaimPrizes' ? true : undefined));
+    claimSwitch(true);
     cancellation.isCancelled.mockReturnValue(false);
 });
 
@@ -71,21 +75,42 @@ describe('gating', () => {
         expect(getAutoClaimStatus()).toEqual({ enabled: true, nextClaimAt: T0 + CLAIM_INTERVAL_MS });
         await runClaimPass('tok', T0 + 1000, deps);
         expect(getAutoClaimStatus().nextClaimAt).toBe(T0 + CLAIM_INTERVAL_MS);
-        settings.getEffectiveSetting.mockReturnValue(false);
+        claimSwitch(false);
         expect(getAutoClaimStatus().enabled).toBe(false);
-        settings.getEffectiveSetting.mockReturnValue(true);
+        claimSwitch(true);
         expect(getAutoClaimStatus().nextClaimAt).toBe(T0 + CLAIM_INTERVAL_MS);
         await runClaimPass('tok', T0 + CLAIM_INTERVAL_MS, deps);
         expect(getAutoClaimStatus().nextClaimAt).toBe(T0 + 2 * CLAIM_INTERVAL_MS);
     });
 
     test('setting off (the default) makes no calls', async () => {
-        settings.getEffectiveSetting.mockReturnValue(false);
+        claimSwitch(false);
         const deps = makeDeps();
         const res = await runClaimPass('tok', T0, deps);
         expect(res).toEqual({ ran: false, challengesClaimed: 0, missionsClaimed: 0, results: [] });
         expect(deps.getMyCompletedChallenges).not.toHaveBeenCalled();
         expect(deps.getMyMissions).not.toHaveBeenCalled();
+    });
+
+    test('a switch the installation cannot read claims nothing and says why, at the pass and not in the status', async () => {
+        settings.captureInstallationSettings.mockReturnValue({
+            ok: false,
+            key: 'autoClaimPrizes',
+            reason: 'the published settings of this phase have expired',
+        });
+        const deps = makeDeps();
+        expect(getAutoClaimStatus().enabled).toBe(false);
+        expect(warningMessages()).toEqual([]);
+        const res = await runClaimPass('tok', T0, deps);
+        expect(res).toEqual({ ran: false, challengesClaimed: 0, missionsClaimed: 0, results: [] });
+        expect(deps.getMyCompletedChallenges).not.toHaveBeenCalled();
+        expect(deps.getMyMissions).not.toHaveBeenCalled();
+        expect(warningMessages()).toEqual([
+            'prizes are not claimed this cycle: autoClaimPrizes is unavailable (the published settings of this phase have expired)',
+        ]);
+        // the throttle was not used up: once the switch can be read the pass runs
+        claimSwitch(true);
+        expect((await runClaimPass('tok', T0, deps)).ran).toBe(true);
     });
 
     test('no token makes no calls', async () => {
@@ -185,6 +210,40 @@ describe('claiming', () => {
         });
         const res2 = await runClaimPass('tok', T0, deps2);
         expect(res2).toEqual({ ran: true, challengesClaimed: 0, missionsClaimed: 0, results: [] });
+    });
+
+    test('a list that was not read (null) is a logged failure; a confirmed empty list is not', async () => {
+        const failed = makeDeps({
+            getMyCompletedChallenges: jest.fn(async () => null),
+            getMyMissions: jest.fn(async () => null),
+        });
+        const result = await runClaimPass('tok', T0, failed);
+        expect(result).toEqual({ ran: true, challengesClaimed: 0, missionsClaimed: 0, results: [] });
+        expect(warningMessages()).toEqual([
+            'could not read completed challenges (page 1); claiming what was read',
+            'could not read missions; nothing claimed from them this time',
+        ]);
+
+        jest.clearAllMocks();
+        resetClaimThrottle();
+        const empty = makeDeps({
+            getMyCompletedChallenges: jest.fn(async () => []),
+            getMyMissions: jest.fn(async () => []),
+        });
+        await runClaimPass('tok', T0, empty);
+        expect(warningMessages()).toEqual([]);
+    });
+
+    test('a page that fails to read after claimable ones were found still claims them and stops paging', async () => {
+        const full = [challenge(7, 'CLAIM'), ...Array.from({ length: 19 }, (_, i) => challenge(100 + i, 'CLAIMED'))];
+        const deps = makeDeps({
+            getMyCompletedChallenges: jest.fn().mockResolvedValueOnce(full).mockResolvedValueOnce(null),
+            getMyMissions: jest.fn(async () => []),
+        });
+        await runClaimPass('tok', T0, deps);
+        expect(deps.getMyCompletedChallenges).toHaveBeenCalledTimes(2);
+        expect(deps.claimChallengeResources).toHaveBeenCalledWith(7, 'tok');
+        expect(warningMessages()).toContain('could not read completed challenges (page 2); claiming what was read');
     });
 
     test('an unconfirmed claim is recorded and warned, not counted', async () => {

@@ -17,6 +17,7 @@
  */
 
 import { makePostRequest } from './api-client';
+import type { TransportPolicy } from './transportPolicy';
 import { ENDPOINTS, createWebHeaders, makeRequireValue } from './constants';
 
 import type {
@@ -33,13 +34,16 @@ const requireValue = makeRequireValue('rewards');
  * Reads one page of the member's completed challenges (newest first).
  *
  * @param limit the page size the web app uses
- * @returns the challenges, or [] on failure
+ * @param policy the transport policy to read under (the baseline policy of a scenario's evidence read); without it
+ *   the effective policy is captured, as for any business request
+ * @returns the challenges (a confirmed empty page is []), or null on a failed request or a body with no list
  */
 const getMyCompletedChallenges = async (
     token: string,
     start: number = 0,
     limit: number = 20,
-): Promise<CompletedChallenge[]> => {
+    policy?: TransportPolicy,
+): Promise<CompletedChallenge[] | null> => {
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
     const data = [`start=${encodeURIComponent(String(start))}`, `limit=${encodeURIComponent(String(limit))}`].join('&');
@@ -47,9 +51,10 @@ const getMyCompletedChallenges = async (
         ENDPOINTS.getMyCompletedChallenges,
         headers,
         data,
+        policy,
     );
     if (!response || !Array.isArray(response.completed_challenges)) {
-        return [];
+        return null;
     }
     return response.completed_challenges;
 };
@@ -72,14 +77,15 @@ const claimChallengeResources = async (challengeId: string | number, token: stri
 /**
  * Lists the member's current missions.
  *
- * @returns the missions, or [] on failure
+ * @param policy the transport policy to read under (see getMyCompletedChallenges)
+ * @returns the missions (a confirmed empty list is []), or null on a failed request or a body with no list
  */
-const getMyMissions = async (token: string): Promise<Mission[]> => {
+const getMyMissions = async (token: string, policy?: TransportPolicy): Promise<Mission[] | null> => {
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
-    const response = await makePostRequest<MissionsResponse>(ENDPOINTS.getMyMissions, headers, '');
+    const response = await makePostRequest<MissionsResponse>(ENDPOINTS.getMyMissions, headers, '', policy);
     if (!response || !Array.isArray(response.list)) {
-        return [];
+        return null;
     }
     return response.list;
 };

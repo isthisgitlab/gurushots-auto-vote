@@ -158,6 +158,21 @@ describe('Logs window preload (src/ts/shells/electron/preloadLogs.ts)', () => {
         expect(electron.ipcRenderer.removeListener).toHaveBeenCalledWith(channel, handler);
     });
 
+    it('exposes the presentation projection and its event, and no complete effective settings', () => {
+        const api = loadLogsPreload();
+
+        expect(api.getEffectivePresentation).toBeDefined();
+        expect(api.onEffectivePresentationChanged).toBeDefined();
+        expect(api.getEffectiveInstallationSettings).toBeUndefined();
+        expect(api.onEffectiveSettingsChanged).toBeUndefined();
+        expect(api.armAutovote).toBeUndefined();
+        electron.ipcRenderer.invoke.mockReturnValueOnce(invalid({ success: true }));
+        api.getEffectivePresentation();
+        expect(electron.ipcRenderer.invoke).toHaveBeenCalledWith('get-effective-presentation');
+        api.onEffectivePresentationChanged(jest.fn());
+        expect(electron.ipcRenderer.on.mock.calls[0][0]).toBe('effective-presentation-changed');
+    });
+
     it('blocks service worker registration too', async () => {
         globalThis.ServiceWorkerContainer = invalid(class {});
         globalThis.ServiceWorkerContainer.prototype.register = jest.fn();

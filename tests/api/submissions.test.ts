@@ -894,6 +894,59 @@ describe('getEligiblePhotos readState: a failed first page is told apart from an
         expect(thrown.firstPageFailed).toBe(false);
     });
 
+    test('truncated is set only when the caller asked for it (started it at false), and only for an early stop', async () => {
+        const full = [{ id: 'a' }, { id: 'b' }];
+        // one page: a full page may be the first of more; a short page is the end
+        makePostRequest.mockResolvedValueOnce({ items: full });
+        const fullPage = { firstPageFailed: false, truncated: false };
+        await getEligiblePhotos('1', token, { limit: 2, readState: fullPage });
+        expect(fullPage.truncated).toBe(true);
+        makePostRequest.mockResolvedValueOnce({ items: [{ id: 'a' }] });
+        const shortPage = { firstPageFailed: false, truncated: false };
+        await getEligiblePhotos('1', token, { limit: 2, readState: shortPage });
+        expect(shortPage.truncated).toBe(false);
+        // a failed first page is not a truncated one: it says so through firstPageFailed
+        makePostRequest.mockResolvedValueOnce(null);
+        const failedPage = { firstPageFailed: false, truncated: false };
+        await getEligiblePhotos('1', token, { limit: 2, readState: failedPage });
+        expect(failedPage).toEqual({ firstPageFailed: true, truncated: false });
+        // a caller that did not ask gets no such field
+        makePostRequest.mockResolvedValueOnce({ items: full });
+        const asked = state();
+        await getEligiblePhotos('1', token, { limit: 2, readState: asked });
+        expect(asked).toEqual({ firstPageFailed: false });
+    });
+
+    test('a walk: the end of the library is not truncated; a failed page, the page cap and the budget are', async () => {
+        makePostRequest.mockResolvedValueOnce({ items: [{ id: 'a' }, { id: 'b' }] }).mockResolvedValueOnce({
+            items: [{ id: 'c' }],
+        });
+        const ended = { firstPageFailed: false, truncated: false };
+        await getEligiblePhotos('1', token, { paginate: true, limit: 2, readState: ended });
+        expect(ended.truncated).toBe(false);
+
+        makePostRequest.mockResolvedValueOnce({ items: [{ id: 'a' }, { id: 'b' }] }).mockResolvedValueOnce(null);
+        const failed = { firstPageFailed: false, truncated: false };
+        await getEligiblePhotos('1', token, { paginate: true, limit: 2, readState: failed });
+        expect(failed).toEqual({ firstPageFailed: false, truncated: true });
+
+        // every page full, so the walk only ever stops at the page cap
+        makePostRequest.mockImplementation(async (_url, _headers, body) => ({
+            items: [{ id: `${body}-1` }, { id: `${body}-2` }],
+        }));
+        const capped = { firstPageFailed: false, truncated: false };
+        await getEligiblePhotos('1', token, { paginate: true, limit: 2, readState: capped });
+        expect(capped.truncated).toBe(true);
+        makePostRequest.mockReset();
+
+        // a budget that has already run out stops the walk after its first page
+        makePostRequest.mockResolvedValue({ items: [{ id: 'a' }, { id: 'b' }] });
+        const timed = { firstPageFailed: false, truncated: false };
+        await getEligiblePhotos('1', token, { paginate: true, limit: 2, budgetMs: 1e-9, readState: timed });
+        expect(timed.truncated).toBe(true);
+        makePostRequest.mockReset();
+    });
+
     test('without a readState nothing changes', async () => {
         makePostRequest.mockResolvedValueOnce(null);
         expect(await getEligiblePhotos('1', token)).toEqual([]);

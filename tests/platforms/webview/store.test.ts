@@ -154,6 +154,38 @@ describe('the jsonStore transport', () => {
     });
 });
 
+// The native side takes the priority Stop fence up to 1024 bytes and the control inbox up to twice the scenario import
+// size (524288), by compare-and-write only (AutoVoteService.kt SideStores): a value past its bound is rejected, and the
+// window's change of it fails without touching the cache or Preferences.
+describe('the priority Stop fence and the control inbox keys', () => {
+    const KEYS = [
+        { key: 'gs_scenario_stop_fence', bound: 1024 },
+        { key: 'gs_scenario_controls', bound: 524_288 },
+    ];
+    const ofSize = (bytes: number) => `{"k":"${'x'.repeat(bytes - 8)}"}`;
+    const nativeCas = (bound: number) =>
+        jest.fn<Promise<CasAnswer> | null, [string, string | null, string]>((_key, _expected, data) =>
+            new TextEncoder().encode(data).length <= bound
+                ? Promise.resolve({ saved: true, current: data })
+                : Promise.reject(new Error('too large')),
+        );
+
+    test.each(KEYS)(
+        '$key is saved at its bound through the native compare-and-write, and refused above it',
+        async ({ key, bound }) => {
+            const cas = nativeCas(bound);
+            const store = createWebviewStorage(cas).jsonStore(ref(key), { strict: true, shared: true });
+            await expect(store.updateThrough(() => ofSize(bound))).resolves.toBe('saved');
+            expect(cas).toHaveBeenLastCalledWith(key, null, ofSize(bound));
+            expect(store.readRaw()).toBe(ofSize(bound));
+            await expect(store.updateThrough(() => ofSize(bound + 1))).resolves.toBe('failed');
+            // What the refused change was made from is still what the cache holds, and nothing went to Preferences.
+            expect(store.readRaw()).toBe(ofSize(bound));
+            expect(mockPrefSet).not.toHaveBeenCalled();
+        },
+    );
+});
+
 describe('the settingsFile transport', () => {
     test('write stages the cache and queues the save; writeIfAbsent stages the import', async () => {
         const file = createWebviewStorage(null).settingsFile(ref('gurushots-config'), WIRING);

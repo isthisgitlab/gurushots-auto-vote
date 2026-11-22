@@ -50,6 +50,8 @@ jest.mock('../../src/ts/core/voting/cancellation', () => ({
 
 import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
+import { answerInstallationReadFromSaved } from '../helpers/savedInstallationRead';
+answerInstallationReadFromSaved(settings);
 import cancellationModule = require('../../src/ts/core/voting/cancellation');
 const cancellation = jest.mocked(cancellationModule);
 import type * as votingOrchestratorModule from '../../src/ts/core/services/votingOrchestrator';

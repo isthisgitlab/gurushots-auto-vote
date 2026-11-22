@@ -16,6 +16,7 @@ import * as updateIpc from './update.handlers';
 import * as votingIpc from '../../core/ipc/voting.handlers';
 import { registerHandlers } from './registerHandlers';
 import { createRemotePairing } from './remote/pairing';
+import { setHostStatusSource } from './remote/hostStatus';
 
 import type { IpcMain } from 'electron';
 import type { GuiLogSink } from '../../core/logger';
@@ -31,17 +32,14 @@ const registerIpc = (ipcMain: IpcMain, deps: RegisterIpcDeps) => {
     // events from any module without a back-reference.
     (global as typeof globalThis & { sendLogToGUI?: GuiLogSink }).sendLogToGUI = logIpc.sendLogToGUI;
     registerHandlers(ipcMain, updateIpc.buildHandlers(deps.update));
-    registerHandlers(
-        ipcMain,
-        miscIpc.buildHandlers({
-            ...deps.misc,
-            remote: createRemotePairing({
-                isPackaged: () => app.isPackaged,
-                argv: process.argv,
-                warn: (message) => logger.withCategory('ui').warning(message, null),
-            }),
-        }),
-    );
+    const pairing = createRemotePairing({
+        isPackaged: () => app.isPackaged,
+        argv: process.argv,
+        warn: (message) => logger.withCategory('ui').warning(message, null),
+    });
+    // The scenario facts read whether the feature is on through the platform port (readScenarioHostStatus), never this store.
+    setHostStatusSource(() => pairing.state());
+    registerHandlers(ipcMain, miscIpc.buildHandlers({ ...deps.misc, remote: pairing }));
     registerHandlers(ipcMain, settingsIpc.buildHandlers());
     registerHandlers(ipcMain, votingIpc.buildHandlers());
     registerHandlers(ipcMain, actionsIpc.buildHandlers());

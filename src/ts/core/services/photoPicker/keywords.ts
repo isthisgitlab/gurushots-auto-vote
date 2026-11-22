@@ -16,7 +16,9 @@ import {
     PEOPLE_LABEL_STEMS,
     descriptionExclusions,
     detectLetterPrefix,
+    readChallengeLetter,
     withoutLetterPhrases,
+    withoutDescriptionLetterPhrases,
     readChallengeTheme,
     isParticiple,
 } from './title';
@@ -82,7 +84,9 @@ const buildChallengeKeywords = (
 ): string[] => {
     // An open theme has no subject, and matching its prose ("breathtaking",
     // "Turbo") against photo labels would only rank noise.
-    if (readChallengeTheme(challenge, ignoreWords).kind === 'open') return [];
+    const theme = readChallengeTheme(challenge, ignoreWords);
+    if (theme.kind === 'open' || theme.kind === 'three-of-a-kind') return [];
+    if (theme.kind === 'eye-contact') return [...theme.subjects];
     // The WHOLE title, series prefix included — unlike buildThemeKeywords, which
     // pools its keywords into one vector and so must drop everything that is not
     // the subject. Here each keyword is matched on its own, so a series word is
@@ -97,13 +101,16 @@ const buildChallengeKeywords = (
     // title and can carry nothing else, while the description's other words stay.
     const negation = parseNegation(challenge?.title, ignoreWords);
     const title = negation.active ? negation.positiveTitle : challenge?.title;
-    const letter = detectLetterPrefix(challenge?.title);
+    const letter = readChallengeLetter(challenge);
     // Compound mode: adjacent words the model knows ("Close Up") become one
     // term, so "Close Up" stops matching "Closed".
     const opts = { ignoreWords, compounds: 'replace' as const };
     const fromTitle = tokenise(stripIfLetter(letter, title), opts);
     const fromUrl = letter === null ? tokenise(challenge?.url, opts) : [];
-    const fromWelcome = tokenise(stripIfLetter(letter, challenge?.welcome_message), opts);
+    const fromWelcome = tokenise(
+        letter === null ? challenge?.welcome_message : withoutDescriptionLetterPhrases(challenge?.welcome_message),
+        opts,
+    );
     // A title word judged not-the-subject ("fun" in "Balloon Fun") is dropped
     // from every source: the slug and the prose repeat it, and here it would
     // score every photo vision-labelled "Fun" as on theme.
@@ -152,7 +159,9 @@ const buildChallengeKeywords = (
  * decide, which is the right answer for a challenge with no visual subject.
  */
 const buildThemeKeywords = (challenge: ChallengeText | null | undefined, ignoreWords: IgnoreWords = null): string[] => {
-    if (readChallengeTheme(challenge, ignoreWords).kind === 'open') return [];
+    const theme = readChallengeTheme(challenge, ignoreWords);
+    if (theme.kind === 'open' || theme.kind === 'three-of-a-kind') return [];
+    if (theme.kind === 'eye-contact') return [...theme.subjects];
     const opts = { ignoreWords, compounds: 'replace' as const };
     // A negated subject must not become the theme (see parseNegation): pooling
     // "human" for "No Humans" pulls the vector straight at photos of people.
@@ -161,7 +170,7 @@ const buildThemeKeywords = (challenge: ChallengeText | null | undefined, ignoreW
     // empties out.
     const negation = parseNegation(challenge?.title, ignoreWords);
     const title = negation.active ? negation.positiveTitle : challenge?.title;
-    const letter = detectLetterPrefix(challenge?.title);
+    const letter = readChallengeLetter(challenge);
     const subject = titleSubject(title, ignoreWords);
     // Pooling is where an abstract word hurts most — "fun" averaged into
     // "balloon" drags the theme toward parties and laughter — so only the
@@ -205,13 +214,14 @@ const buildThemeAlternatives = (
 const visualSubjectWords = (challenge: ChallengeText | null | undefined, ignoreWords: IgnoreWords = null): string[] => {
     // "10 Hours" is the challenge's length: judging photos against "hours"
     // moved an unrelated clock photo ahead of the ranking's own pick.
-    if (readChallengeTheme(challenge, ignoreWords).kind === 'open') return [];
+    const theme = readChallengeTheme(challenge, ignoreWords);
+    if (theme.kind === 'open' || theme.kind === 'three-of-a-kind') return [];
     const negation = parseNegation(challenge?.title, ignoreWords);
     const title = negation.active ? negation.positiveTitle : challenge?.title;
     const negated = new Set(negation.stems);
     // A letter phrase is not a visual subject; strip it after titleSubject, as
     // buildThemeKeywords does.
-    const letter = detectLetterPrefix(challenge?.title);
+    const letter = readChallengeLetter(challenge);
     const subject = titleSubject(title, ignoreWords);
     const words = rawTokenise(stripIfLetter(letter, subject), {
         ignoreWords,
@@ -267,7 +277,13 @@ const buildSearchTerms = (challenge: ChallengeText | null | undefined, opts: Tag
     // and the client-side letter filter in pickPhotosForChallenge narrows it. A
     // non-letter title tokenises normally.
     const theme = readChallengeTheme(challenge, ignoreWords);
-    if (terms.length === 0 && !detectLetterPrefix(challenge?.title) && theme.kind !== 'open') {
+    if (terms.length === 0 && theme.kind === 'eye-contact') return [...theme.subjects];
+    if (
+        terms.length === 0 &&
+        !readChallengeLetter(challenge) &&
+        theme.kind !== 'open' &&
+        theme.kind !== 'three-of-a-kind'
+    ) {
         // Subject segment only: on a series title the prefix ("Color Hunt") is
         // never a tag, so searching it spends a round-trip to find nothing and
         // burns one of the SEARCH_TERMS_CAP slots the real subject needs.

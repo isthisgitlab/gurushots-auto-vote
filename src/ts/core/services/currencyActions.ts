@@ -17,6 +17,7 @@
  */
 
 import { errorMessage } from '../errorMessage';
+import { clockSec } from '../simulationScope';
 import { findActiveChallenge } from './findActiveChallenge';
 import { isMarkedChallenge } from '../challengeMarks';
 import { rankCandidatesForChallenge, resolveMemberId } from './autoFill';
@@ -60,7 +61,7 @@ type CurrencyOutcome = (typeof CURRENCY_OUTCOME)[keyof typeof CURRENCY_OUTCOME];
 export type SpendOutcome = { ok: boolean; outcome: string };
 export type SwapCandidate = { id: string; member_id: string };
 
-const nowSec = () => Math.floor(Date.now() / 1000);
+const nowSec = clockSec;
 
 // ONE lock across every spend — manual (all channels) and automatic alike: a
 // single spend in flight at a time, so a click during a voting pass can't race

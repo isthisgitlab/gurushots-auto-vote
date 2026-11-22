@@ -13,6 +13,7 @@
  */
 
 jest.mock('../../src/ts/core/settings');
+jest.mock('../../src/ts/core/services/effectiveEvents', () => ({ announceEffectiveChange: jest.fn() }));
 jest.mock('../../src/ts/core/apiFactory', () => ({
     refreshApi: jest.fn(),
     getApiStrategy: jest.fn(),
@@ -40,6 +41,7 @@ const { buildHandlers } = require('../../src/ts/core/ipc/settings.handlers') as 
 const installWindows = (): PlatformWindows => {
     const windows: PlatformWindows = {
         broadcastSettingsChanged: jest.fn<void, [object]>(),
+        broadcastEvent: jest.fn(),
         afterWipe: jest.fn<void, []>(),
     };
     installTestPlatform({ windows });
@@ -65,7 +67,7 @@ const EXPECTED_THIN_HANDLERS: [string, string, string | boolean | null][] = [
     ['get-title-rules', 'getTitleRules', null],
     ['set-title-rules', 'setTitleRules', false],
     ['get-title-profile', 'getTitleProfile', null],
-    ['get-entry-pins', 'getEntryPins', null],
+    ['get-entry-pins', 'getStoredEntryPins', null],
     ['get-challenge-overrides', 'getChallengeOverrides', null],
     ['replace-challenge-overrides', 'replaceChallengeOverrides', false],
     ['get-challenge-profiles', 'getChallengeProfiles', null],
@@ -200,7 +202,7 @@ const CHALLENGE_ID_CHANNELS: [string, string, number][] = [
     ['get-challenge-overrides', 'getChallengeOverrides', 0],
     ['replace-challenge-overrides', 'replaceChallengeOverrides', 0],
     ['apply-challenge-profile', 'applyChallengeProfile', 1],
-    ['get-entry-pins', 'getEntryPins', 0],
+    ['get-entry-pins', 'getStoredEntryPins', 0],
 ];
 
 describe('settings.handlers challenge id arguments', () => {

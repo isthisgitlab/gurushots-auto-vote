@@ -12,6 +12,11 @@
 jest.mock('../../src/ts/core/settings', () => ({
     getEffectiveSetting: jest.fn(() => false),
     getSetting: jest.fn(() => 'UTC'),
+    // The installation's own read of the time zone: the saved one while no installation scenario overlays it.
+    captureInstallationSettings: jest.fn((keys: string[]) => ({
+        ok: true,
+        values: Object.fromEntries(keys.map((key) => [key, 'UTC'])),
+    })),
     getEntryPins: jest.fn(() => ({ boost: null, turbo: null })),
     consumeChosenPhotos: jest.fn(() => false),
 }));

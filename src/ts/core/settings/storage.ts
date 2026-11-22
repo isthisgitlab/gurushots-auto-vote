@@ -29,6 +29,7 @@ import {
     settleStores,
 } from './jsonStore';
 import { rebaseConfigText } from './settingsMerge';
+import { refuseInSimulation } from '../simulationScope';
 import {
     getDefaultMockSetting,
     getEnvironmentInfo,
@@ -104,16 +105,27 @@ const createSettingsFile = (options: SettingsFileOptions) => {
 
     return {
         readRaw: (): string | null => of().readRaw(),
-        write: (data: string): WriteResult => (areWritesRefused() ? { ok: false } : of().write(data)),
+        write: (data: string): WriteResult => {
+            refuseInSimulation('a settings write');
+            return areWritesRefused() ? { ok: false } : of().write(data);
+        },
         /** `write`, for the caller that has no use for `landed`. */
-        writeRaw: (data: string): boolean => (areWritesRefused() ? false : of().write(data).ok),
-        writeIfAbsent: (data: string): WriteIfAbsentResult =>
-            areWritesRefused() ? { outcome: 'failed' } : of().writeIfAbsent(data),
+        writeRaw: (data: string): boolean => {
+            refuseInSimulation('a settings write');
+            return areWritesRefused() ? false : of().write(data).ok;
+        },
+        writeIfAbsent: (data: string): WriteIfAbsentResult => {
+            refuseInSimulation('a settings write');
+            return areWritesRefused() ? { outcome: 'failed' } : of().writeIfAbsent(data);
+        },
         location: (): string => of().location(),
         isLoaded: (): boolean => of().isLoaded(),
         isPersisted: (): boolean => of().isPersisted(),
         hasQuarantined: (): boolean => of().hasQuarantined(),
-        quarantineRaw: (raw: string): QuarantineResult => of().quarantineRaw(raw),
+        quarantineRaw: (raw: string): QuarantineResult => {
+            refuseInSimulation('a settings write');
+            return of().quarantineRaw(raw);
+        },
         initializeAsync: async (): Promise<void> => of().hydrate(),
         /** The in-flight Capacitor write-behind chain (see flushPendingWrites). */
         flush: () => of().flush(),

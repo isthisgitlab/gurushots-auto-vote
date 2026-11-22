@@ -15,7 +15,8 @@ import { isInteger } from '../numbers';
 
 import * as pkg from '../../../../package.json';
 
-import type { AutovoteState } from '../autovote/state';
+import type { AutovoteState, ExecutionMode } from '../autovote/state';
+import type { AdmitRefusal, FenceFailure, StopResult, WithdrawalOutcome } from '../autovote/runGate';
 
 /**
  * The app version this build carries. `hello` announces it for the logs; no peer compares it, the link version
@@ -34,7 +35,7 @@ export const APP_VERSION: string = pkg.version;
  * enum member of an existing setting, or a change to a channel's spend class needs a new number and a new
  * `contract/v<N>/`. New page code must handle a missing field and a channel an older desktop refuses.
  */
-export const LINK_VERSION = 2 as const;
+export const LINK_VERSION = 3 as const;
 
 /** The highest link version a `hello` may carry: a bound on the wire, not a statement of what is published. */
 const MAX_LINK_VERSION = 999;
@@ -74,12 +75,33 @@ export type HelloMessage = {
     linkVersion: number;
     host: boolean;
 };
-/** Phone → host: one window.api invoke. `undefinedAt` restores JSON-lost `undefined` arguments (see bridge/web.ts). */
-export type InvokeMessage = { t: 'invoke'; id: number; channel: string; args: unknown[]; undefinedAt?: number[] };
+/**
+ * Phone → host: one window.api invoke. `undefinedAt` restores JSON-lost `undefined` arguments (see bridge/web.ts).
+ * A scenario change (`scenarioControlTarget`, core/remote/allowlist.ts) carries `requestId`, its identity in the host's control
+ * inbox, and `expectedRevision`, the revision of its target the phone last saw: a request that expected an older one is stale.
+ */
+export type InvokeMessage = {
+    t: 'invoke';
+    id: number;
+    channel: string;
+    args: unknown[];
+    undefinedAt?: number[];
+    requestId?: string;
+    expectedRevision?: number;
+};
+/** What the host's control inbox holds for the request an answer belongs to: its identity, its target and that target's revision. */
+export type ControlReport = { requestId: string; target: string; revision: number };
 /** Host → phone: the answer to one invoke. `ok: false` carries the handler's error text; `reason` marks the send failure that kept the answer from the phone. */
 export type ResultMessage =
-    | { t: 'result'; id: number; ok: true; result?: unknown }
-    | { t: 'result'; id: number; ok: false; error: string; reason?: 'too-large' | 'unsendable' };
+    | { t: 'result'; id: number; ok: true; result?: unknown; control?: ControlReport }
+    | {
+          t: 'result';
+          id: number;
+          ok: false;
+          error: string;
+          reason?: 'too-large' | 'unsendable';
+          control?: ControlReport;
+      };
 /** Host → phone: one window.api event (settings-changed, update-*, log-message). */
 export type EventMessage = { t: 'event'; channel: string; payload: unknown };
 /**
@@ -89,9 +111,31 @@ export type EventMessage = { t: 'event'; channel: string; payload: unknown };
  * the relay cannot overwrite a newer one. A new `hostRun` (the desktop restarted) is always applied. A state
  * without the pair is dropped.
  */
-export type AutovoteStateMessage = { t: 'autovote-state'; state: AutovoteState; hostRun: string; n: number };
-/** Phone → host: start/stop/rearm the desktop's own controller. */
-export type AutovoteCommandMessage = { t: 'autovote-command'; command: AutovoteCommandName };
+export type AutovoteStateMessage = {
+    t: 'autovote-state';
+    state: AutovoteState;
+    hostRun: string;
+    n: number;
+    /** Set on the state that follows a phone's command: the host's acknowledgment of it (the state shows what it came to). */
+    ack?: CommandAck;
+};
+/** What the host did with a phone's command: `ran` (the controller ran it; its state says what came of it), `failed`, `duplicate` (the identity was already seen) or `stop-epoch-moved` (a Stop happened since the phone's state). */
+export type CommandAck = {
+    requestId: string;
+    command: AutovoteCommandName;
+    outcome: 'ran' | 'failed' | 'duplicate' | 'stop-epoch-moved';
+};
+/**
+ * Phone → host: start/stop/rearm the desktop's own controller. `requestId` is its identity; a `start` or `rearm` also carries
+ * `expectedStopEpoch`, the Stop epoch of the state the phone saw, and is refused when a Stop has moved it since. `stop` is a
+ * priority full Stop: the host cancels and records the fence on receipt, whatever else it is doing.
+ */
+export type AutovoteCommandMessage = {
+    t: 'autovote-command';
+    command: AutovoteCommandName;
+    requestId: string;
+    expectedStopEpoch?: number;
+};
 /** Both directions: the sender leaves (a refused peer, the host shutting down). `reason: 'full'` is the
  * host turning a phone away because the peer limit is reached — not an offline desktop. */
 export type ByeMessage = { t: 'bye'; reason?: 'full' };
@@ -108,12 +152,64 @@ export type PeerMessage =
 const isBoundedString = (value: unknown): value is string =>
     typeof value === 'string' && value.length > 0 && value.length <= MAX_PEER_FIELD_LENGTH;
 
+const isCommandName = (value: unknown): value is AutovoteCommandName =>
+    value === 'start' || value === 'stop' || value === 'rearm';
+
+const isControlReport = (value: unknown): value is ControlReport =>
+    isPlainObject(value) &&
+    isBoundedString(value.requestId) &&
+    isBoundedString(value.target) &&
+    isInteger(value.revision) &&
+    value.revision >= 0;
+
+const isCommandAck = (value: unknown): value is CommandAck =>
+    isPlainObject(value) &&
+    isBoundedString(value.requestId) &&
+    isCommandName(value.command) &&
+    (value.outcome === 'ran' ||
+        value.outcome === 'failed' ||
+        value.outcome === 'duplicate' ||
+        value.outcome === 'stop-epoch-moved');
+
 const isIndexList = (value: unknown): value is number[] =>
     Array.isArray(value) && value.every((index) => isInteger(index) && index >= 0);
+
+const EXECUTION_MODES: readonly ExecutionMode[] = ['stopped', 'armed', 'voting'];
+const ADMIT_REFUSALS: readonly AdmitRefusal[] = [
+    'superseded',
+    'stop-not-saved',
+    'fence-unreadable',
+    'stop-epoch-moved',
+    'block-not-cleared',
+    'arm-refused',
+    'no-armed-cycle',
+];
+const FENCE_FAILURES: readonly FenceFailure[] = ['unreadable', 'oversize', 'not-saved'];
+const WITHDRAWALS: readonly WithdrawalOutcome[] = ['withdrawn', 'none', 'failed', 'no-route'];
+
+const isOneOf = <T extends string>(list: readonly T[], value: unknown): value is T =>
+    typeof value === 'string' && (list as readonly string[]).includes(value);
+
+/** What a full Stop came to, as the controller reports it: the fence's answer and the withdrawal's, or the remote `requested` arm. */
+const isStopResult = (value: unknown): value is StopResult => {
+    if (!isPlainObject(value)) return false;
+    if (value.outcome === 'requested') return value.durable === false;
+    if (!isOneOf(WITHDRAWALS, value.withdrawal)) return false;
+    if (value.outcome === 'stopped') return value.durable === true && isInteger(value.epoch) && value.epoch >= 0;
+    return (
+        value.outcome === 'stopped-locally' &&
+        value.durable === false &&
+        (value.reason === 'no-fence' || isOneOf(FENCE_FAILURES, value.reason))
+    );
+};
 
 /** The state a `autovote-state` message carries: a plain object with the reducer's fields. */
 const isAutovoteState = (value: unknown): value is AutovoteState =>
     isPlainObject(value) &&
+    isOneOf(EXECUTION_MODES, value.executionMode) &&
+    (value.stopEpoch === null || (isInteger(value.stopEpoch) && value.stopEpoch >= 0)) &&
+    (value.lastStop === null || isStopResult(value.lastStop)) &&
+    (value.startRefusal === null || isOneOf(ADMIT_REFUSALS, value.startRefusal)) &&
     typeof value.running === 'boolean' &&
     isInteger(value.cycles) &&
     (value.lastRun === null || typeof value.lastRun === 'string') &&
@@ -170,19 +266,43 @@ export const parsePeerMessage = (raw: unknown): PeerMessage | null => {
                 return null;
             }
             if (raw.undefinedAt !== undefined && !isIndexList(raw.undefinedAt)) return null;
-            return raw.undefinedAt === undefined
-                ? { t: 'invoke', id: raw.id, channel: raw.channel, args: raw.args }
-                : { t: 'invoke', id: raw.id, channel: raw.channel, args: raw.args, undefinedAt: raw.undefinedAt };
+            if (raw.requestId !== undefined && !isBoundedString(raw.requestId)) return null;
+            if (raw.expectedRevision !== undefined && !(isInteger(raw.expectedRevision) && raw.expectedRevision >= 0)) {
+                return null;
+            }
+            return {
+                t: 'invoke',
+                id: raw.id,
+                channel: raw.channel,
+                args: raw.args,
+                ...(raw.undefinedAt === undefined ? {} : { undefinedAt: raw.undefinedAt }),
+                ...(raw.requestId === undefined ? {} : { requestId: raw.requestId }),
+                ...(raw.expectedRevision === undefined ? {} : { expectedRevision: raw.expectedRevision }),
+            };
         case 'result':
             if (!isInteger(raw.id) || raw.id < 0 || typeof raw.ok !== 'boolean') return null;
-            if (raw.ok) return { t: 'result', id: raw.id, ok: true, result: raw.result };
+            if (raw.control !== undefined && !isControlReport(raw.control)) return null;
+            if (raw.ok) {
+                return {
+                    t: 'result',
+                    id: raw.id,
+                    ok: true,
+                    result: raw.result,
+                    ...(raw.control === undefined ? {} : { control: raw.control }),
+                };
+            }
             // `reason` is the send-failure marker: absent, 'too-large' or 'unsendable' — anything else is
             // not one of the shapes.
             if (raw.reason !== undefined && raw.reason !== 'too-large' && raw.reason !== 'unsendable') return null;
             return isBoundedString(raw.error)
-                ? raw.reason === undefined
-                    ? { t: 'result', id: raw.id, ok: false, error: raw.error }
-                    : { t: 'result', id: raw.id, ok: false, error: raw.error, reason: raw.reason }
+                ? {
+                      t: 'result',
+                      id: raw.id,
+                      ok: false,
+                      error: raw.error,
+                      ...(raw.reason === undefined ? {} : { reason: raw.reason }),
+                      ...(raw.control === undefined ? {} : { control: raw.control }),
+                  }
                 : null;
         case 'event':
             return isBoundedString(raw.channel) && 'payload' in raw
@@ -191,13 +311,30 @@ export const parsePeerMessage = (raw: unknown): PeerMessage | null => {
         case 'autovote-state':
             if (!isAutovoteState(raw.state)) return null;
             // The pair is read whole: a state without both `hostRun` and `n` is dropped.
+            if (raw.ack !== undefined && !isCommandAck(raw.ack)) return null;
             return isBoundedString(raw.hostRun) && isInteger(raw.n) && raw.n >= 0
-                ? { t: 'autovote-state', state: raw.state, hostRun: raw.hostRun, n: raw.n }
+                ? {
+                      t: 'autovote-state',
+                      state: raw.state,
+                      hostRun: raw.hostRun,
+                      n: raw.n,
+                      ...(raw.ack === undefined ? {} : { ack: raw.ack }),
+                  }
                 : null;
         case 'autovote-command':
-            return raw.command === 'start' || raw.command === 'stop' || raw.command === 'rearm'
-                ? { t: 'autovote-command', command: raw.command }
-                : null;
+            if (!isCommandName(raw.command) || !isBoundedString(raw.requestId)) return null;
+            if (
+                raw.expectedStopEpoch !== undefined &&
+                !(isInteger(raw.expectedStopEpoch) && raw.expectedStopEpoch >= 0)
+            ) {
+                return null;
+            }
+            return {
+                t: 'autovote-command',
+                command: raw.command,
+                requestId: raw.requestId,
+                ...(raw.expectedStopEpoch === undefined ? {} : { expectedStopEpoch: raw.expectedStopEpoch }),
+            };
         case 'bye':
             if (raw.reason === undefined) return { t: 'bye' };
             return raw.reason === 'full' ? { t: 'bye', reason: 'full' } : null;

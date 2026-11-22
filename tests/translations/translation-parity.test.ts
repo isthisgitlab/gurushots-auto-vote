@@ -190,3 +190,48 @@ describe('the import date sentence ends in one full stop', () => {
         expect(text.endsWith('..')).toBe(false);
     });
 });
+
+describe('the simulation assumption wording reads as a sentence after the operation', () => {
+    const fillVars = (template: string, vars: Record<string, string>) =>
+        template.replace(/\{(\w+)\}/g, (_match, name: string) => vars[name] ?? '');
+    const outcomes = ['success', 'refused', 'unclear'] as const;
+    const wordsOf = (
+        app: Pick<typeof english.app, 'sbOutcome_success' | 'sbOutcome_refused' | 'sbOutcome_unclear'>,
+    ) => ({
+        success: app.sbOutcome_success,
+        refused: app.sbOutcome_refused,
+        unclear: app.sbOutcome_unclear,
+    });
+
+    test('english: the outcomes say what happens to the request', () => {
+        expect(wordsOf(english.app)).toEqual({
+            success: 'succeeds',
+            refused: 'is refused',
+            unclear: 'gets no answer',
+        });
+    });
+
+    test('latvian: the outcomes say what happens to the request', () => {
+        expect(wordsOf(latvian.app)).toEqual({
+            success: 'izdodas',
+            refused: 'tiek atteikts',
+            unclear: 'paliek bez atbildes',
+        });
+    });
+
+    test.each([
+        ['english', english.app, 'Submitting a photo succeeds'],
+        ['latvian', latvian.app, 'Foto iesniegšana — izdodas'],
+    ])('%s: the echoed assumption and the timeline line read as one phrase', (_language, app, expected) => {
+        const vars = { operation: app.sbAssumed_submit, outcome: app.sbOutcome_success };
+        expect(fillVars(app.sbAssumedAs, vars)).toBe(expected);
+        expect(fillVars(app.sbEventOperation, vars)).toBe(expected);
+    });
+
+    test('every outcome has a word in both languages', () => {
+        for (const outcome of outcomes) {
+            expect(english.app[`sbOutcome_${outcome}`]).toBeTruthy();
+            expect(latvian.app[`sbOutcome_${outcome}`]).toBeTruthy();
+        }
+    });
+});

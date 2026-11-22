@@ -5,7 +5,9 @@
  * are starting points, not recommendations.
  *
  * Dependency-free so the renderer can list them. Every template must pass
- * validateScenario (tests/scenarios/templates.test.ts).
+ * validateScenario (tests/scenarios/templates.test.ts). The remote link's frozen contract
+ * (remote/contract/v3/channelsScenarioLibrary.ts) embeds the shape of this list: a template
+ * added or changed here is added there in the same change.
  */
 
 // A function, so each phase owns its settings object: an in-place edit of one
@@ -229,6 +231,161 @@ const SCENARIO_TEMPLATES = [
                                 { type: 'entry', select: { by: 'bestRank' }, field: 'turbo', op: '=', value: false },
                             ],
                             do: [{ type: 'turbo', entry: { by: 'bestRank' } }],
+                        },
+                    ],
+                },
+            },
+        },
+    },
+    {
+        id: 'dynamicSubmission',
+        scenario: {
+            name: 'Submit photos on a dynamic schedule',
+            version: 1,
+            description:
+                'Photo 1 comes from joining. Photo 2 goes in 10 h before the end, or 1 h before the free Boost expires if that is earlier. Photo 3 goes in 9 h before the end and photo 4 8 h before it. A photo already in counts for its row. Auto-Submit must be on.',
+            start: 'push',
+            phases: {
+                push: {
+                    settings: { autoSubmit: true },
+                    schedules: {
+                        submit: {
+                            alignment: 'end',
+                            rows: [
+                                {
+                                    count: 2,
+                                    at: {
+                                        kind: 'earlier',
+                                        of: [
+                                            {
+                                                kind: 'offset',
+                                                from: { kind: 'fact', name: 'challenge.end' },
+                                                by: { kind: 'literal', value: 10, quantity: 'duration', unit: 'hours' },
+                                                direction: 'before',
+                                            },
+                                            {
+                                                kind: 'offset',
+                                                from: { kind: 'fact', name: 'boost.freeExpiry' },
+                                                by: { kind: 'literal', value: 1, quantity: 'duration', unit: 'hours' },
+                                                direction: 'before',
+                                            },
+                                        ],
+                                    },
+                                },
+                                {
+                                    count: 3,
+                                    at: {
+                                        kind: 'offset',
+                                        from: { kind: 'fact', name: 'challenge.end' },
+                                        by: { kind: 'literal', value: 9, quantity: 'duration', unit: 'hours' },
+                                        direction: 'before',
+                                    },
+                                },
+                                {
+                                    count: 4,
+                                    at: {
+                                        kind: 'offset',
+                                        from: { kind: 'fact', name: 'challenge.end' },
+                                        by: { kind: 'literal', value: 8, quantity: 'duration', unit: 'hours' },
+                                        direction: 'before',
+                                    },
+                                },
+                            ],
+                        },
+                    },
+                },
+            },
+        },
+    },
+    {
+        id: 'candidateJoin',
+        scenario: {
+            name: 'Join cheap challenges when photos are ready',
+            version: 1,
+            description:
+                'Before joining, join a challenge that costs 50 coins or less when at least 3 of your photos can enter it. The join never spends more than 50 coins.',
+            start: 'candidate',
+            phases: {
+                candidate: {
+                    rules: [
+                        {
+                            id: 'join-cheap',
+                            label: 'Join when cheap and photos are ready',
+                            repeat: 'once',
+                            stages: ['preJoin'],
+                            if: [
+                                {
+                                    type: 'compare',
+                                    left: { kind: 'fact', name: 'challenge.joinPrice' },
+                                    op: '<=',
+                                    right: { kind: 'literal', value: 50, quantity: 'coins' },
+                                },
+                                {
+                                    type: 'compare',
+                                    left: { kind: 'fact', name: 'photos.eligibleCount' },
+                                    op: '>=',
+                                    right: { kind: 'literal', value: 3, quantity: 'count' },
+                                },
+                            ],
+                            do: [{ type: 'join', maxCoins: { kind: 'literal', value: 50, quantity: 'coins' } }],
+                        },
+                    ],
+                },
+            },
+        },
+    },
+    {
+        id: 'photoQueue',
+        scenario: {
+            name: 'Photo queue with a Boost pin',
+            version: 1,
+            description:
+                'Enter photos from the photo pool "Morning queue" in order, using only those photos. Create that pool first, or change the name. Turbo stays unpinned here. In the last 2 days, pin Boost to the best-ranked entry.',
+            start: 'queue',
+            phases: {
+                queue: {
+                    photoPool: { name: 'Morning queue', only: true, inOrder: true },
+                    pins: { turbo: null },
+                    rules: [
+                        {
+                            id: 'pin-boost',
+                            label: 'Pin Boost to the best-ranked entry',
+                            repeat: 'once',
+                            if: [{ type: 'beforeEnd', max: '2d' }],
+                            do: [{ type: 'setPin', power: 'boost', entry: { by: 'bestRank' } }],
+                        },
+                    ],
+                },
+            },
+        },
+    },
+    {
+        id: 'installationPolicy',
+        scenario: {
+            name: 'Missions and currency for this installation',
+            version: 1,
+            description:
+                'For the whole installation: keep 1 key, 2 swaps and 2 fills in reserve, spend at most 100 coins on joins per cycle, claim prizes and do the missions that save Turbos and join early. Tells you when keys run out.',
+            scope: 'installation',
+            start: 'policy',
+            phases: {
+                policy: {
+                    settings: {
+                        currencyReserveKeys: 1,
+                        currencyReserveSwaps: 2,
+                        currencyReserveFills: 2,
+                        autoJoinCycleCoinBudget: 100,
+                        autoClaimPrizes: true,
+                        missionSaveTurbos: true,
+                        missionJoinEarly: true,
+                    },
+                    rules: [
+                        {
+                            id: 'keys-out',
+                            label: 'Keys ran out',
+                            repeat: 'once',
+                            if: [{ type: 'balance', currency: 'keys', op: '<', value: 1 }],
+                            do: [{ type: 'notify', message: 'You are out of keys.' }],
                         },
                     ],
                 },

@@ -14,6 +14,7 @@ const {
     sanitizeNotificationText,
     computeDueNotifications,
     createDedupe,
+    filterStillEnabled,
     formatNotification,
     readNotificationConfig,
     ACTION_LABEL_KEY,
@@ -290,5 +291,18 @@ describe('defensive inputs from hosts', () => {
             enabled: { autoSubmit: false, boost: false, turbo: false, emergencySubmit: false },
             anyEnabled: false,
         });
+    });
+});
+
+describe('filterStillEnabled — the switches read again right before delivery', () => {
+    const due = [{ action: 'boost' }, { action: 'turbo' }, { action: 'autoSubmit' }];
+
+    test('keeps only the notifications whose switch is still on', () => {
+        expect(filterStillEnabled(due, { boost: true, turbo: false })).toEqual([{ action: 'boost' }]);
+    });
+
+    test('a switch that is missing is off, and nothing enabled leaves nothing', () => {
+        expect(filterStillEnabled(due, {})).toEqual([]);
+        expect(filterStillEnabled([], { boost: true })).toEqual([]);
     });
 });

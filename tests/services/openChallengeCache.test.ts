@@ -6,7 +6,7 @@ import { invalid } from '../helpers/invalid';
 import type * as cacheModule from '../../src/ts/core/services/openChallengeCache';
 import type { DiscoverChallenge } from '../../src/ts/core/types/gurushots';
 
-const { rememberOpenChallenges, getOpenChallenge, clearOpenChallenges } =
+const { rememberOpenChallenges, getOpenChallenge, listOpenChallenges, clearOpenChallenges } =
     require('../../src/ts/core/services/openChallengeCache') as typeof cacheModule;
 
 const item = (id: number | string, title: string) => invalid<DiscoverChallenge>({ id, title });
@@ -46,5 +46,15 @@ describe('rememberOpenChallenges', () => {
         expect(getOpenChallenge(2)).toBeUndefined();
         clearOpenChallenges();
         expect(getOpenChallenge(1)).toBeUndefined();
+    });
+});
+
+describe('listOpenChallenges', () => {
+    test('lists every remembered challenge, and nothing after the cache is cleared', () => {
+        expect(listOpenChallenges()).toEqual([]);
+        rememberOpenChallenges([item(1, 'One'), item(2, 'Two')]);
+        expect(listOpenChallenges().map((c) => c.title)).toEqual(['One', 'Two']);
+        clearOpenChallenges();
+        expect(listOpenChallenges()).toEqual([]);
     });
 });

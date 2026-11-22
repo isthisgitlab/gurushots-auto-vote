@@ -37,10 +37,17 @@ describe('getMyCompletedChallenges', () => {
         expect(makePostRequest.mock.calls[0][2]).toBe('start=0&limit=20');
     });
 
-    test('returns [] on null / malformed payload', async () => {
+    test('returns null on a failed request or a malformed payload, never an empty list', async () => {
         makePostRequest.mockResolvedValueOnce(null);
-        expect(await getMyCompletedChallenges(token)).toEqual([]);
+        expect(await getMyCompletedChallenges(token)).toBeNull();
         makePostRequest.mockResolvedValueOnce({ success: true });
+        expect(await getMyCompletedChallenges(token)).toBeNull();
+        makePostRequest.mockResolvedValueOnce(invalid({ completed_challenges: 'nope' }));
+        expect(await getMyCompletedChallenges(token)).toBeNull();
+    });
+
+    test('returns [] only for a confirmed empty list', async () => {
+        makePostRequest.mockResolvedValueOnce({ completed_challenges: [] });
         expect(await getMyCompletedChallenges(token)).toEqual([]);
     });
 
@@ -80,10 +87,17 @@ describe('getMyMissions', () => {
         expect(body).toBe('');
     });
 
-    test('returns [] on null / malformed payload', async () => {
+    test('returns null on a failed request or a malformed payload, never an empty list', async () => {
         makePostRequest.mockResolvedValueOnce(null);
-        expect(await getMyMissions(token)).toEqual([]);
-        makePostRequest.mockResolvedValueOnce({ list: 'nope' });
+        expect(await getMyMissions(token)).toBeNull();
+        makePostRequest.mockResolvedValueOnce(invalid({ list: 'nope' }));
+        expect(await getMyMissions(token)).toBeNull();
+        makePostRequest.mockResolvedValueOnce({ success: true });
+        expect(await getMyMissions(token)).toBeNull();
+    });
+
+    test('returns [] only for a confirmed empty list', async () => {
+        makePostRequest.mockResolvedValueOnce({ list: [], success: true });
         expect(await getMyMissions(token)).toEqual([]);
     });
 

@@ -7,12 +7,17 @@
  */
 
 jest.mock('../../src/ts/core/services/VotingLogic', () => ({ describeDeadlineActions: jest.fn() }));
+jest.mock('../../src/ts/core/settings', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/ts/core/settings')>('../../src/ts/core/settings'),
+}));
 
 import type { Challenge } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 import votingLogicModule = require('../../src/ts/core/services/VotingLogic');
 const votingLogic = jest.mocked(votingLogicModule);
+import settingsModule = require('../../src/ts/core/settings');
 import type * as computations_handlersModule from '../../src/ts/core/ipc/computations.handlers';
 const { buildHandlers } = require('../../src/ts/core/ipc/computations.handlers') as typeof computations_handlersModule;
 
@@ -44,6 +49,15 @@ describe('get-deadline-actions', () => {
         await expect(handler({}, invalid(challenge))).resolves.toEqual({
             success: false,
             error: 'invalid challenge id',
+        });
+        expect(votingLogic.describeDeadlineActions).not.toHaveBeenCalled();
+    });
+
+    test('a challenge whose scenario settings are unavailable is refused with the fixed code', async () => {
+        jest.spyOn(settingsModule, 'scenarioSubjectAvailable').mockReturnValueOnce(false);
+        await expect(handler({}, invalid<Challenge>({ id: 7, close_time: 999 }))).resolves.toEqual({
+            success: false,
+            error: 'scenario-settings-unavailable',
         });
         expect(votingLogic.describeDeadlineActions).not.toHaveBeenCalled();
     });

@@ -8,11 +8,14 @@
 import type * as photoPickerModule from '../../src/ts/core/services/photoPicker';
 const {
     readChallengeTheme,
+    buildScoredCandidates,
+    pickPhotosForChallenge,
     buildSearchTerms,
     buildChallengeKeywords,
     buildThemeKeywords,
     visualSubjectWords,
     detectLetterPrefix,
+    readChallengeLetter,
     withoutLetterPhrases,
     parseNegation,
     tokenise,
@@ -29,6 +32,105 @@ const ROADS = {
     title: 'Roads to Anywhere',
     welcome_message: 'Show photos of the different kinds of roads found all around the world.',
 };
+
+describe('Three Of A Kind', () => {
+    const challenge = {
+        title: 'Three Of A Kind',
+        url: 'three-of-a-kind',
+        welcome_message: 'Show Three Of A Kind in your photos.',
+    };
+    const photos = [
+        { id: 'apples', labels: ['Apples'], votes: 100, permission: { allowed: true, message: null } },
+        { id: 'stool', labels: ['Three-legged stool'], votes: 1, permission: { allowed: true, message: null } },
+    ];
+    test('does not derive search or scoring words from the title', () => {
+        expect(buildSearchTerms(challenge)).toEqual([]);
+        expect(buildChallengeKeywords(challenge)).toEqual([]);
+        expect(buildThemeKeywords(challenge)).toEqual([]);
+        expect(visualSubjectWords(challenge)).toEqual([]);
+        expect(buildSearchTerms(challenge, { mustIncludeTags: ['apple'] })).toEqual(['apple']);
+        expect(buildSearchTerms(challenge, { shouldIncludeTags: ['apple'] })).toEqual(['apple']);
+    });
+    test('requires a chosen eligible photo even when fallback and semantic scores are supplied', () => {
+        expect(pickPhotosForChallenge({ title: 'Three Of A Kind' }, photos, 1)).toEqual([]);
+        const chosen = { ids: ['apples'], only: false, inOrder: false };
+        expect(
+            pickPhotosForChallenge(challenge, photos, 2, {
+                chosen,
+                mustIncludeTags: ['missing'],
+                submitWithoutTagMatch: true,
+                semanticScores: new Map([['stool', 1]]),
+            }),
+        ).toEqual(['apples']);
+        expect(
+            buildScoredCandidates(challenge, photos, {
+                chosen: { ...chosen, ids: ['apples', 'stool'] },
+                semanticScores: new Map([['stool', 1]]),
+            }).map(({ id, score, semantic }) => ({ id, score, semantic })),
+        ).toEqual([
+            { id: 'apples', score: 0, semantic: 0 },
+            { id: 'stool', score: 0, semantic: 0 },
+        ]);
+        expect(pickPhotosForChallenge(challenge, photos, 1, { chosen: { ...chosen, ids: [] } })).toEqual([]);
+        expect(
+            pickPhotosForChallenge(challenge, photos, 1, {
+                chosen: { ...chosen, ids: ['missing'] },
+                submitWithoutTagMatch: true,
+            }),
+        ).toEqual([]);
+        expect(
+            pickPhotosForChallenge(challenge, photos, 1, { chosen: { ...chosen, excludeIds: new Set(['apples']) } }),
+        ).toEqual([]);
+        expect(
+            pickPhotosForChallenge(
+                challenge,
+                [{ ...photos[0], permission: { allowed: false, message: null } }, photos[1]],
+                1,
+                { chosen },
+            ),
+        ).toEqual([]);
+    });
+    test('matches the full title ignoring case and whitespace', () => {
+        expect(readChallengeTheme({ title: '  tHree  OF\tA kind  ', welcome_message: 'Open theme' })).toEqual({
+            kind: 'three-of-a-kind',
+            subjects: [],
+        });
+        expect(readChallengeTheme({ title: 'Three Of A Kind in Nature' }).kind).not.toBe('three-of-a-kind');
+        expect(buildSearchTerms({ title: 'Three Trees' })).toContain('three');
+    });
+    test('keeps an explicit letter rule from the description', () => {
+        expect(
+            pickPhotosForChallenge(
+                { ...challenge, welcome_message: 'Photos must start with the letter A.' },
+                photos,
+                2,
+                { chosen: { ids: ['apples', 'stool'], only: false, inOrder: false }, submitWithoutTagMatch: false },
+            ),
+        ).toEqual(['apples']);
+    });
+});
+
+const EYE_CONTACT = {
+    title: 'Facing The Camera',
+    url: 'facing-the-camera2',
+    welcome_message:
+        'For this challenge share your best photos where the subject is looking at the camera. I think that the most powerful photos are those where the viewer has direct eye-contact with the subject.',
+};
+
+test('camera-facing titles derive portrait subjects', () => {
+    expect(readChallengeTheme(EYE_CONTACT)).toEqual({ kind: 'eye-contact', subjects: ['portrait', 'face', 'person'] });
+    expect(buildSearchTerms(EYE_CONTACT)).toEqual(['portrait', 'face', 'person']);
+    expect(buildChallengeKeywords(EYE_CONTACT)).toEqual(['portrait', 'face', 'person']);
+    expect(buildThemeKeywords(EYE_CONTACT)).toEqual(['portrait', 'face', 'person']);
+    expect(buildSearchTerms(EYE_CONTACT, { mustIncludeTags: ['cat'], shouldIncludeTags: ['dog'] })).toEqual(['cat']);
+    expect(buildSearchTerms(EYE_CONTACT, { shouldIncludeTags: ['dog'] })).toEqual(['dog']);
+    expect(readChallengeTheme({ title: 'Looking Directly Into The Camera' }).kind).toBe('eye-contact');
+    expect(readChallengeTheme({ title: 'Looking At The Camera' }).kind).toBe('eye-contact');
+    expect(readChallengeTheme({ title: 'Looking Into The Camera' }).kind).toBe('eye-contact');
+    expect(readChallengeTheme({ title: 'Looking Directly At The Camera' }).kind).toBe('eye-contact');
+    expect(readChallengeTheme({ title: 'Vintage Cameras' }).kind).not.toBe('eye-contact');
+    expect(buildSearchTerms({ title: 'Vintage Cameras' })).toContain('camera');
+});
 
 describe('readChallengeTheme', () => {
     describe('open theme', () => {
@@ -194,6 +296,80 @@ describe('compound titles with the lexicon not loaded', () => {
 });
 
 describe('letter challenges — the letter phrase is not the subject', () => {
+    test.each([
+        ['All About E', 'Share photos that start with the letter <strong>E</strong>.', 'Eagle', 'Envelope'],
+        ['All About A', 'Share photos that start with the letter A this week.', 'Apple', 'Alphabet'],
+        ['The Letter E', 'Share photos that start with the letter <strong>E</strong>.', 'Eagle', 'Envelope'],
+    ])('description rule words do not affect scoring for %s', (title, welcome_message, popular, other) => {
+        const challenge = { title, welcome_message };
+        const photos = [
+            { id: popular, labels: [popular], votes: 100, permission: { allowed: true, message: null } },
+            { id: other, labels: [other, 'Letter'], votes: 1, permission: { allowed: true, message: null } },
+        ];
+        expect(pickPhotosForChallenge(challenge, photos, 1)).toEqual([popular]);
+        expect(buildChallengeKeywords(challenge)).not.toContain('start');
+        expect(buildChallengeKeywords(challenge)).not.toContain('letter');
+    });
+
+    test('All About E uses the description rule to filter candidates', () => {
+        const challenge = {
+            title: 'All About E',
+            url: 'all-about-e10',
+            welcome_message:
+                "Share your best photos of anything that starts with the letter 'E'! Like, Eagle, Ears, Elephant, Engine, Eyes, Etc. Join our challenge and earn rewards! * Participation reward: 10 coins * Elite Level reward: 20 coins * ALLSTAR Level reward: 50 coins Good luck!",
+        };
+        const photos = [
+            { id: 'eagle', labels: ['Eagle'], votes: 1, permission: { allowed: true, message: null } },
+            { id: 'cat', labels: ['Cat'], votes: 1000, permission: { allowed: true, message: null } },
+        ];
+        expect(readChallengeTheme(challenge)).toEqual({ kind: 'unconfirmed', subjects: [] });
+        expect(buildScoredCandidates(challenge, photos).map((candidate) => candidate.id)).toEqual(['eagle']);
+        expect(buildScoredCandidates(challenge, [photos[1]], { submitWithoutTagMatch: false })).toEqual([]);
+        expect(buildScoredCandidates(challenge, [photos[1]], { submitWithoutTagMatch: true }).map((p) => p.id)).toEqual(
+            ['cat'],
+        );
+    });
+
+    test.each([
+        ['Starts with letter E', 'e'],
+        ['Begins with the letter e', 'e'],
+        ['Photos should begin with the letter “E”.', 'e'],
+        ["Photos must start with letter 'E'.", 'e'],
+        ['Photos. Starting with the letter E!', 'e'],
+        ['<p>Starts with the letter E.</p>', 'e'],
+        ['The letter E is exciting.', null],
+        ['Any photos that start with the letter E', null],
+        ['Do not submit any photos that start with the letter E.', null],
+        ['Any photos that start with the letter E will be rejected.', null],
+        ['Do not submit cats. Share photos that start with the letter E.', 'e'],
+        ['Any photos that start with the letter S. Show photos that begin with the letter E.', 'e'],
+        ['Share photos that start with the letter E without people.', 'e'],
+        ['Share photos that start with the letter E. Avoid portraits.', 'e'],
+        ["Don't share photos that start with the letter E.", null],
+        ['Show photos that start with the letter E and exclude people.', 'e'],
+        ['If you submit any photos that start with the letter E they will be rejected.', null],
+        ['Share photos that start with the letter E, are not allowed.', null],
+        ['Share photos that start with the letter E must not be submitted.', null],
+        ['Submit photos that start with the letter E.', 'e'],
+        ['Enter photos that start with the letter E.', 'e'],
+        ['Photos must not start with the letter E.', null],
+        ['Starts with the letter Eagle.', null],
+        ['Starts with the letter E-x.', null],
+        ["Starts with the letter 'E'x.", null],
+        ['Starts with the letter “E”-x.', null],
+    ])('reads description rule %s', (welcome_message, expected) => {
+        expect(readChallengeLetter({ title: 'All About E', welcome_message })).toBe(expected);
+    });
+
+    test('title wins and descriptions use the existing text limit', () => {
+        expect(readChallengeLetter({ title: 'Begins With S', welcome_message: 'Starts with the letter E.' })).toBe('s');
+        const rule = 'Starts with the letter E';
+        expect(
+            readChallengeLetter({ title: 'All About E', welcome_message: `${' '.repeat(4096 - rule.length)}${rule}` }),
+        ).toBe('e');
+        expect(readChallengeLetter({ title: 'All About E', welcome_message: `${' '.repeat(4096)}${rule}` })).toBeNull();
+        expect(readChallengeLetter({ title: 'All About E' })).toBeNull();
+    });
     // GuruShots challenge 136581 ("The Letter \"S\""), quoted word for word as
     // the API returned it on 2026-10-22.
     const LETTER_S_DESC =

@@ -83,7 +83,8 @@ describe('reads keep the default retry', () => {
         makePostRequest.mockResolvedValue({ items: [], bankroll: { challenges: [] } });
         await getMemberChallenges(token);
         await getBankroll(token);
-        expect(makePostRequest.mock.calls.map((call) => call.length)).toEqual([3, 3]);
+        // no per-call options: the only fourth argument is the transport policy slot, and a business read leaves it empty
+        expect(makePostRequest.mock.calls.map((call) => call.slice(3))).toEqual([[undefined], [undefined]]);
     });
 });
 
@@ -119,11 +120,29 @@ describe('getBankroll', () => {
         expect(await getBankroll(token)).toBeNull();
     });
 
-    test('skips null entries and zeroes a non-numeric amount', async () => {
+    test('skips null entries and unrecognized types, and reads a numeric string', async () => {
         makePostRequest.mockResolvedValueOnce({
             success: true,
-            bankroll: { challenges: [null, { type: 'KEYS', amount: 'lots' }, { type: 'COINS', amount: '12' }] },
+            bankroll: { challenges: [null, { type: 'WHAT', amount: 'lots' }, { type: 'COINS', amount: '12' }] },
         });
         expect(await getBankroll(token)).toEqual({ keys: 0, swaps: 0, fills: 0, coins: 12 });
     });
+
+    test.each([
+        ['text', 'lots'],
+        ['a missing amount', undefined],
+        ['null', null],
+        ['an empty string', ''],
+        ['not finite', Number.POSITIVE_INFINITY],
+        ['an object', {}],
+    ])(
+        'a recognized currency with %s as its amount fails the whole read, never a zero balance',
+        async (_label, amount) => {
+            makePostRequest.mockResolvedValueOnce({
+                success: true,
+                bankroll: { challenges: [{ type: 'COINS', amount: 5 }, invalid({ type: 'KEYS', amount })] },
+            });
+            expect(await getBankroll(token)).toBeNull();
+        },
+    );
 });

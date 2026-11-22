@@ -8,6 +8,7 @@ import { stem, stripTags, tokenise, matches, tokeniseTagList } from './photoPick
 import {
     abstractTitleWords,
     detectLetterPrefix,
+    readChallengeLetter,
     descriptionExclusions,
     parseNegation,
     readChallengeTheme,
@@ -55,6 +56,7 @@ export {
     OFF_THEME_MARGIN,
     buildSearchTerms,
     detectLetterPrefix,
+    readChallengeLetter,
     withoutLetterPhrases,
     parseNegation,
     descriptionExclusions,

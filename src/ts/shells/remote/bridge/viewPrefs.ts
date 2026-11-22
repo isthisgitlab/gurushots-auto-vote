@@ -27,9 +27,11 @@ import { isPlainObject } from '../../../core/plainObject';
 
 import { createViewPrefsStore, isBoolean, normalizeId, pruneOverrides, VIEW_PREFS_STORAGE } from './viewPrefsStore';
 import { overlaySettings } from './viewPrefsOverlay';
+import { createHostProjections } from './viewPrefsHost';
 
 import type { PeerBridgeContext } from './context';
 import type { InvokePipeline } from './invokes';
+import type { HostProjections } from './viewPrefsHost';
 import type { PrefKey, ViewPrefsStore } from './viewPrefsStore';
 
 export { VIEW_PREFS_STORAGE };
@@ -53,6 +55,13 @@ export type ViewPrefs = {
      * four keys in place.
      */
     ingestSettings: (payload: unknown) => unknown;
+    /**
+     * Takes a host effective-settings or effective-presentation event (viewPrefsHost.ts): the payload to dispatch with the
+     * phone's own four preferences in place, or null for a stale or malformed one.
+     */
+    ingestEffective: HostProjections['ingest'];
+    /** What the computer paints now (never the phone's own choices), for a panel that inspects the host. */
+    hostPresentation: HostProjections['hostPresentation'];
 };
 
 /** What one seed settles with: the three forwarded reads, each its own settled outcome. */
@@ -71,6 +80,7 @@ export const createViewPrefs = ({
 }): ViewPrefs => {
     const prefsStore: ViewPrefsStore = createViewPrefsStore();
     const { stored: store, persist, mapFull, putGlobal } = prefsStore;
+    const projections = createHostProjections(store);
 
     /** The last desktop settings object the bridge saw; null before the first one. */
     let lastDesktop: Record<string, unknown> | null = null;
@@ -386,6 +396,10 @@ export const createViewPrefs = ({
                 );
             case 'get-settings-schema':
                 return settingsSchemaRead();
+            case 'get-effective-installation-settings':
+            case 'get-effective-presentation':
+                // What a mount, a focus or a reconnect fetches: the host's answer with the phone's own four preferences in place.
+                return sendInvoke(channel, args).then((reply) => projections.answer(channel, reply));
             case 'cleanup-stale-challenge-setting':
             case 'cleanup-stale-metadata':
                 if (pruneOverrides(store, args[0])) persist();
@@ -395,5 +409,10 @@ export const createViewPrefs = ({
         }
     };
 
-    return { route, ingestSettings };
+    return {
+        route,
+        ingestSettings,
+        ingestEffective: projections.ingest,
+        hostPresentation: projections.hostPresentation,
+    };
 };

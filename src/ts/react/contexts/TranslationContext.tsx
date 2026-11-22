@@ -1,7 +1,8 @@
-import { createContext, useContext, useCallback, useLayoutEffect, useMemo } from 'react';
+import { createContext, useContext, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import { rendererTranslator } from '../../core/translations/renderer';
 import { DEFAULT_LANGUAGE, isSupportedLanguage, resolveLanguage } from '../../core/translations/translator';
 import { useIpcQuery } from '../api/useIpcQuery';
+import { useEffectivePresentation } from '../api/useEffectiveSettings';
 import * as ipc from '../api/ipc';
 
 import type { ComponentChildren } from 'preact';
@@ -33,7 +34,7 @@ const adoptLanguage = (language: string) => {
     document.documentElement.lang = language;
 };
 
-// Adopt the saved language before publishing it.
+// Adopt a language before publishing it.
 const applyLanguage = (saved: unknown, { setData }: Pick<IpcQueryTools<string, Error>, 'setData'>) => {
     const language = resolveLanguage(saved);
     adoptLanguage(language);
@@ -50,14 +51,27 @@ const logLanguageSaveFailure = (reason: unknown) => {
  * ipc module, persists changes the same way, follows a language saved
  * elsewhere (another window, the CLI) through settings-changed, and exposes
  * `t` bound to the current language. `ready` turns true once the saved
- * language has been read (or the read failed, leaving English).
+ * language has been read (or the read failed, leaving English) and the effective
+ * one has been asked for.
+ *
+ * What the window paints is the effective language: the saved one, or a running scenario's published
+ * one over it (useEffectiveSettings.ts). Once an effective language is known it wins over the saved one,
+ * and a withdrawal is simply the next projection carrying the saved language again; nothing is written to
+ * the settings for either. The native menu follows through the same refresh route a saved change uses.
  */
 export function TranslationProvider({ children }: { children?: ComponentChildren }) {
+    // The effective language once one is known: the saved language no longer decides what is painted.
+    const effectiveRef = useRef<string | null>(null);
+    const applyBaseline = useCallback((saved: unknown, tools: Pick<IpcQueryTools<string, Error>, 'setData'>) => {
+        if (effectiveRef.current === null) applyLanguage(saved, tools);
+    }, []);
     const {
         data: language,
         setData,
         loading,
-    } = useIpcQuery(fetchLanguage, { initialData: DEFAULT_LANGUAGE, apply: applyLanguage });
+    } = useIpcQuery(fetchLanguage, { initialData: DEFAULT_LANGUAGE, apply: applyBaseline });
+    const { presentation, settled, refresh } = useEffectivePresentation();
+    const effectiveLanguage = presentation?.language ?? null;
 
     // Every successful settings write broadcasts settings-changed, so a
     // language saved in another window (or edited through the CLI) lands here
@@ -69,10 +83,21 @@ export function TranslationProvider({ children }: { children?: ComponentChildren
         () =>
             ipc.onSettingsChanged((changed: { app?: { language?: unknown } } | null | undefined) => {
                 if (changed?.app?.language === undefined) return;
-                applyLanguage(changed.app.language, { setData });
+                applyBaseline(changed.app.language, { setData });
             }),
-        [setData],
+        [setData, applyBaseline],
     );
+
+    // The effective language, as the host last published it: painted when it differs from what the window shows.
+    useLayoutEffect(() => {
+        if (effectiveLanguage === null) return;
+        effectiveRef.current = effectiveLanguage;
+        const next = resolveLanguage(effectiveLanguage);
+        if (next === language) return;
+        adoptLanguage(next);
+        setData(next);
+        Promise.resolve(ipc.refreshMenu()).catch(() => {});
+    }, [effectiveLanguage, language, setData]);
 
     // A new `t` per language re-renders memoized consumers, so the text
     // always matches `language`.
@@ -101,19 +126,23 @@ export function TranslationProvider({ children }: { children?: ComponentChildren
                 logLanguageSaveFailure('the settings store rejected the write');
                 return false;
             }
-            adoptLanguage(lang);
-            setData(lang);
+            // The saved language is what this window paints unless a scenario's effective one is over it: the host says which.
+            if (effectiveRef.current === null) {
+                adoptLanguage(lang);
+                setData(lang);
+            }
             Promise.resolve(ipc.refreshMenu()).catch(() => {});
+            await refresh();
             return true;
         },
-        [setData],
+        [setData, refresh],
     );
 
     const getCurrentLanguage = useCallback(() => language, [language]);
 
     const value = useMemo(
-        () => ({ t, language, setLanguage, getCurrentLanguage, ready: !loading }),
-        [t, language, setLanguage, getCurrentLanguage, loading],
+        () => ({ t, language, setLanguage, getCurrentLanguage, ready: !loading && settled }),
+        [t, language, setLanguage, getCurrentLanguage, loading, settled],
     );
 
     return <TranslationContext.Provider value={value}>{children}</TranslationContext.Provider>;

@@ -58,6 +58,64 @@ export type ScenarioSummary = {
 
 type ScenarioStatus = Extract<Awaited<ReturnType<WindowApi['getScenarioStatus']>>, { success: true }>;
 
+/** A successful get-scenario-snapshot: one subject's settings as saved and as they apply, its schedules, pause and generation. */
+export type ScenarioSnapshotView = Extract<Awaited<ReturnType<WindowApi['getScenarioSnapshot']>>, { success: true }>;
+
+/**
+ * One subject's scenario snapshot (get-scenario-snapshot), for the card's "what applies now" detail: read again
+ * whenever the card's own status is (`status`: a pass, a phase change, a settings change, or a status refresh gives
+ * the card a new summary) and on every progress reset or resume (the same signal the card's status reads). No timer.
+ * Null while disabled or when the read fails — the card keeps its line either way.
+ *
+ * @param subject - the challenge id
+ * @param status - the card's current summary; a new one means its status was read again
+ */
+export function useScenarioSnapshot(subject: string, status: ScenarioSummary | null): ScenarioSnapshotView | null {
+    const [snapshot, setSnapshot] = useState<ScenarioSnapshotView | null>(null);
+    // Read while rendering, so a reset anywhere renders this card again.
+    const resets = scenarioResets.value;
+    useEffect(() => {
+        let cancelled = false;
+        void (async () => {
+            const result = await ipc.callOrNull(() => ipc.getScenarioSnapshot(subject));
+            if (!cancelled) setSnapshot(result?.success ? result : null);
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [subject, resets, status]);
+    return snapshot;
+}
+
+/** A pending lifecycle request of one target, as the notice's Check status reads it (get-scenario-request-status). */
+export type PendingRequestView = { requestId: string; operation: string } | null;
+
+/**
+ * The pending lifecycle request of a subject, if one waits for the background service; null when there is none or
+ * the status cannot be read (the notice's own check re-reads by identity anyway).
+ */
+export function usePendingRequest(target: string): PendingRequestView {
+    const [pending, setPending] = useState<PendingRequestView>(null);
+    const resets = scenarioResets.value;
+    useEffect(() => {
+        let cancelled = false;
+        void (async () => {
+            const result = await ipc.callOrNull(() => ipc.getScenarioRequestStatus({ target }));
+            if (!cancelled) {
+                setPending(
+                    result?.success && result.state === 'target' && result.pending
+                        ? { requestId: result.pending.requestId, operation: result.pending.operation }
+                        : null,
+                );
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [target, resets]);
+    return pending;
+}
+
 /**
  * A card-sized summary of where a challenge is in its scenario, or null when
  * it has none. `nextWakeAt` is computed here with the engine's own wake-up

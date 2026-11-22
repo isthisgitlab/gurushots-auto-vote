@@ -16,6 +16,8 @@ import { titleRuleInfo } from './helpers/titleRules';
 import { ChallengeNav } from '@/components/app/ChallengeNav';
 import type { Challenge } from '../../src/ts/core/types/gurushots';
 import { invalid } from '../helpers/invalid';
+import { createTranslator } from '../../src/ts/core/translations/translator';
+import { rendererTranslator } from '../../src/ts/core/translations/renderer';
 
 const challenge = (id: number, title: string) => invalid<Challenge>({ id, title });
 /** A running challenge at 5% exposure, which the jump list flags with a red dot. */
@@ -31,6 +33,8 @@ const lowExposureChallenge = (id: number, title: string) => {
 };
 
 describe('ChallengeNav', () => {
+    const defaultTranslate = jest.mocked(rendererTranslator.t).getMockImplementation()!;
+
     beforeEach(() => {
         jest.mocked(window.api.getChallengeOverrides).mockReset();
         jest.mocked(window.api.getChallengeOverrides).mockResolvedValue({});
@@ -38,7 +42,10 @@ describe('ChallengeNav', () => {
         jest.mocked(window.api.getTitleProfile).mockResolvedValue(null);
     });
 
-    afterEach(() => jest.restoreAllMocks());
+    afterEach(() => {
+        jest.restoreAllMocks();
+        jest.mocked(rendererTranslator.t).mockImplementation(defaultTranslate);
+    });
 
     test('renders nothing when there are no challenges', () => {
         render(<ChallengeNav challenges={[]} />);
@@ -57,6 +64,7 @@ describe('ChallengeNav', () => {
         const marked = invalid<Challenge>({
             id: 21,
             title: 'Marked',
+            max_photo_submits: 4,
             dataIssues: ['member.boost.timeout'],
             start_time: nowSec - 3600,
             close_time: nowSec + 3600,
@@ -66,6 +74,7 @@ describe('ChallengeNav', () => {
 
         const [markedChip, plainChip] = screen.getAllByRole('button');
         expect(markedChip.textContent).toMatch(/Marked/);
+        expect(markedChip.querySelector('.badge')?.textContent).toBe('4');
         expect(markedChip.querySelector('[data-testid^="pulse-dot"]')).toBeNull();
         expect(plainChip.querySelector('[data-testid^="pulse-dot"]')).toBeNull();
     });
@@ -81,17 +90,75 @@ describe('ChallengeNav', () => {
     });
 
     test('clicking an entry scrolls the matching card into view', () => {
-        render(<ChallengeNav challenges={[challenge(42, 'JumpTo')]} />);
+        render(<ChallengeNav challenges={[invalid<Challenge>({ id: 42, title: 'JumpTo', max_photo_submits: 4 })]} />);
 
         const fakeCard = Object.assign(document.createElement('div'), { scrollIntoView: jest.fn(), focus: jest.fn() });
         const getById = jest.spyOn(document, 'getElementById').mockReturnValue(fakeCard);
 
-        fireEvent.click(screen.getByRole('button', { name: /JumpTo/ }));
+        const chip = screen.getByRole('button', { name: /JumpTo/ });
+        expect(chip.querySelector('.badge')?.textContent).toBe('4');
+        fireEvent.click(chip);
 
         expect(getById).toHaveBeenCalledWith('challenge-42');
         expect(fakeCard.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
         expect(fakeCard.focus).toHaveBeenCalledWith({ preventScroll: true });
     });
+
+    test.each([
+        [{ type: 'exhibition', badge: 'magazine', max_photo_submits: 4 }, 'M', 'app.challengeFormatMagazine'],
+        [{ type: ' MaGaZiNe ' }, 'M', 'app.challengeFormatMagazine'],
+        [{ badge: ' ExHiBiTiOn ' }, 'E', 'app.challengeFormatExhibition'],
+        [{ type: 'exhibition' }, 'E', 'app.challengeFormatExhibition'],
+        [{ type: 'flash', badge: 'fourphoto', max_photo_submits: 4 }, 'F', 'app.challengeFormatFlash'],
+        [{ type: 5, badge: 'magazine' }, 'M', 'app.challengeFormatMagazine'],
+        [{ type: 5, badge: {}, max_photo_submits: 4 }, '4', 'app.challengePhotoLimit'],
+        [{ max_photo_submits: 1 }, '1', 'app.challengePhotoLimit'],
+        [{ max_photo_submits: 4 }, '4', 'app.challengePhotoLimit'],
+    ])('shows the format for %p', (fields, badge, label) => {
+        render(<ChallengeNav challenges={[invalid<Challenge>({ id: 1, title: 'Format', ...fields })]} />);
+        const chip = screen.getByRole('button', { name: new RegExp(`Format.*${label}`) });
+        const marker = chip.querySelector('.badge')!;
+        expect(marker.textContent).toBe(badge);
+        expect(marker.getAttribute('aria-hidden')).toBe('true');
+        expect(marker.className).toContain('shrink-0');
+        expect(chip.querySelector('.truncate')!.getAttribute('title')).toContain(label);
+        expect(chip.textContent?.split(label)).toHaveLength(2);
+    });
+
+    test.each([
+        ['en', 'Exhibition', 'Magazine', 'Photo limit: 4'],
+        ['lv', 'Izstāde', 'Žurnāls', 'Maksimālais foto skaits: 4'],
+    ])('renders translated format labels in %s', (language, exhibition, magazine, limit) => {
+        const translator = createTranslator();
+        jest.mocked(rendererTranslator.t).mockImplementation((key, vars) => translator.t(key, vars, language));
+        render(
+            <ChallengeNav
+                challenges={[
+                    invalid<Challenge>({ id: 1, title: 'First', type: 'exhibition' }),
+                    invalid<Challenge>({ id: 2, title: 'Second', badge: 'magazine' }),
+                    invalid<Challenge>({ id: 3, title: 'Third', max_photo_submits: 4 }),
+                    invalid<Challenge>({ id: 4, title: 'Fourth', type: 'flash' }),
+                ]}
+            />,
+        );
+        for (const [title, label] of [
+            ['First', exhibition],
+            ['Second', magazine],
+            ['Third', limit],
+            ['Fourth', 'Flash'],
+        ]) {
+            const chip = screen.getByRole('button', { name: `${title} (${label})` });
+            expect(chip.querySelector('.truncate')!.getAttribute('title')).toBe(`${title} — ${label}`);
+        }
+    });
+
+    test.each([{}, { max_photo_submits: 0 }, { max_photo_submits: 1.5 }, { max_photo_submits: '4' }])(
+        'omits the format for %p',
+        (fields) => {
+            render(<ChallengeNav challenges={[invalid<Challenge>({ id: 1, title: 'Unknown', ...fields })]} />);
+            expect(screen.getByRole('button', { name: 'Unknown' }).querySelector('.badge')).toBeNull();
+        },
+    );
 
     test('marks only the challenges that carry a per-challenge override', async () => {
         jest.mocked(window.api.getChallengeOverrides).mockImplementation(async (id) =>
@@ -179,6 +246,7 @@ describe('ChallengeNav', () => {
             invalid<Challenge>({
                 id,
                 title,
+                max_photo_submits: 4,
                 teamMatch: { us: { name: 'Us', votes: 3 }, them: { name: 'Them', votes: 1 } },
             });
         render(<ChallengeNav challenges={[team(11, 'Team'), challenge(12, 'Solo')]} />);
@@ -191,6 +259,7 @@ describe('ChallengeNav', () => {
         expect(badge!.getAttribute('aria-hidden')).toBe('true');
         expect(badge!.textContent).toBe('T');
         expect(badge!.className).toContain('badge-primary');
+        expect(Array.from(teamChip.querySelectorAll('.badge'), (item) => item.textContent)).toEqual(['T', '4']);
         // The label reaches screen readers once, through the hint's sr-only span.
         expect(teamChip.textContent?.match(/app\.teamChallenge/g)).toHaveLength(1);
         expect(teamChip.querySelector('.truncate')!.getAttribute('title')).toContain('app.teamChallenge');

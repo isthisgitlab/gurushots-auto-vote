@@ -34,6 +34,262 @@ beforeEach(() => {
     jest.clearAllMocks();
 });
 
+describe('useAsyncIpcAction: a change with no final result', () => {
+    const lost = { success: false, error: 'lost', unclear: true, requestId: 'req-1' };
+    const queued = { success: true, pending: true, requestId: 'app-1', target: 't', revision: 1 };
+    // What get-scenario-request-status resolves to, so the fixtures carry it without a cast each.
+    type RequestStatusAnswer = Awaited<ReturnType<typeof mockApi.getScenarioRequestStatus>>;
+    const record = (status: string, error: string | null = null): RequestStatusAnswer =>
+        invalid({
+            success: true,
+            state: 'request',
+            record: { requestId: 'req-1', operation: 'o', target: 't', status, error, revision: 1, at: 1 },
+        });
+
+    test('a lost reply with its identity is an open outcome, not an error, and the identity is kept', async () => {
+        const invoker = jest.fn().mockResolvedValue(lost);
+        const { result } = renderHook(() => useAsyncIpcAction(invoker));
+        await act(async () => {
+            await result.current.run(1);
+        });
+        expect(result.current.outcome).toEqual({ kind: 'unclear', requestId: 'req-1', checked: null });
+        expect(result.current.error).toBeNull();
+        expect(mockApi.logWarning).toHaveBeenCalledWith('IPC action not final: unclear req-1');
+    });
+
+    test('a lost reply with no identity keeps the old behavior: it is the error', async () => {
+        const invoker = jest.fn().mockResolvedValue({ success: false, error: 'spend-unclear', unclear: true });
+        const { result } = renderHook(() => useAsyncIpcAction(invoker));
+        await act(async () => {
+            await result.current.run(1);
+        });
+        expect(result.current.outcome).toBeNull();
+        expect(result.current.error).toBe('spend-unclear');
+    });
+
+    test('an Android request the service has queued is an open outcome too', async () => {
+        const invoker = jest.fn().mockResolvedValue(queued);
+        const { result } = renderHook(() => useAsyncIpcAction(invoker));
+        await act(async () => {
+            await result.current.run();
+        });
+        expect(result.current.outcome).toEqual({ kind: 'queued', requestId: 'app-1', checked: null });
+        expect(result.current.error).toBeNull();
+    });
+
+    test('while one is open, run sends nothing: the earlier change is checked first, never sent again', async () => {
+        const invoker = jest.fn().mockResolvedValue(lost);
+        const { result } = renderHook(() => useAsyncIpcAction(invoker));
+        await act(async () => {
+            await result.current.run(1);
+        });
+        let again;
+        await act(async () => {
+            again = await result.current.run(1);
+        });
+        expect(again).toEqual({ success: false, error: 'effect-unresolved' });
+        expect(invoker).toHaveBeenCalledTimes(1);
+    });
+
+    test('Check status after a reconnect asks by identity; a still-open change keeps it, and a final result closes it', async () => {
+        const invoker = jest.fn().mockResolvedValue(lost);
+        const { result } = renderHook(() => useAsyncIpcAction(invoker));
+        await act(async () => {
+            await result.current.run(1);
+        });
+
+        mockApi.getScenarioRequestStatus.mockResolvedValueOnce(invalid({ success: true, state: 'not-recorded' }));
+        let settled;
+        await act(async () => {
+            settled = await result.current.checkStatus();
+        });
+        expect(settled).toBe(false);
+        expect(mockApi.getScenarioRequestStatus).toHaveBeenCalledWith({ requestId: 'req-1' });
+        expect(result.current.outcome).toEqual({ kind: 'unclear', requestId: 'req-1', checked: 'not-recorded' });
+
+        mockApi.getScenarioRequestStatus.mockResolvedValueOnce(record('pending'));
+        await act(async () => {
+            await result.current.checkStatus();
+        });
+        expect(result.current.outcome).toMatchObject({ kind: 'waiting', requestId: 'req-1' });
+
+        mockApi.getScenarioRequestStatus.mockResolvedValueOnce(record('applied'));
+        await act(async () => {
+            settled = await result.current.checkStatus();
+        });
+        expect(settled).toBe(true);
+        expect(result.current.outcome).toBeNull();
+        expect(result.current.error).toBeNull();
+        // Nothing was ever sent again.
+        expect(invoker).toHaveBeenCalledTimes(1);
+
+        // With nothing open, run works again.
+        invoker.mockResolvedValueOnce({ success: true });
+        await act(async () => {
+            await result.current.run(2);
+        });
+        expect(invoker).toHaveBeenCalledTimes(2);
+    });
+
+    test('onApplied gets the arguments the change was sent with, when a check finds it applied — not when it failed or is open', async () => {
+        const onApplied = jest.fn();
+        const invoker = jest.fn().mockResolvedValue(lost);
+        const { result } = renderHook(() => useAsyncIpcAction(invoker, {}, { onApplied }));
+        await act(async () => {
+            await result.current.run('first', 1);
+        });
+        mockApi.getScenarioRequestStatus.mockResolvedValueOnce(record('pending'));
+        await act(async () => {
+            await result.current.checkStatus();
+        });
+        mockApi.getScenarioRequestStatus.mockResolvedValueOnce(record('failed', 'busy'));
+        await act(async () => {
+            await result.current.checkStatus();
+        });
+        expect(onApplied).not.toHaveBeenCalled();
+        // A failed change is closed: a new one is sent, lost again, and this time found applied.
+        await act(async () => {
+            await result.current.run('second', 2);
+        });
+        mockApi.getScenarioRequestStatus.mockResolvedValueOnce(record('applied'));
+        await act(async () => {
+            await result.current.checkStatus();
+        });
+        expect(onApplied).toHaveBeenCalledTimes(1);
+        expect(onApplied).toHaveBeenCalledWith(['second', 2]);
+    });
+
+    test('a status reply for a change that was given up settles nothing, and does not touch the change that replaced it', async () => {
+        const onApplied = jest.fn();
+        const invoker = jest
+            .fn()
+            .mockResolvedValueOnce({ success: false, error: 'lost', unclear: true, requestId: 'old' })
+            .mockResolvedValueOnce({ success: false, error: 'lost', unclear: true, requestId: 'new' });
+        const { result } = renderHook(() => useAsyncIpcAction(invoker, {}, { onApplied }));
+        await act(async () => {
+            await result.current.run('old');
+        });
+        // The check for the old change is on its way when the user gives it up and sends another.
+        let release!: () => void;
+        mockApi.getScenarioRequestStatus.mockImplementationOnce(
+            () =>
+                new Promise((resolve) => {
+                    release = () => resolve(record('applied'));
+                }),
+        );
+        let late!: Promise<boolean>;
+        await act(async () => {
+            late = result.current.checkStatus();
+        });
+        await act(async () => {
+            result.current.dismissOutcome();
+        });
+        await act(async () => {
+            await result.current.run('new');
+        });
+        expect(result.current.outcome).toMatchObject({ requestId: 'new' });
+        await act(async () => {
+            release();
+            expect(await late).toBe(false);
+        });
+        expect(onApplied).not.toHaveBeenCalled();
+        expect(result.current.outcome).toMatchObject({ requestId: 'new' });
+        expect(result.current.error).toBeNull();
+    });
+
+    test('a status reply that comes after the component is gone settles nothing', async () => {
+        const onApplied = jest.fn();
+        const invoker = jest.fn().mockResolvedValue(lost);
+        const { result, unmount } = renderHook(() => useAsyncIpcAction(invoker, {}, { onApplied }));
+        await act(async () => {
+            await result.current.run('x');
+        });
+        let release!: () => void;
+        mockApi.getScenarioRequestStatus.mockImplementationOnce(
+            () =>
+                new Promise((resolve) => {
+                    release = () => resolve(record('applied'));
+                }),
+        );
+        let late!: Promise<boolean>;
+        await act(async () => {
+            late = result.current.checkStatus();
+        });
+        await act(async () => {
+            unmount();
+        });
+        release();
+        await expect(late).resolves.toBe(false);
+        expect(onApplied).not.toHaveBeenCalled();
+    });
+
+    test('a final failure closes the outcome and becomes the error', async () => {
+        const invoker = jest.fn().mockResolvedValue(queued);
+        const { result } = renderHook(() => useAsyncIpcAction(invoker, { failureMessage: 'fallback' }));
+        await act(async () => {
+            await result.current.run();
+        });
+        mockApi.getScenarioRequestStatus.mockResolvedValueOnce(
+            invalid({
+                success: true,
+                state: 'request',
+                record: {
+                    requestId: 'app-1',
+                    operation: 'o',
+                    target: 't',
+                    status: 'failed',
+                    error: 'conflict',
+                    revision: 1,
+                    at: 1,
+                },
+            }),
+        );
+        await act(async () => {
+            await result.current.checkStatus();
+        });
+        expect(result.current.outcome).toBeNull();
+        expect(result.current.error).toBe('conflict');
+    });
+
+    test('Check status with nothing open settles at once and asks nothing', async () => {
+        const { result } = renderHook(() => useAsyncIpcAction(jest.fn().mockResolvedValue({ success: true })));
+        let settled;
+        await act(async () => {
+            settled = await result.current.checkStatus();
+        });
+        expect(settled).toBe(true);
+        expect(mockApi.getScenarioRequestStatus).not.toHaveBeenCalled();
+    });
+
+    test('the user can give the change up, which lets run send again', async () => {
+        const invoker = jest.fn().mockResolvedValue(lost);
+        const { result } = renderHook(() => useAsyncIpcAction(invoker));
+        await act(async () => {
+            await result.current.run(1);
+        });
+        act(() => result.current.dismissOutcome());
+        expect(result.current.outcome).toBeNull();
+        await act(async () => {
+            await result.current.run(1);
+        });
+        expect(invoker).toHaveBeenCalledTimes(2);
+    });
+
+    test('a final run after a lost reply that carried no identity leaves no outcome', async () => {
+        const invoker = jest
+            .fn()
+            .mockResolvedValueOnce({ success: false, error: 'x', unclear: true })
+            .mockResolvedValue({ success: true });
+        const { result } = renderHook(() => useAsyncIpcAction(invoker));
+        await act(async () => {
+            await result.current.run();
+            await result.current.run();
+        });
+        expect(result.current.outcome).toBeNull();
+        expect(result.current.error).toBeNull();
+    });
+});
+
 describe('useAsyncIpcAction', () => {
     test('without labels, falls back to the generic failure and error codes, and logs the raw detail', async () => {
         const invoker = jest

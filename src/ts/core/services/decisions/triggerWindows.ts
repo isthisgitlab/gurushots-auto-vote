@@ -9,7 +9,7 @@ import * as settings from '../../settings';
 // Pure wall-clock math for the scheduled-fill feature (no import cycle:
 // wallClock.ts imports nothing).
 import { occurrencesOf } from '../../scheduling/wallClock';
-import { effectiveTimezone } from '../../settings/uiDefaults';
+import { captureInstallationTimezone } from '../installationTimezone';
 // From settings/limits (not settings/schema) — keeps zod out of any bundle
 // that reaches this module. No `any` cast needed: limits.ts exports a plain
 // number literal, so inference is already exact.
@@ -23,6 +23,35 @@ import * as logger from '../../logger';
 // the logger is mocked across much of the test suite, and its own oneLine() on
 // the finished message is a backstop, not the first line of defence.
 import { oneLine as oneLineId } from '../../format/logSafe';
+
+import type { PhaseSchedulesRead } from '../../settings';
+import type { ResolvedWindowRow } from '../../types/autoFill';
+
+/**
+ * What the windows say at an instant: `active` — some window is known (a usable entry exists); `inWindow` — a known window
+ * holds the instant (both ends inclusive); `unproven` (set only when true) — a window the evidence could not tell, which
+ * could be active, so a decision that needs every window known must not go on without it.
+ */
+type WindowState = { active: boolean; inWindow: boolean; unproven?: true };
+
+const windowState = (rows: readonly ResolvedWindowRow[], now: number): WindowState => {
+    const knownRows = rows.filter((row) => row.state === 'known');
+    const state: WindowState = {
+        active: knownRows.length > 0,
+        inWindow: knownRows.some((row) => now >= row.start && now <= row.end),
+    };
+    return rows.some((row) => row.state === 'unknown') ? { ...state, unproven: true } : state;
+};
+
+/**
+ * The phase's dynamic windows of a kind: the rows its owner published, 'unavailable' while the published settings cannot be
+ * read (nothing is known then), or null when the phase carries none (the literal settings apply).
+ */
+const dynamicWindows = (challengeId: string, kind: 'vote' | 'pause'): readonly ResolvedWindowRow[] | null => {
+    const read: PhaseSchedulesRead | undefined = settings.getPhaseSchedules?.(challengeId);
+    if (read?.kind === 'unavailable') return [{ state: 'unknown', reason: read.reason }];
+    return (read?.kind === 'resolved' && read.schedules[kind]?.rows) || null;
+};
 
 /**
  * Shared trigger-window evaluation for the two features built on the same pair
@@ -64,6 +93,7 @@ const _triggerWindowState = (
     challengeId: string,
     now: number,
     keys: {
+        scheduleKind: 'vote' | 'pause';
         enabledKey: string;
         timesKey: string;
         beforeEndKey: string;
@@ -72,10 +102,14 @@ const _triggerWindowState = (
         onCorruptDuration: 'default' | 'off';
         maxDurationMin: number | null;
     },
-): { active: boolean; inWindow: boolean } => {
+): WindowState => {
     if (settings.getEffectiveSetting(keys.enabledKey, challengeId) !== true) {
         return { active: false, inWindow: false };
     }
+
+    // A phase's dynamic schedule replaces the literal triggers and their duration for as long as the phase holds it.
+    const dynamic = dynamicWindows(challengeId, keys.scheduleKind);
+    if (dynamic) return windowState(dynamic, now);
 
     // Corrupt duration handling is per-feature, because the two features must
     // fail in OPPOSITE directions and a shared fallback would get one of them
@@ -120,7 +154,10 @@ const _triggerWindowState = (
         effectiveDurationMin = keys.maxDurationMin;
     }
     const durationSec = effectiveDurationMin * 60;
-    const timezone = effectiveTimezone(settings.getSetting('timezone'));
+    // The installation's effective zone, read once for this evaluation; one that cannot be read opens no window (the saved
+    // zone never takes its place).
+    const timezone = captureInstallationTimezone();
+    if (timezone === null) return { active: false, inWindow: false };
     // Both triggers are LISTS — every entry opens its own window, all OR'd.
     // Non-array corruption = form off; a corrupt ENTRY inside the array is
     // skipped (contributes nothing, not even `active`). The slice bounds
@@ -132,28 +169,24 @@ const _triggerWindowState = (
     const rawBefores = settings.getEffectiveSetting(keys.beforeEndKey, challengeId);
     const befores = (Array.isArray(rawBefores) ? rawBefores : []).slice(0, MAX_SCHEDULED_FILL_ENTRIES);
 
-    let active = false;
-    let inWindow = false;
+    const rows: ResolvedWindowRow[] = [];
 
     // Time-of-day entries: unparseable values yield null → entry skipped.
     for (const entry of times) {
         const occ = occurrencesOf(entry, timezone, now);
         if (!occ) continue;
-        active = true;
-        if (now - occ.prev <= durationSec) inWindow = true;
+        rows.push({ state: 'known', start: occ.prev, end: occ.prev + durationSec });
     }
     // Before-end entries: NaN and non-positives fail the > 0 gate → skipped.
     for (const entry of befores) {
         const beforeEndSec = Number(entry);
         if (!(beforeEndSec > 0)) continue;
-        active = true;
         const start = Number(challenge.close_time) - beforeEndSec;
-        if (now >= start && now - start <= durationSec) inWindow = true;
+        rows.push({ state: 'known', start, end: start + durationSec });
     }
 
-    // `inWindow` can only have been set inside a loop that already set
-    // `active`, so it never needs a separate guard here.
-    return { active, inWindow };
+    // Both lists lower into the one resolved form the dynamic schedules use; an inWindow row is one holding `now`.
+    return windowState(rows, now);
 };
 
 /**
@@ -177,10 +210,11 @@ const getScheduledFillState = (
     challenge: Challenge,
     challengeId: string,
     now: number,
-): { active: boolean; inWindow: boolean; replaces: boolean } => {
+): WindowState & { replaces: boolean } => {
     const inactive = { active: false, inWindow: false, replaces: false };
     try {
         const state = _triggerWindowState(challenge, challengeId, now, {
+            scheduleKind: 'vote',
             enabledKey: 'useScheduledFill',
             timesKey: 'scheduledFillTime',
             beforeEndKey: 'scheduledFillBeforeEnd',
@@ -189,7 +223,8 @@ const getScheduledFillState = (
             onCorruptDuration: 'default',
             maxDurationMin: null,
         });
-        if (!state.active) return inactive;
+        // A window that cannot be told is not active, but it keeps the verdict from reading "no schedule": the caller decides.
+        if (!state.active && !state.unproven) return inactive;
         return {
             ...state,
             replaces: settings.getEffectiveSetting('scheduledFillReplaces', challengeId) === true,
@@ -229,11 +264,7 @@ const getScheduledFillState = (
  *
  * @param now - Current time (Unix timestamp, seconds)
  */
-const getVotingPauseState = (
-    challenge: Challenge,
-    challengeId: string,
-    now: number,
-): { active: boolean; inWindow: boolean } => {
+const getVotingPauseState = (challenge: Challenge, challengeId: string, now: number): WindowState => {
     const notPaused = { active: false, inWindow: false };
     try {
         // A non-finite close_time defeats the deadline rules (last-minute and
@@ -242,6 +273,7 @@ const getVotingPauseState = (
         // would otherwise pause such a challenge with nothing left to rescue it.
         if (!Number.isFinite(Number(challenge?.close_time))) return notPaused;
         return _triggerWindowState(challenge, challengeId, now, {
+            scheduleKind: 'pause',
             enabledKey: 'useVotingPause',
             timesKey: 'votingPauseTime',
             beforeEndKey: 'votingPauseBeforeEnd',

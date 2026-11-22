@@ -67,6 +67,7 @@ const {
 // The service's windows: the explicit no-ops its shell module passes.
 const windows: PlatformWindows = {
     broadcastSettingsChanged: () => undefined,
+    broadcastEvent: () => undefined,
     afterWipe: () => undefined,
 };
 
@@ -77,7 +78,7 @@ const windows: PlatformWindows = {
  */
 const installNodePlatformWithExtractor = (): void => {
     const installed = installTestPlatform();
-    const family = createNodePlatform(windows, { extractVisionCliAssets: () => mockExtract() });
+    const family = createNodePlatform(windows, 'cli', { extractVisionCliAssets: () => mockExtract() });
     const nodeModelLocation = family.assets.visionModel.location;
     installed.assets = {
         ...family.assets,
@@ -190,6 +191,16 @@ describe('descriptionLead', () => {
 });
 
 describe('challengePrompts', () => {
+    test('uses the eye-contact interpretation for Facing The Camera', () => {
+        expect(
+            challengePrompts({
+                title: 'Facing The Camera',
+                url: 'facing-the-camera2',
+                welcome_message:
+                    'For this challenge share your best photos where the subject is looking at the camera. I think that the most powerful photos are those where the viewer has direct eye-contact with the subject.',
+            }),
+        ).toEqual(['a portrait with the subject looking directly at the viewer and making eye contact']);
+    });
     test('builds prompts from any challenge title and description', () => {
         expect(challengePrompts(LEAVES)).toEqual(PROMPTS);
         expect(challengePrompts({ title: 'Metal & Wood' })).toEqual(['a photo of metal wood']);
@@ -256,6 +267,50 @@ describe('orderByVisualFit', () => {
 describe('rankVisually', () => {
     const ids = ['a', 'b', 'c'].map(hex);
     const eligible = ['a', 'b', 'c'].map(photo);
+
+    test('recorded black and white portraits abstention can select no photo', async () => {
+        const seeds = '0123456789ab'.split('');
+        const pairs = [
+            [-7.8047061, -14.740448],
+            [-8.0207319, -9.5971585],
+            [-13.8085862, -15.943203],
+            [-7.8075866, -10.5640011],
+            [-17.0391121, -18.6748238],
+            [-9.9468555, -12.6420622],
+            [-8.0396061, -8.96002],
+            [-8.8113547, -17.0598984],
+            [-10.5231285, -13.6434364],
+            [-11.8984804, -17.1285172],
+            [-9.3621178, -13.8710394],
+            [-14.4095259, -11.2506066],
+        ];
+        logitsBy(Object.fromEntries(seeds.map((seed, index) => [seed, pairs[index]])));
+        const challenge = {
+            title: 'Powerful B&W Portraits',
+            welcome_message:
+                "Let's see some black and white portraits of people. Both portraits and black and white photography create drama.",
+        };
+        const logger = makeLogger();
+        jest.mocked(logger.challengeTag).mockReturnValue('[Challenge: Powerful B&W Portraits]');
+        expect(
+            await rankVisually(challenge, seeds.map(hex), seeds.map(photo), 1, {
+                logger,
+                ...joint(seeds),
+                skipOnAbstain: true,
+            }),
+        ).toEqual([]);
+        expect(mockClassifier).toHaveBeenCalledWith(
+            expect.any(String),
+            expect.arrayContaining([expect.stringContaining('black and white portraits of people')]),
+        );
+        expect(logger.scoped.info).toHaveBeenCalledWith(
+            'Visual check abstained for [Challenge: Powerful B&W Portraits]. No photo selected.',
+            expect.objectContaining({
+                prompts: expect.any(Array),
+                scores: expect.arrayContaining([expect.objectContaining({ id: hex('0'), logits: expect.any(Array) })]),
+            }),
+        );
+    });
 
     test('promotes the on-theme photo and loads the model from packaged resources once', async () => {
         logitsBy({ a: [-10.3, -8.4], b: [-1.7, -2.8], c: [-3.5, -2.9] });

@@ -37,6 +37,10 @@ import type { AutovoteState } from '../../src/ts/core/autovote/state';
 
 const state = {
     running: true,
+    executionMode: 'voting',
+    stopEpoch: null,
+    lastStop: null,
+    startRefusal: null,
     cycles: 3,
     lastRun: '12:00:00',
     nextRunAt: 1,
@@ -54,8 +58,8 @@ describe('parsePeerMessage', () => {
         expect(PROTOCOL_VERSION).toBe(1);
     });
 
-    test('the link version is 2, and the protocol version stays frozen at 1', () => {
-        expect(LINK_VERSION).toBe(2);
+    test('the link version is 3, and the protocol version stays frozen at 1', () => {
+        expect(LINK_VERSION).toBe(3);
         expect(PROTOCOL_VERSION).toBe(1);
     });
 
@@ -153,6 +157,10 @@ describe('parsePeerMessage', () => {
             t: 'autovote-state',
             state: {
                 running: false,
+                executionMode: 'stopped',
+                stopEpoch: null,
+                lastStop: null,
+                startRefusal: null,
                 cycles: 0,
                 lastRun: null,
                 nextRunAt: null,
@@ -168,6 +176,10 @@ describe('parsePeerMessage', () => {
             t: 'autovote-state',
             state: {
                 running: true,
+                executionMode: 'voting',
+                stopEpoch: null,
+                lastStop: null,
+                startRefusal: null,
                 cycles: 1,
                 lastRun: null,
                 nextRunAt: 5,
@@ -179,10 +191,11 @@ describe('parsePeerMessage', () => {
             ...stamp,
         };
         expect(parsePeerMessage(errored)).toEqual(errored);
-        const command: AutovoteCommandMessage = { t: 'autovote-command', command: 'rearm' };
+        const command: AutovoteCommandMessage = { t: 'autovote-command', command: 'rearm', requestId: 'r1' };
         expect(parsePeerMessage(command)).toEqual({
             t: 'autovote-command',
             command: 'rearm',
+            requestId: 'r1',
         });
         const bye: ByeMessage = { t: 'bye' };
         expect(parsePeerMessage(bye)).toEqual({ t: 'bye' });

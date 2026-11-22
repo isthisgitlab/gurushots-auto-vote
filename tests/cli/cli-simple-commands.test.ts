@@ -28,11 +28,19 @@ jest.mock('../../src/ts/core/logger', () => {
     };
 });
 
-jest.mock('../../src/ts/core/settings', () => ({
-    getSetting: jest.fn(),
-    loadSettings: jest.fn(() => ({ mock: false })),
-    setSetting: jest.fn(),
-}));
+jest.mock('../../src/ts/core/settings', () => {
+    const getSetting = jest.fn();
+    return {
+        getSetting,
+        // The installation's own read of the time zone: the saved one while no installation scenario overlays it.
+        captureInstallationSettings: jest.fn((keys: string[]) => ({
+            ok: true,
+            values: Object.fromEntries(keys.map((key) => [key, getSetting(key)])),
+        })),
+        loadSettings: jest.fn(() => ({ mock: false })),
+        setSetting: jest.fn(),
+    };
+});
 
 jest.mock('../../src/ts/core/apiFactory', () => {
     const middleware = { isAuthenticated: jest.fn(() => true), cliLogin: jest.fn() };
@@ -460,6 +468,19 @@ describe('discover', () => {
                 .filter((l) => l.startsWith('  • [1]'))
                 .at(-1);
         };
+
+        test('a zone the installation cannot read shows no local times, and says so', async () => {
+            settings.captureInstallationSettings.mockReturnValueOnce({ ok: false, key: 'timezone', reason: 'expired' });
+            handlers['get-member-challenges'].mockResolvedValue(
+                invalid({
+                    success: true,
+                    items: [{ id: 1, title: 'A', type: 'flash', join_coins: 0, close_time: CLOSE }],
+                }),
+            );
+            await showDiscover();
+            expect(msgs('info')).toContain('  (unavailable — the time zone cannot be read)');
+            expect(msgs('info').some((l) => l.startsWith('  • [1]'))).toBe(false);
+        });
 
         test('is written as the challenge card writes it, in the timezone setting and not the device clock', async () => {
             expect(await lineOf({ close_time: CLOSE }, 'UTC')).toBe(

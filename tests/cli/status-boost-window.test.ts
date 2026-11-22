@@ -38,7 +38,17 @@ jest.mock('../../src/ts/core/settings', () => ({
         challenges: {},
     })),
     getEffectiveSetting: jest.fn(() => 1),
+    // The execution-mode lines: no running flag, no fence, no installation scenario.
+    getSetting: jest.fn(() => false),
+    readStopFence: jest.fn(() => ({ state: 'missing' })),
+    getInstallationScenario: jest.fn(() => null),
 }));
+
+// The mode lines read the installation's pause through the lifecycle handlers.
+jest.mock('../../src/ts/core/ipc/scenarioLifecycle.handlers', () => {
+    const handlers = { 'get-scenario-snapshot': jest.fn(async () => ({ success: true as const, paused: null })) };
+    return { __handlers: handlers, buildLifecycleHandlers: () => handlers };
+});
 
 jest.mock('../../src/ts/shells/cli/runScheduler', () => ({ createScheduler: jest.fn() }));
 

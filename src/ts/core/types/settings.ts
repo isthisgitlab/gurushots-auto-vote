@@ -10,6 +10,7 @@
 
 import type { SettingKey, SettingValues } from '../settings/schema';
 import type { ConfigAuthV2, ConfigV2 } from './config';
+import type { Quantity } from './scenario';
 
 /** A plain object whose values are not trusted yet (hand-edited file, IPC payload). */
 export type LooseRecord = { [key: string]: unknown };
@@ -22,6 +23,95 @@ export type ChallengeValues = Record<string, unknown>;
  * known literal key, `unknown` for a key only known at runtime.
  */
 export type SettingValueOf<K extends string> = K extends SettingKey ? SettingValues[K] : unknown;
+
+/** Where a scenario phase overlay may write a setting: one challenge, or the whole installation. */
+export type ScenarioScope = 'challenge' | 'installation';
+
+/** The one class every named configuration key belongs to. */
+export type SettingDisposition =
+    | 'challengePolicy'
+    | 'accountPolicy'
+    | 'appPreference'
+    | 'devicePreference'
+    | 'lifecycleControl'
+    | 'internalState';
+
+/** Who may change a setting outside a scenario overlay. */
+type SettingCapabilityOwner =
+    | 'challenge'
+    | 'installation'
+    | 'device'
+    | 'controller'
+    | 'window'
+    | 'onboarding'
+    | 'updates'
+    | 'authentication';
+
+/**
+ * What an expression reads a setting as. A number with a time unit is stored in that unit and converts to a duration
+ * in seconds when it is read into an expression; every other number keeps its stored value and names what it counts.
+ * `other` is a value with no expression form (a schedule, photos, window geometry, milliseconds).
+ */
+export type ScenarioValueDescriptor =
+    | { kind: 'boolean' }
+    | { kind: 'number'; quantity: 'duration'; unit: 'seconds' | 'minutes' | 'hours' }
+    | { kind: 'number'; quantity: Exclude<Quantity, 'duration'> }
+    | { kind: 'string' }
+    | { kind: 'enum'; values: readonly string[] }
+    | { kind: 'list' }
+    | { kind: 'other' };
+
+/**
+ * How one setting is classified: `read` is the value itself or a restricted projection of it, `phaseWrite` the scopes a
+ * phase overlay may write (none: no overlay may), and `restriction` the plain reason when none may.
+ */
+export type ScenarioSettingClass = {
+    disposition: SettingDisposition;
+    read: 'value' | 'projection';
+    phaseWrite: readonly ScenarioScope[];
+    owner: SettingCapabilityOwner;
+    restriction?: string;
+};
+
+/**
+ * What a scenario may do with one setting: its class, and the value descriptor of what it holds.
+ */
+export type ScenarioSettingCapability = ScenarioSettingClass & { value: ScenarioValueDescriptor };
+
+/**
+ * The keys of the `app` block that are not schema keys: the form settings of the shared UI defaults, plus the mock
+ * switch, the onboarding flag and the window geometry. Listed out because `keyof ConfigApp` carries an index
+ * signature that cannot check coverage.
+ */
+export type AppExtraKey =
+    | 'theme'
+    | 'language'
+    | 'timezone'
+    | 'customTimezones'
+    | 'stayLoggedIn'
+    | 'apiTimeout'
+    | 'checkFrequencyMin'
+    | 'checkFrequencyMax'
+    | 'apiMaxRetries'
+    | 'apiRetryBaseDelayMs'
+    | 'mock'
+    | 'onboardingCompleted'
+    | 'windowBounds';
+
+/** Every named configuration key: the schema keys and the app keys outside the schema. */
+export type CapabilityKey = SettingKey | AppExtraKey;
+
+/** One row of the serialized capability projection. */
+export type ScenarioCapabilityRow = ScenarioSettingCapability & { key: CapabilityKey };
+
+/**
+ * The capability catalogue as plain JSON: one row per key, sorted by key, and the remote-access switch described
+ * apart because it is not a configuration key. It never carries key material.
+ */
+export type ScenarioCapabilityProjection = {
+    settings: ScenarioCapabilityRow[];
+    remoteEnabled: ScenarioSettingCapability;
+};
 
 /** A challenge id as callers hold it: the API's string, or a number from older paths. */
 export type ChallengeIdInput = string | number | null | undefined;

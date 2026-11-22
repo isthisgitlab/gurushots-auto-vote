@@ -7,9 +7,11 @@ import { resolveConfigsFailSoft, challengeLabel, isSoonerUpcomingStart } from '.
 
 import type { Challenge } from '../../types/gurushots';
 import type { RuleTiming } from '../../voting/currencyAuto';
+import type { ExpressionContext } from '../../scenarios/expressions';
+import type { FactEvidence } from '../../scenarios/facts';
 import type { ScenarioEngineState } from '../../types/scenario';
 import type { ScenarioDocument } from '../../settings/scenarioSchema';
-import type { CurrencyRuleStart, ScenarioWakeStart, BoostHoldEnd } from './shared';
+import type { AccountWakeStart, CurrencyRuleStart, ScenarioWakeStart, BoostHoldEnd } from './shared';
 
 /** Per-challenge timing of each ENABLED currency-automation rule (null = rule off). */
 export type ResolveCurrencyAuto = (
@@ -105,11 +107,122 @@ export async function soonestScenarioWake(
             timezone: input.timezone,
             // No saved state = the plan has not started: it has no phase clock yet.
             phaseClock: input.state !== null,
+            // What the scheduler knows of the challenge itself (its Boost, Turbo and clock); the rest is unknown and supplies no instant.
+            facts: challengeFacts(open[i], state, now, input.timezone),
         });
         if (startTime !== null && isSoonerUpcomingStart(startTime, now, best)) {
             best = { challengeId: open[i].id, challengeTitle: challengeLabel(open[i]), startTime, phase: state.phase };
         }
     }
+    return best;
+}
+
+/** The facts of a challenge the scheduler can read from the challenge alone: no account evidence, so those facts are unknown. */
+const challengeFacts = (
+    challenge: Challenge,
+    state: ScenarioEngineState,
+    now: number,
+    timezone: string,
+): ExpressionContext => ({
+    challenge,
+    state: { phaseEnteredAt: state.phaseEnteredAt, memory: state.memory },
+    now,
+    timezone,
+});
+
+/**
+ * What the account's own boundaries are worked out from, read by the host once per decision. Every field is optional evidence:
+ * one that is absent supplies no boundary.
+ */
+export type AccountWakeSources = {
+    /** The installation scenario this runtime owns, its progress (null: not started), and how far ahead to look (unix seconds). */
+    installation: {
+        scenario: ScenarioDocument;
+        state: ScenarioEngineState | null;
+        timezone: string;
+        horizon: number;
+        evidence?: FactEvidence;
+    } | null;
+    /** Open and upcoming challenges the account has not joined, whose scenario has pre-join rules, with that scenario. */
+    candidates: Array<{ challenge: Challenge; scenario: ScenarioDocument; timezone: string }>;
+    /** The next instant the claim pass may run (unix seconds), when claiming is on. */
+    claimAt: number | null;
+    /** The earliest instant an unfinished mission expires (unix seconds), when the last mission read showed one. */
+    missionExpiry: number | null;
+};
+
+/** The account's boundaries, or null when this host reads none. */
+export type ResolveAccountWake = () => AccountWakeSources | null | Promise<AccountWakeSources | null>;
+
+/**
+ * Soonest instant after `now` of a boundary that belongs to the account and not to an active challenge: the installation
+ * scenario's rule conditions and publication, a candidate's opening or pre-join rule, the claim throttle, a mission's expiry.
+ * None of them is bounded by a challenge's close time: the installation looks ahead to its own explicit horizon. Unknown
+ * evidence supplies no deadline. Fail-soft: a resolver that throws supplies nothing.
+ *
+ * @param now - Unix timestamp (seconds)
+ */
+export async function soonestAccountWake(
+    now: number,
+    resolveAccountWake: ResolveAccountWake,
+): Promise<AccountWakeStart | null> {
+    let sources: AccountWakeSources | null;
+    try {
+        sources = await resolveAccountWake();
+    } catch {
+        return null;
+    }
+    if (!sources) return null;
+    let best: AccountWakeStart | null = null;
+    const offer = (kind: AccountWakeStart['kind'], startTime: number | null, label: string) => {
+        if (startTime !== null && Number.isFinite(startTime) && isSoonerUpcomingStart(startTime, now, best)) {
+            best = { kind, startTime, label };
+        }
+    };
+    const { installation } = sources;
+    if (installation) {
+        const state = installation.state ?? startState(installation.scenario, now);
+        offer(
+            'installation',
+            nextWakeAt({
+                scenario: installation.scenario,
+                state,
+                challenge: null,
+                now,
+                timezone: installation.timezone,
+                phaseClock: installation.state !== null,
+                facts: {
+                    subject: { kind: 'installation' },
+                    state: { phaseEnteredAt: state.phaseEnteredAt, memory: state.memory },
+                    now,
+                    timezone: installation.timezone,
+                    ...installation.evidence,
+                },
+                horizon: installation.horizon,
+            }),
+            'the installation scenario',
+        );
+    }
+    for (const { challenge, scenario, timezone } of sources.candidates) {
+        const state = startState(scenario, now);
+        // The candidate opens (it can be joined from then), and its pre-join rules' own conditions can flip before and after.
+        offer('pre-join', Number(challenge.start_time), challengeLabel(challenge));
+        offer(
+            'pre-join',
+            nextWakeAt({
+                scenario,
+                state,
+                challenge,
+                now,
+                timezone,
+                phaseClock: false,
+                facts: challengeFacts(challenge, state, now, timezone),
+            }),
+            challengeLabel(challenge),
+        );
+    }
+    offer('claim', sources.claimAt, 'the prize claim');
+    offer('mission', sources.missionExpiry, 'a mission expiry');
     return best;
 }
 

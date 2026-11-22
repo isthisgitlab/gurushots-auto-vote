@@ -21,6 +21,7 @@ function Probe({ id = 42, initialCompact, version }: { id?: number; initialCompa
                     override: s.hasCompactOverride,
                 })}
             </span>
+            <span data-testid="unavailable">{s.unavailableReason ?? ''}</span>
             <button onClick={s.toggleCompact}>toggle</button>
         </div>
     );
@@ -62,7 +63,7 @@ beforeEach(() => {
 
 test('seeds isCompact from initialCompact, then applies the IPC values', async () => {
     overrides = { boostTime: 10 };
-    effective = { autoSubmit: true, compactCards: false };
+    effective = { autoSubmit: true, manualPhotosOnly: false, compactCards: false };
     render(<Probe initialCompact={true} />);
     expect(state().compact).toBe(true);
     await waitFor(() =>
@@ -238,5 +239,94 @@ describe('useChallengeSettings — settingsVersion', () => {
         await act(async () => first.resolve({ compactCards: false }));
 
         expect(state().compact).toBe(true);
+    });
+});
+
+describe('a challenge whose settings cannot be read', () => {
+    const reason = () => screen.getByTestId('unavailable').textContent;
+
+    test('its reason comes from the scenario status, and the values stay as they were rather than reading as off', async () => {
+        overrides = { compactCards: true };
+        window.api.getScenarioStatus = jest.fn(async () => ({
+            success: true,
+            overlay: { available: false, reason: 'the published settings of this phase have expired' },
+        })) as unknown as typeof window.api.getScenarioStatus;
+        render(<Probe initialCompact={true} />);
+        await waitFor(() => expect(state().override).toBe(true));
+        expect(state().compact).toBe(true);
+        // every effective read answered with a value: nothing to say
+        expect(reason()).toBe('');
+
+        // the channel answers null for a setting that cannot be read (a boolean otherwise)
+        effective = { autoSubmit: null, manualPhotosOnly: null, compactCards: null };
+        overrides = {};
+        window.api.getEffectiveSetting = jest.fn(async () => null);
+        render(<Probe id={43} initialCompact={true} />);
+        await waitFor(() => expect(window.api.getScenarioStatus).toHaveBeenCalledWith('43'));
+        await waitFor(() =>
+            expect(screen.getAllByTestId('unavailable')[1].textContent).toBe(
+                'the published settings of this phase have expired',
+            ),
+        );
+        expect(JSON.parse(screen.getAllByTestId('state')[1].textContent as string)).toMatchObject({
+            fill: false,
+            compact: true,
+        });
+    });
+
+    test('a status that cannot be read still says it is unavailable, not that the card is off', async () => {
+        window.api.getEffectiveSetting = jest.fn(async () => null);
+        window.api.getScenarioStatus = jest.fn(async () => ({
+            success: false,
+        })) as unknown as typeof window.api.getScenarioStatus;
+        render(<Probe />);
+        await waitFor(() => expect(reason()).toBe('unavailable'));
+    });
+
+    test('a reason that is not given is still unavailable', async () => {
+        window.api.getEffectiveSetting = jest.fn(async () => null);
+        window.api.getScenarioStatus = jest.fn(async () => ({
+            success: true,
+            overlay: { available: false, reason: null },
+        })) as unknown as typeof window.api.getScenarioStatus;
+        render(<Probe />);
+        await waitFor(() => expect(reason()).toBe('unavailable'));
+    });
+
+    test('a status that settles after a newer reload applies nothing', async () => {
+        window.api.getEffectiveSetting = jest.fn(async () => null);
+        let settle!: (status: unknown) => void;
+        window.api.getScenarioStatus = jest
+            .fn()
+            .mockImplementationOnce(
+                () =>
+                    new Promise((resolve) => {
+                        settle = resolve;
+                    }),
+            )
+            .mockResolvedValue({
+                success: true,
+                overlay: { available: false, reason: 'newer' },
+            }) as unknown as typeof window.api.getScenarioStatus;
+        const { rerender } = render(<Probe version={0} />);
+        await waitFor(() => expect(window.api.getScenarioStatus).toHaveBeenCalledTimes(1));
+        rerender(<Probe version={1} />);
+        await waitFor(() => expect(reason()).toBe('newer'));
+        settle({ success: true, overlay: { available: false, reason: 'older' } });
+        await act(async () => {});
+        expect(reason()).toBe('newer');
+    });
+
+    test('readable again: the reason clears and the values follow', async () => {
+        window.api.getEffectiveSetting = jest.fn(async () => null);
+        window.api.getScenarioStatus = jest.fn(async () => ({
+            success: false,
+        })) as unknown as typeof window.api.getScenarioStatus;
+        const { rerender } = render(<Probe version={0} />);
+        await waitFor(() => expect(reason()).toBe('unavailable'));
+        window.api.getEffectiveSetting = jest.fn(async (key) => key === 'autoSubmit');
+        rerender(<Probe version={1} />);
+        await waitFor(() => expect(reason()).toBe(''));
+        expect(state().fill).toBe(true);
     });
 });

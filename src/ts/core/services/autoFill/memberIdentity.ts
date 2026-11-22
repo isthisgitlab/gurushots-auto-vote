@@ -5,6 +5,7 @@
 
 import type { FillLogger, RankDeps } from '../../types/autoFill';
 import { errorMessage } from '../../errorMessage';
+import { clockMs, isolateMapWhileSimulating } from '../../simulationScope';
 
 /**
  * A memoised lookup: the shared promise, and when a null answer expires (null =
@@ -23,6 +24,8 @@ type MemberIdCacheEntry = {
 // re-login naturally misses; bounded because an unbounded map keyed by a
 // credential is a leak waiting to happen, and one entry is the realistic case.
 const memberIdCache: Map<string, MemberIdCacheEntry> = new Map();
+// A simulation's lookups of the member id are dropped when it ends.
+isolateMapWhileSimulating(memberIdCache);
 const MAX_MEMBER_ID_CACHE = 4;
 
 // How long a FAILED identity lookup stays cached before it is retried.
@@ -51,7 +54,7 @@ const resolveMemberId = async (
 ): Promise<string | null> => {
     const cached = memberIdCache.get(token);
     // A resolved id never expires; a cached null does (see NEGATIVE_IDENTITY_TTL_MS).
-    if (cached && (cached.expiresAt === null || cached.expiresAt > Date.now())) return cached.promise;
+    if (cached && (cached.expiresAt === null || cached.expiresAt > clockMs())) return cached.promise;
 
     // Cache the PROMISE, not the value, so two fills racing on the same token
     // share one request instead of both missing an empty cache and issuing it.
@@ -83,7 +86,7 @@ const resolveMemberId = async (
     // stamps the expiry afterwards. `void` because the inner function catches
     // everything and resolves to null, so there is no rejection to handle.
     void promise.then((id) => {
-        if (id === null) entry.expiresAt = Date.now() + NEGATIVE_IDENTITY_TTL_MS;
+        if (id === null) entry.expiresAt = clockMs() + NEGATIVE_IDENTITY_TTL_MS;
     });
     return promise;
 };

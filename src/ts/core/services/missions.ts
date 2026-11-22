@@ -11,7 +11,7 @@
  * progress, never from the text.
  *
  * Read at the start of a voting cycle — only while one of the mission settings
- * is on — and handed to the join pre-step and the voting pass as a mutable
+ * is on (the installation's effective switches, captured then) — and handed to the join pre-step and the voting pass as a mutable
  * MissionNeeds. Each step that lands a join, a fill, a turbo win or a boost counts it
  * down (consumeMission), so the rest of the cycle doesn't overshoot on the
  * progress the server reported at its start. The headless Android pass also
@@ -24,11 +24,12 @@
 
 import * as logger from '../logger';
 import * as settings from '../settings';
+import { isolateWhileSimulating } from '../simulationScope';
 
 import type { Challenge, Mission } from '../types/gurushots';
 import { errorMessage } from '../errorMessage';
 
-type MissionKind = 'join' | 'fill' | 'turbo' | 'boost' | 'vote';
+export type MissionKind = 'join' | 'fill' | 'turbo' | 'boost' | 'vote';
 
 /**
  * A "Use Fill" mission the pass can spend on: its server progress when the pass read it, what it still needs (counted
@@ -43,6 +44,11 @@ export type FillMission = { id: string; required: number; current: number; remai
 export type MissionNeeds = Record<MissionKind, number> & {
     turboRequirements?: Array<{ remaining: number; expiresAtSec: number | null }>;
     fillMissions?: FillMission[];
+    /**
+     * `false` when the mission list was not read: the needs are then the empty "no needs" value, not a list that was
+     * read and held nothing. Absent when the list was read.
+     */
+    readable?: false;
 };
 
 const MISSION_KEYWORDS: ReadonlyArray<[MissionKind, RegExp]> = [
@@ -77,6 +83,15 @@ const MISSION_SETTINGS: Readonly<
     boost: ['missionUseBoosts'],
     vote: ['missionVote'],
 });
+
+// The installation settings that turn the mission automation on, captured together at the start of a cycle.
+const MISSION_SETTING_KEYS = [
+    'missionJoinEarly',
+    'missionUseFills',
+    'missionSaveTurbos',
+    'missionUseBoosts',
+    'missionVote',
+] as const;
 
 const CLAIMABLE = 'CLAIM';
 
@@ -117,6 +132,10 @@ const remainingOf = (mission: Mission, nowSec: number): number => {
     return Number.isFinite(left) && left > 0 ? left : 0;
 };
 
+/** A number as a payload carries it: null, undefined and an empty string are not numbers (Number() would read 0). */
+const readNumber = (value: unknown): number =>
+    value === null || value === undefined || value === '' ? Number.NaN : Number(value);
+
 const logNeeds = (needs: MissionNeeds) => {
     const active = (Object.keys(MISSION_SETTINGS) as MissionKind[]).filter((kind) => needs[kind] > 0);
     const summary = active.map((kind) => `${kind} ${needs[kind]} to go`).join(', ');
@@ -125,20 +144,75 @@ const logNeeds = (needs: MissionNeeds) => {
     cat().info(summary ? `🎯 Active missions: ${summary}` : 'No automatable mission active', null);
 };
 
+/**
+ * What the missions need of the app, from one read of the list, for every kind (no mission setting applies): how much each
+ * kind still needs, the kinds with a mission whose progress could not be read (their need cannot be told), and the
+ * earliest instant an unfinished mission expires. A mission the classifier cannot place adds to no need; one that is
+ * claimable or expired needs nothing.
+ *
+ * @param nowSec epoch seconds
+ */
+const missionEvidence = (
+    missions: readonly Mission[],
+    nowSec: number,
+): {
+    needs: Record<MissionKind, number>;
+    unreadable: MissionKind[];
+    nextExpiry: number | null;
+    expiryUnreadable: boolean;
+} => {
+    const needs: Record<MissionKind, number> = { join: 0, fill: 0, turbo: 0, boost: 0, vote: 0 };
+    const unreadable = new Set<MissionKind>();
+    let nextExpiry: number | null = null;
+    let expiryUnreadable = false;
+    for (const mission of missions) {
+        const kind = classifyMission(mission);
+        if (!kind || mission?.claim_state === CLAIMABLE) continue;
+        const expiry: unknown = mission?.expiration_timestamp;
+        const expires = readNumber(expiry);
+        if (expiry !== undefined && expiry !== null && !Number.isFinite(expires)) expiryUnreadable = true;
+        if (expires > 0 && expires <= nowSec) continue;
+        const left = readNumber(mission?.progress?.required) - readNumber(mission?.progress?.current);
+        if (!Number.isFinite(left)) {
+            unreadable.add(kind);
+            continue;
+        }
+        needs[kind] = Math.max(needs[kind], left > 0 ? left : 0);
+        if (left > 0 && expires > nowSec && (nextExpiry === null || expires < nextExpiry)) nextExpiry = expires;
+    }
+    return { needs, unreadable: [...unreadable], nextExpiry, expiryUnreadable };
+};
+
 const readMissionNeeds = async (
     token: string,
     nowMs: number,
-    getMyMissions: (token: string) => Promise<Mission[]>,
+    getMyMissions: (token: string) => Promise<Mission[] | null>,
 ): Promise<MissionNeeds | null> => {
+    if (!token) return null;
+    // The mission switches as this cycle starts, from the installation's published phase over the saved settings: the whole
+    // cycle follows them. One that cannot be read means no mission is read or acted on this cycle, never the saved switch.
+    const switches = settings.captureInstallationSettings(MISSION_SETTING_KEYS);
+    if (!switches.ok) {
+        cat().warning(
+            `missions are not followed this cycle: ${switches.key} is unavailable (${switches.reason})`,
+            null,
+        );
+        return null;
+    }
     const kinds = Object.keys(MISSION_SETTINGS) as MissionKind[];
-    const enabled = kinds.filter((kind) =>
-        MISSION_SETTINGS[kind].some((key) => settings.getEffectiveSetting(key, null) === true),
-    );
-    if (!token || enabled.length === 0) return null;
+    const enabled = kinds.filter((kind) => MISSION_SETTINGS[kind].some((key) => switches.values[key] === true));
+    if (enabled.length === 0) return null;
     const missions = await getMyMissions(token);
     const nowSec = Math.floor(nowMs / 1000);
+    // A list that was not read is not a list with nothing to do: no needs, said so, and not logged as "none active".
+    if (!Array.isArray(missions)) {
+        cat().warning('could not read missions (the request failed or the answer held no list)', null);
+        return { join: 0, fill: 0, turbo: 0, boost: 0, vote: 0, readable: false };
+    }
+    // The earliest expiry this read showed, for the scheduler: it wakes there so a mission is not slept past.
+    lastMissionExpiry = missionEvidence(missions, nowSec).nextExpiry;
     const needs: MissionNeeds = { join: 0, fill: 0, turbo: 0, boost: 0, vote: 0 };
-    for (const mission of Array.isArray(missions) ? missions : []) {
+    for (const mission of missions) {
         const kind = classifyMission(mission);
         if (!kind || !enabled.includes(kind)) continue;
         const remaining = remainingOf(mission, nowSec);
@@ -165,7 +239,9 @@ const readMissionNeeds = async (
 
 /**
  * The active missions' needs for the kinds a setting on follows (the rest
- * stay 0), or null when every mission setting is off or the missions can't be read.
+ * stay 0), or null when every mission setting is off or the read threw. A read that fails
+ * (no list came back) answers the "no needs" value with `readable: false`, so a caller that cannot handle a
+ * failure does nothing different and one that can tell it from an empty list does.
  * Never throws: like the join and claim pre-steps, it must not abort voting.
  *
  * @param nowMs epoch ms
@@ -173,7 +249,7 @@ const readMissionNeeds = async (
 const loadMissionNeeds = async (
     token: string,
     nowMs: number,
-    { getMyMissions }: { getMyMissions: (token: string) => Promise<Mission[]> },
+    { getMyMissions }: { getMyMissions: (token: string) => Promise<Mission[] | null> },
 ): Promise<MissionNeeds | null> => {
     try {
         return await readMissionNeeds(token, nowMs, getMyMissions);
@@ -246,6 +322,20 @@ const neediestFillMission = (needs: MissionNeeds | null | undefined): FillMissio
     return neediest;
 };
 
+let lastMissionExpiry: number | null = null;
+
+isolateWhileSimulating(() => {
+    const expiry = lastMissionExpiry;
+    const summary = lastSummary;
+    return () => {
+        lastMissionExpiry = expiry;
+        lastSummary = summary;
+    };
+});
+
+/** The earliest expiry (epoch seconds) of an unfinished mission in the last mission list that was read, or null when none. */
+const getNextMissionExpiry = (): number | null => lastMissionExpiry;
+
 const registerMissionNeeds = (token: string, needs: MissionNeeds | null): (() => void) | null => {
     if (!needs) return null;
     const active = activeNeedsByToken.get(token) ?? new Map<MissionNeeds, number>();
@@ -274,11 +364,13 @@ const resetMissionLog = () => {
 export {
     classifyMission,
     loadMissionNeeds,
+    missionEvidence,
     consumeMission,
     neediestFillMission,
     isMissionVoteCandidate,
     missionVoteQuota,
     registerMissionNeeds,
+    getNextMissionExpiry,
     recordManualTurboWin,
     resetMissionLog,
 };

@@ -11,6 +11,7 @@
  */
 
 jest.mock('../../src/ts/core/settings');
+jest.mock('../../src/ts/core/services/effectiveEvents', () => ({ announceEffectiveChange: jest.fn() }));
 jest.mock('../../src/ts/core/settings/localData', () => ({ wipeLocalData: jest.fn() }));
 jest.mock('../../src/ts/core/thirdPartyNotices', () => ({ loadThirdPartyNotices: jest.fn() }));
 jest.mock('../../src/ts/core/metadata', () => ({ cleanupStaleMetadata: jest.fn() }));
@@ -27,6 +28,8 @@ import type { PlatformWindows } from '../../src/ts/core/platform/port';
 
 import settingsModule = require('../../src/ts/core/settings');
 const settings = jest.mocked(settingsModule);
+import effectiveEventsModule = require('../../src/ts/core/services/effectiveEvents');
+const effectiveEvents = jest.mocked(effectiveEventsModule);
 import metadataModule = require('../../src/ts/core/metadata');
 const metadata = jest.mocked(metadataModule);
 import apiFactoryModule = require('../../src/ts/core/apiFactory');
@@ -49,6 +52,7 @@ const boom = () => {
 const installWindows = (): PlatformWindows => {
     const windows: PlatformWindows = {
         broadcastSettingsChanged: jest.fn<void, [object]>(),
+        broadcastEvent: jest.fn(),
         afterWipe: jest.fn<void, []>(),
     };
     installTestPlatform({ windows });
@@ -195,6 +199,16 @@ describe('set-setting', () => {
 
         await expect(h['set-setting']({}, 'language', 'lv')).resolves.toBe(false);
         expect(windows.broadcastSettingsChanged).not.toHaveBeenCalled();
+        expect(effectiveEvents.announceEffectiveChange).not.toHaveBeenCalled();
+    });
+
+    test('a landed write also has the effective projections worked out and told', async () => {
+        installWindows();
+        settings.setSetting = jest.fn().mockReturnValue(true);
+        const h = buildHandlers();
+
+        await h['set-setting']({}, 'language', 'lv');
+        expect(effectiveEvents.announceEffectiveChange).toHaveBeenCalledTimes(1);
     });
 });
 

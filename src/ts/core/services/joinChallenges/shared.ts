@@ -11,6 +11,7 @@ import type * as joinApi from '../../api/join';
 import type * as submissionsApi from '../../api/submissions';
 import type * as tagsApi from '../../api/tags';
 import type * as joinStateStore from '../../joinStateStore';
+import type { PreJoinHook } from '../scenarioRunner/lifecycle';
 
 /**
  * The join flow's endpoints and state (documented in the joinChallenges.ts header).
@@ -40,6 +41,11 @@ export interface JoinDeps {
      * process owns the file.
      */
     refreshJoinState?: () => Promise<boolean>;
+    /**
+     * The cycle's coordinator of scenario work in the pass (services/scenarioRunner/lifecycle.ts): a candidate whose
+     * scenario has pre-join rules is decided by them before the Auto Join switch and the timing gates. Absent: none is.
+     */
+    preJoin?: PreJoinHook | null;
     /** test seam over the visual re-rank */
     rankVisually?: typeof rankVisually;
     /**

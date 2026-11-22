@@ -44,6 +44,9 @@ const mockFill: ReturnType<typeof useFillChallenge> = {
     loading: false,
     error: null,
     clearError: jest.fn(),
+    outcome: null,
+    checkStatus: jest.fn(async () => true),
+    dismissOutcome: jest.fn(),
 };
 
 jest.mock('@/api/useTurbo', () => ({

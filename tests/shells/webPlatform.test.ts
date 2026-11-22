@@ -27,6 +27,8 @@ describe('the web shell platform module', () => {
     test('the module installs the platform, and the capabilities answer the web values', () => {
         expect(installed).toBeDefined();
         const capabilities = installed.capabilities;
+        // The runtime the installation scenario names as `web`.
+        expect(capabilities.executor).toBe('web');
         expect(capabilities.refreshMissionNeeds).toBe(false);
         expect(capabilities.snapAllowed).toBe(true);
         expect(capabilities.backgroundServiceOwnsScenarios()).toBe(false);
@@ -40,7 +42,12 @@ describe('the web shell platform module', () => {
     test('with no run registered the windows are no-ops', () => {
         webPlatform.setWebShellRun(null);
         expect(() => installed.windows.broadcastSettingsChanged({})).not.toThrow();
+        expect(() => installed.windows.broadcastEvent('effective-presentation-changed', {})).not.toThrow();
         expect(() => installed.windows.afterWipe()).not.toThrow();
+    });
+
+    test('the web shell has no pairing to observe', async () => {
+        await expect(installed.native.readScenarioHostStatus()).resolves.toEqual({ supported: false });
     });
 
     test('the windows delegate to the registered run', () => {
@@ -50,6 +57,8 @@ describe('the web shell platform module', () => {
         const settings = { theme: 'dark' };
         installed.windows.broadcastSettingsChanged(settings);
         expect(emit).toHaveBeenCalledWith('settings-changed', settings);
+        installed.windows.broadcastEvent('effective-settings-changed', { revision: 2 });
+        expect(emit).toHaveBeenCalledWith('effective-settings-changed', { revision: 2 });
         installed.windows.afterWipe();
         expect(afterWipe).toHaveBeenCalledTimes(1);
     });

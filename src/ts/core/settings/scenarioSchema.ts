@@ -22,7 +22,7 @@ import { assignRuleIds, semanticIssues } from './scenarioSchema/semantics';
 import type { ScenarioDocument } from './scenarioSchema/shapes';
 import type { ScenarioIssue } from './scenarioSchema/semantics';
 
-export type { ScenarioAction, ScenarioDocument, ScenarioRule } from './scenarioSchema/shapes';
+export type { ScenarioAction, ScenarioDocument, ScenarioPhase, ScenarioRule } from './scenarioSchema/shapes';
 export type { ScenarioIssue };
 
 const { SCENARIO_CAPS } = vocabulary;
@@ -42,10 +42,13 @@ const formatPath = (path: ReadonlyArray<PropertyKey>): string =>
  * (names trimmed, every rule carrying an id); otherwise every issue found.
  *
  * @param globalDefaults - the stored global challenge defaults
+ * @param profiles - the saved challenge profiles, to refuse a phase profile that sets a key a phase may not write
+ *   (omitted when a stored document is read back)
  */
 const validateScenario = (
     input: unknown,
     globalDefaults: Record<string, unknown>,
+    profiles: Record<string, unknown> | null = null,
 ): { ok: true; scenario: ScenarioDocument } | { ok: false; issues: ScenarioIssue[] } => {
     const parsed = scenarioDocument.safeParse(input);
     if (!parsed.success) {
@@ -55,7 +58,7 @@ const validateScenario = (
         };
     }
     const doc = parsed.data;
-    const issues = semanticIssues(doc, globalDefaults);
+    const issues = semanticIssues(doc, globalDefaults, profiles);
     if (issues.length) return { ok: false, issues };
     return { ok: true, scenario: assignRuleIds(doc) };
 };

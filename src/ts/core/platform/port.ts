@@ -20,6 +20,7 @@ import type { BroadcastSettingsChange } from '../ipc/settingsThinHandlers';
 import type { DroppedSaveOps } from '../settings/saveDropped';
 import type { QuarantineResult, WriteIfAbsentResult, WriteResult } from '../settings/storageTypes';
 import type { AutoVoteStatus } from '../types/capacitor';
+import type { InstallationExecutor } from '../types/config';
 import type { CasAnswer, ThroughResult } from '../types/stores';
 import type { TransformersModule } from '../types/vision';
 
@@ -293,7 +294,21 @@ export type PlatformNative = {
     autovote: PlatformAutovote | null;
     foregroundService: PlatformForegroundService | null;
     apkInstaller: PlatformApkInstaller | null;
+    /**
+     * A read-only, sanitized look at what the host knows of the remote-access pairing, for the scenario facts
+     * `remote.enabled` and `remote.connected`: `supported` false where the shell has no pairing (the web shell, the CLI,
+     * Android). It carries no key material, link or peer identity. A rejection is a failed read: the facts are then unknown.
+     */
+    readScenarioHostStatus: () => Promise<ScenarioHostStatus>;
 };
+
+/** What `readScenarioHostStatus` answers. */
+export type ScenarioHostStatus =
+    | { supported: true; remoteEnabled: boolean; remoteConnected: boolean | null }
+    | { supported: false };
+
+/** The host-to-client events of the effective projections (ipc/manifest.ts eventMethods). */
+export type EffectiveEventChannel = 'effective-settings-changed' | 'effective-presentation-changed';
 
 /**
  * What the platform can do to the app's windows: the settings broadcast and
@@ -303,6 +318,11 @@ export type PlatformNative = {
 export type PlatformWindows = {
     /** Sends the new settings to every window. */
     broadcastSettingsChanged: BroadcastSettingsChange;
+    /**
+     * Sends one of the effective-projection events to the windows that may have it (the shell keeps the Logs window to the
+     * presentation one). A shell with no windows does nothing.
+     */
+    broadcastEvent: (channel: EffectiveEventChannel, payload: unknown) => void;
     /** Relaunches the app after a wipe (or exits). */
     afterWipe: () => void;
 };
@@ -312,6 +332,11 @@ export type PlatformWindows = {
  * on state that changes at runtime is a function; the rest are constants.
  */
 export type PlatformCapabilities = {
+    /**
+     * Which runtime this is, as the installation scenario names its owner (types/config.ts InstallationExecutor): only the
+     * runtime the assignment names publishes the installation's settings. Every shell supplies its own.
+     */
+    executor: InstallationExecutor;
     /** Whether the pass builds the mission-needs refresh resolver (the headless cycle has no pass-scoped fetch). */
     refreshMissionNeeds: boolean;
     /** Whether Snap turbo may be played from here. */
@@ -397,4 +422,7 @@ const resetPlatformForTests = (): void => {
     delete (globalThis as PlatformGlobals)[PLATFORM_SLOT];
 };
 
-export { installPlatform, installedPlatform, platform, resetPlatformForTests };
+/** The `readScenarioHostStatus` of a shell with no remote-access pairing: nothing to observe. */
+const unsupportedScenarioHostStatus = async (): Promise<ScenarioHostStatus> => ({ supported: false });
+
+export { installPlatform, installedPlatform, platform, resetPlatformForTests, unsupportedScenarioHostStatus };

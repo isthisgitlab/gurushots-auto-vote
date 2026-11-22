@@ -4,20 +4,21 @@
 
 import * as logger from '../../logger';
 import * as settings from '../../settings';
+import { clockSec } from '../../simulationScope';
 import { reserveAllows, lockedSpend } from '../currencyAuto';
 import { CURRENCY_OUTCOME } from '../../voting/currencyActions';
 import { refreshChallengeState } from '../autoFill';
 import type { BoostState } from '../../types/gurushots';
 import type { ScenarioState } from '../../types/stores';
 import type { SpendOutcome } from '../currencyActions';
-import type { ScenarioDocument } from '../../settings/scenarioSchema';
 import type {
     ActionEffects,
+    ActiveContext,
+    ActionOutcome,
     DoneOutcome,
+    JoinAttempt,
     NotDoneOutcome,
-    RunnerContext,
     ScenarioAction,
-    ScenarioRule,
     SpendAction,
     SpendKind,
 } from './types';
@@ -46,6 +47,20 @@ const SPEND: Record<SpendAction, { action: 'swap' | 'key' | 'fill'; limit: Spend
 const isSpend = (action: ScenarioAction): action is ScenarioAction & { type: SpendAction } =>
     Object.hasOwn(SPEND, action.type);
 
+// The spends a `runAutomation` operation makes through the normal automation's own runner.
+const AUTOMATION_SPEND: Readonly<Record<string, SpendAction | undefined>> = {
+    unlockBoost: 'unlockBoost',
+    swap: 'swap',
+    fillExposure: 'fillExposure',
+};
+
+/**
+ * The currency spend a step may make, if any: a spending action, or a `runAutomation` of a spending operation. It is the
+ * identity the step's write-ahead marker, its unclear marker and its limit go by.
+ */
+const spendOf = (action: ScenarioAction): SpendAction | undefined =>
+    action.type === 'runAutomation' ? AUTOMATION_SPEND[action.operation] : isSpend(action) ? action.type : undefined;
+
 /**
  * What a spend is given to make its request with: it sends the request only after the spend is written down.
  */
@@ -60,7 +75,7 @@ type Retry = { count: boolean; origin: 'unclear' | 'pending' };
 // The outcome of a spend that was not made because its marker could not be written down first.
 const NOT_WRITTEN = 'not-written';
 
-const nowSec = () => Math.floor(Date.now() / 1000);
+const nowSec = clockSec;
 
 /**
  * The scenario `limits` / `spent` key a spend counts against.
@@ -71,6 +86,28 @@ const done = (effects: ActionEffects = {}): DoneOutcome => ({ status: 'done', ..
 const skipped = (message: string): NotDoneOutcome => ({ status: 'skipped', message });
 const failed = (message: string): NotDoneOutcome => ({ status: 'failed', message });
 const deferred = (message: string): NotDoneOutcome => ({ status: 'deferred', message });
+
+/**
+ * What a join attempt comes to as a step. Joined is done. Paid for (or possibly paid for) and not entered: the step is retried,
+ * the claim on file makes the retry submit only (it never unlocks again), and the coins count against the limit as spent.
+ * Any other refusal: a skip under the scenario's own decision (`direct`); under the pass's normal policy (`normal`) a
+ * refusal that spent nothing is the policy saying not now, which completes the step and says why.
+ */
+const joinOutcome = (attempt: JoinAttempt, policy: 'direct' | 'normal'): ActionOutcome => {
+    const coins = attempt.charged + attempt.maybeCharged;
+    if (attempt.status === 'joined') return done({ coins });
+    if (attempt.status === 'charged-pending-submit') {
+        return {
+            ...failed('the join is paid for but not completed yet; it is retried without paying again'),
+            coins,
+            resume: true,
+        };
+    }
+    const message = `the join was not made (${attempt.status})`;
+    if (attempt.status === 'busy') return deferred(message);
+    if (attempt.status === 'failed-no-charge' || attempt.status === 'error') return failed(message);
+    return policy === 'normal' ? done({ notDue: attempt.status }) : skipped(message);
+};
 
 /**
  * The end of a rule whose spend got no answer and cannot be shown to have taken effect: it is not spent again, and
@@ -90,20 +127,6 @@ const unclearHalted = (actionType: SpendAction, from: Retry): NotDoneOutcome => 
 });
 
 /**
- * True when any rule of the scenario compares a currency balance.
- */
-const usesBalance = (scenario: ScenarioDocument) => {
-    const walk = (conditions: ScenarioRule['if']): boolean =>
-        (conditions ?? []).some(
-            (item) =>
-                item.type === 'balance' ||
-                ((item.type === 'any' || item.type === 'all') && walk(item.of)) ||
-                (item.type === 'not' && walk([item.condition])),
-        );
-    return Object.values(scenario.phases).some((phase) => (phase.rules ?? []).some((rule) => walk(rule.if)));
-};
-
-/**
  * Re-read the challenge live (merged into the pass object in place).
  *
  * @returns null when the live state is good to act on; otherwise the outcome the step returns: the challenge left
@@ -111,7 +134,7 @@ const usesBalance = (scenario: ScenarioDocument) => {
  * have dropped it (deferred: the step stops its rule and is retried on the next pass, never on data the boundary
  * could not vouch for).
  */
-const refreshLive = async (ctx: RunnerContext): Promise<NotDoneOutcome | null> => {
+const refreshLive = async (ctx: ActiveContext): Promise<NotDoneOutcome | null> => {
     const refresh = await refreshChallengeState(
         ctx.challenge,
         ctx.pass.token,
@@ -144,7 +167,7 @@ const noAnswer = (actionType: SpendAction, spent: boolean): NotDoneOutcome => ({
  */
 const spendAllowed = async (
     actionType: SpendAction,
-    ctx: RunnerContext,
+    ctx: ActiveContext,
     state: ScenarioState,
 ): Promise<string | null> => {
     const spend = SPEND[actionType];
@@ -177,7 +200,7 @@ const TRANSIENT_OUTCOMES: ReadonlySet<string> = new Set([
  */
 const lockedCurrencySpend = async (
     actionType: SpendAction,
-    ctx: RunnerContext,
+    ctx: ActiveContext,
     spend: (request: SpendRequest) => Promise<SpendOutcome>,
 ): Promise<NotDoneOutcome | null> => {
     // The only way a spend's request is made: the marker is written down first, and a request whose marker could not
@@ -207,12 +230,7 @@ const lockedCurrencySpend = async (
     return result.outcome === undefined || TRANSIENT_OUTCOMES.has(result.outcome) ? failed(message) : skipped(message);
 };
 
-const currencyDeps = (ctx: RunnerContext) => ({ strategy: ctx.pass.currency.strategy, logger, settings });
-
-/**
- * What entry selectors read: remembered photos, and vote history for `fastest`.
- */
-const selectContext = (state: ScenarioState) => ({ memory: state.memory, history: state.history, now: nowSec() });
+const currencyDeps = (ctx: ActiveContext) => ({ strategy: ctx.pass.currency.strategy, logger, settings });
 
 /**
  * The photo a `with` / `photo` source names: a remembered id, or null for "best".
@@ -227,18 +245,18 @@ export {
     nowSec,
     limitOf,
     isSpend,
+    spendOf,
     done,
     skipped,
     failed,
     deferred,
-    usesBalance,
+    joinOutcome,
     refreshLive,
     spendAllowed,
     lockedCurrencySpend,
     noAnswer,
     unclearHalted,
     currencyDeps,
-    selectContext,
     rememberedPhoto,
 };
 export type { Retry };

@@ -129,8 +129,10 @@ type LibraryOptions = {
     /**
      * Out-parameter: `firstPageFailed` is set when the first page could not be read (a failed request or an
      * unreadable payload), which the empty list returned for it cannot tell from a library with nothing in it.
+     * `truncated` (a caller starts it at false to ask for it) is set when the read stopped before the library was
+     * exhausted: a walk that hit the page cap, the time budget or a failed page, or a single page that came back full.
      */
-    readState?: { firstPageFailed: boolean };
+    readState?: { firstPageFailed: boolean; truncated?: boolean };
     /**
      * A walk only (getEligiblePhotosWalk): photos this answers true for are left out of `items` and do not count
      * toward the walk's cap or a `maxKept` batch (their ids are reported as `skipped`, up to 2 * MAX_LIBRARY_PAGES *
@@ -196,6 +198,11 @@ const markFirstPageFailed = (readState: LibraryOptions['readState'], page: numbe
     if (page === 0 && readState) readState.firstPageFailed = true;
 };
 
+/** Notes in a caller's readState (when it asked) that a read stopped before the library was exhausted. */
+const markTruncated = (readState: LibraryOptions['readState'], truncated: boolean): void => {
+    if (truncated && readState && readState.truncated !== undefined) readState.truncated = true;
+};
+
 /**
  * The paginated library walk (see getEligiblePhotos for its stop conditions).
  * Given a `skip`, the cap is on the photos kept rather than the pages read: the walk ends once at least
@@ -247,13 +254,16 @@ const walkLibrary = async (
     // `start + (pages fully read) * limit`, so a continuation resumes here and a page cut short by a failure or the
     // budget is re-read rather than skipped.
     let nextStart = start;
-    const result = (truncated: boolean, stop: LibraryWalkStop): LibraryWalk => ({
-        items: Array.from(byId.values()),
-        truncated,
-        nextStart,
-        stop,
-        ...(skip ? { skipped: Array.from(skipped) } : {}),
-    });
+    const result = (truncated: boolean, stop: LibraryWalkStop): LibraryWalk => {
+        markTruncated(options.readState, truncated);
+        return {
+            items: Array.from(byId.values()),
+            truncated,
+            nextStart,
+            stop,
+            ...(skip ? { skipped: Array.from(skipped) } : {}),
+        };
+    };
     let page = 0;
     // Why the walk stopped early, when it did; null until a budget or failed-page break sets it.
     let stoppedAs: 'budget' | 'failed' | null = null;
@@ -334,6 +344,7 @@ export {
     buildPhotoPageBody,
     normalizeLibraryOptions,
     markFirstPageFailed,
+    markTruncated,
     walkLibrary,
     MAX_LIBRARY_PAGES,
 };

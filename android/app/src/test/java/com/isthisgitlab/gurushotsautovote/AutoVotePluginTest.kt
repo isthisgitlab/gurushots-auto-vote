@@ -12,8 +12,10 @@ import com.getcapacitor.JSObject
 import com.getcapacitor.PluginCall
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
 import io.mockk.mockkStatic
 import io.mockk.slot
+import io.mockk.unmockkObject
 import io.mockk.unmockkStatic
 import io.mockk.verify
 import org.json.JSONObject
@@ -60,6 +62,8 @@ class AutoVotePluginTest {
         ServiceState.clear(app)
         SideStores.resume()
         AutoVotePlugin.newWebView = defaultNewWebView
+        unmockkObject(SideStores)
+        app.getSharedPreferences(SideStores.PREFS_FILE, Context.MODE_PRIVATE).edit().clear().commit()
     }
 
     private fun resolved(block: (PluginCall) -> Unit): JSObject {
@@ -251,7 +255,7 @@ class AutoVotePluginTest {
     @Test
     fun wipeLocalDataStopsTheServiceAndForgetsEverything() {
         ShadowAlarmManager.setCanScheduleExactAlarms(true)
-        AutoVoteService.scheduleAlarm(app, 60_000L)
+        assertTrue(AutoVoteService.scheduleAlarm(app, 60_000L, 0L))
         assertEquals(1, alarms().size)
         ServiceState.setEnabled(app, true)
         ServiceState.record(app, 5, 77L, "x")
@@ -266,6 +270,9 @@ class AutoVotePluginTest {
             .putString("gurushots-settings_original", """{"token":"older"}""")
             .putString("gs_v2_import", "{}")
             .putString("gs_title_pins", "{}")
+            // A full wipe clears the Stop fence and the control inbox together.
+            .putString(StopFence.KEY, """{"stopEpoch":4,"blocked":true,"lastStop":null,"lastArm":null}""")
+            .putString(SideStores.CONTROLS_KEY, """{"targets":{}}""")
             .putString("gurushots-config_corrupt-2026-10-16T08-00-00-000Z", "{")
             .putString("gurushots-settings_corrupt-2026-10-16T08-00-00-000Z", "{")
             .putString("gurushots-settings_unimportable-2026-10-16T08-00-00-000Z", "{")
@@ -345,5 +352,178 @@ class AutoVotePluginTest {
             updates.setWritable(true)
             apk.delete()
         }
+    }
+
+    // ---------- stopAll: the direct native Stop ----------
+
+    private fun prefs() = app.getSharedPreferences(SideStores.PREFS_FILE, Context.MODE_PRIVATE)
+
+    /** [at] is what the JS `Date.now()` becomes in the call data: a Long. */
+    private fun callData(at: Any?): JSObject = JSObject().apply { if (at != null) put("at", at) }
+
+    private fun stopAll(requestId: String?, at: Any? = 1_700_000_000_000L): JSObject =
+        resolved {
+            every { it.getString("requestId") } returns requestId
+            every { it.data } returns callData(at)
+            plugin.stopAll(it)
+        }
+
+    private fun rejected(requestId: String?, at: Any?) {
+        val call = mockk<PluginCall>(relaxed = true)
+        every { call.getString("requestId") } returns requestId
+        every { call.data } returns callData(at)
+        plugin.stopAll(call)
+        verify(exactly = 1) { call.reject("invalid stop") }
+        verify(exactly = 0) { call.resolve(any()) }
+    }
+
+    private fun fence() = StopFence.parse(prefs().getString(StopFence.KEY, null)!!)!!
+
+    /** A run that is going: automation enabled, the service running, an alarm waiting under epoch 0. */
+    private fun aRunningService() {
+        ShadowAlarmManager.setCanScheduleExactAlarms(true)
+        ServiceState.setEnabled(app, true)
+        AutoVoteService.isRunning = true
+        assertTrue(AutoVoteService.scheduleAlarm(app, 60_000L, 0L))
+        assertEquals(1, alarms().size)
+    }
+
+    private fun assertLocallyCancelled() {
+        assertFalse(ServiceState.isEnabled(app))
+        assertFalse(AutoVoteService.isRunning)
+        assertTrue(alarms().isEmpty())
+        val stopped = shadowOf(app).nextStartedService
+        assertEquals(AutoVoteService::class.java.name, stopped.component!!.className)
+        assertEquals(AutoVoteService.ACTION_STOP, stopped.action)
+    }
+
+    @Test
+    fun stopAllCancelsTheWorkThenRecordsTheStopInTheFence() {
+        aRunningService()
+
+        val ret = stopAll("stop-a")
+
+        assertTrue(ret.getBoolean("stopped"))
+        assertTrue(ret.getBoolean("durable"))
+        assertEquals(1, ret.getInt("epoch"))
+        assertFalse(ret.has("reason"))
+        assertLocallyCancelled()
+        val stored = fence()
+        assertEquals(1L, stored.epoch)
+        assertTrue(stored.blocked)
+        assertEquals("stop-a", stored.lastStop!!.getString("requestId"))
+        assertEquals(1_700_000_000_000L, stored.lastStop!!.getLong("at"))
+    }
+
+    @Test
+    fun theRunningCycleIsLatchedFirstAndTheFenceHoldsTheStopBeforeTheServiceIsEnded() {
+        aRunningService()
+        val order = mutableListOf<String>()
+        AutoVoteService.cancelCycle = { order.add("latch") }
+        mockkObject(SideStores)
+        every { SideStores.compareAndSet(any(), StopFence.KEY, any(), any(), any()) } answers {
+            // The service has not been told to end yet, and new work is already cancelled.
+            order.add(if (shadowOf(app).peekNextStartedService() == null) "fence-before-end" else "fence-after-end")
+            assertFalse(ServiceState.isEnabled(app))
+            callOriginal()
+        }
+        try {
+            assertTrue(stopAll("stop-a").getBoolean("durable"))
+        } finally {
+            AutoVoteService.cancelCycle = null
+        }
+        assertEquals(listOf("latch", "fence-before-end"), order)
+        assertEquals(AutoVoteService.ACTION_STOP, shadowOf(app).nextStartedService.action)
+    }
+
+    @Test
+    fun stopAllWithNoServiceRunningStillRecordsTheStop() {
+        // The foreground app with no service: nothing to cancel, and the fence still advances.
+        val ret = stopAll("stop-a")
+        assertTrue(ret.getBoolean("durable"))
+        assertEquals(1, ret.getInt("epoch"))
+        assertFalse(ServiceState.isEnabled(app))
+        assertEquals(AutoVoteService.ACTION_STOP, shadowOf(app).nextStartedService.action)
+    }
+
+    @Test
+    fun theTimeMayArriveAsAnIntAWholeLongOrADouble() {
+        listOf(5, 1_700_000_000_000L, 12.5).forEachIndexed { index, at ->
+            assertTrue(stopAll("stop-$index", at).getBoolean("durable"))
+        }
+        assertEquals(3L, fence().epoch)
+        assertEquals(12L, fence().lastStop!!.getLong("at"))
+    }
+
+    @Test
+    fun theSameStopTwiceAdvancesTheEpochOnce() {
+        assertEquals(1, stopAll("stop-a").getInt("epoch"))
+        assertEquals(1, stopAll("stop-a").getInt("epoch"))
+        assertEquals(2, stopAll("stop-b").getInt("epoch"))
+    }
+
+    @Test
+    fun aStopNeverWaitsBehindNorTouchesTheControlInbox() {
+        // A full inbox, a busy one (a request pending) and one that cannot be read: the Stop advances the fence regardless,
+        // and not a byte of the inbox changes.
+        val head = """{"targets":{"installation":{"pending":""""
+        val tail = """"}}}"""
+        val full = head + "x".repeat(524_288 - head.length - tail.length) + tail
+        listOf(
+            full,
+            """{"targets":{"installation":{"revision":1,"pending":{"requestId":"r1"},"results":[]}}}""",
+            "not json at all",
+        ).forEachIndexed { index, inbox ->
+            prefs().edit().putString(SideStores.CONTROLS_KEY, inbox).commit()
+            val ret = stopAll("stop-$index")
+            assertTrue(ret.getBoolean("durable"))
+            assertEquals(index + 1, ret.getInt("epoch"))
+            assertEquals(inbox, prefs().getString(SideStores.CONTROLS_KEY, null))
+        }
+    }
+
+    @Test
+    fun aFenceThatCannotBeReadIsNotDurableButTheCancellationStands() {
+        aRunningService()
+        prefs().edit().putString(StopFence.KEY, "garbage").commit()
+
+        val ret = stopAll("stop-a")
+
+        assertTrue(ret.getBoolean("stopped"))
+        assertFalse(ret.getBoolean("durable"))
+        assertEquals("unreadable", ret.getString("reason"))
+        assertFalse(ret.has("epoch"))
+        assertLocallyCancelled()
+        assertEquals("garbage", prefs().getString(StopFence.KEY, null))
+    }
+
+    @Test
+    fun aFenceThatCannotBeSavedIsNotDurableButTheCancellationStands() {
+        aRunningService()
+        mockkObject(SideStores)
+        every { SideStores.compareAndSet(any(), StopFence.KEY, any(), any(), any()) } returns
+            SideStores.Result(SideStores.Outcome.REFUSED, null)
+
+        val ret = stopAll("stop-a")
+
+        assertTrue(ret.getBoolean("stopped"))
+        assertFalse(ret.getBoolean("durable"))
+        assertEquals("not-saved", ret.getString("reason"))
+        assertLocallyCancelled()
+        assertNull(prefs().getString(StopFence.KEY, null))
+    }
+
+    @Test
+    fun aStopWithoutAValidRequestIdAndTimeIsRejectedAndCancelsNothing() {
+        aRunningService()
+        rejected(null, 1.0)
+        rejected("has space", 1.0)
+        rejected("a".repeat(65), 1.0)
+        rejected("stop-a", null)
+        rejected("stop-a", "now")
+        assertTrue(ServiceState.isEnabled(app))
+        assertEquals(1, alarms().size)
+        assertNull(prefs().getString(StopFence.KEY, null))
+        assertNull(shadowOf(app).nextStartedService)
     }
 }

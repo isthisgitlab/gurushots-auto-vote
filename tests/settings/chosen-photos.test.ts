@@ -10,6 +10,7 @@ import { invalid } from '../helpers/invalid';
 import logger = require('../../src/ts/core/logger');
 import type * as openChallengesModule from '../../src/ts/core/settings/openChallenges';
 import type * as scenarioStateStoreModule from '../../src/ts/core/scenarioStateStore';
+import type { ScenarioState } from '../../src/ts/core/types/stores';
 import { isConfig } from '../helpers/storedShapes';
 import { installHeadlessStore, removeHeadlessStore } from '../helpers/headlessStore';
 import { isRecordOf, isShape, isUnknown, parseJsonAs } from '../helpers/parseJson';
@@ -323,7 +324,7 @@ describe('Chosen Photos settings', () => {
             expect(settings.setTitleRules([{ ...rule, profile: 'Mine', scenario: 'Plan' }])).toBe(true);
             expect(settings.deleteChallengeProfile('Mine')).toBe(true);
             expect(settings.getTitleRules()).toEqual([expect.objectContaining({ chosenPhotos: ['a'] })]);
-            expect(settings.deleteScenario('Plan')).toBe(true);
+            expect(settings.deleteScenario('Plan')).toEqual({ ok: true });
             const [kept] = settings.getTitleRules();
             expect(kept).toEqual(expect.objectContaining({ chosenPhotos: ['a'] }));
             expect(kept).not.toHaveProperty('scenario');
@@ -441,6 +442,227 @@ describe('Chosen Photos settings', () => {
         });
         afterAll(() => {
             settings.rememberChallengeTitles([]);
+        });
+
+        describe('the assignment of a scenario that still has work for a challenge', () => {
+            const withRule = (name: string, stages: string[]) =>
+                settings.saveScenario({
+                    name,
+                    version: 1,
+                    start: 'main',
+                    phases: { main: { rules: [{ stages, do: [{ type: 'notify', message: 'x' }] }] } },
+                });
+            const assign = (id: string, name: string) => settings.setChallengeOverride('scenario', id, name);
+
+            beforeEach(() => {
+                settings.rememberChallengeTitles([{ id: '999', title: 'Elsewhere' }]);
+                settings.rememberPostCloseListing(null);
+            });
+
+            test('a pre-join assignment is kept while the challenge can still be joined, and pruned once it cannot', () => {
+                withRule('Pre', ['preJoin']);
+                assign('200', 'Pre');
+                assign('201', 'Pre');
+                settings.rememberOpenChallengeIds([200]);
+                settings.rememberUpcomingChallenges([]);
+                expect(settings.cleanupStaleChallengeSetting([])).toBe(true);
+                expect(keys()).toEqual(['200']);
+            });
+
+            describe('a post-close assignment', () => {
+                const DAY = 86400;
+                const nowSec = () => Math.floor(Date.now() / 1000);
+                const samples = (secondsAgo: number) => ({
+                    a: [[nowSec() - secondsAgo, 5]] as Array<[number, number]>,
+                });
+                // The progress a challenge left behind: last seen active `daysAgo` days ago (by its last vote sample). The ledger
+                // read is stubbed: what is under test is what cleanup does with a record, not where the record is kept.
+                const states = new Map<string, ScenarioState | 'unreadable'>();
+                const progress = (id: string, daysAgo: number, over: Partial<ScenarioState> = {}) =>
+                    states.set(id, {
+                        ...initialState('Post', 'main', nowSec() - daysAgo * DAY),
+                        history: samples(daysAgo * DAY),
+                        ...over,
+                    });
+                let ledgerRead: jest.SpyInstance<
+                    ReturnType<typeof scenarioStateLedger.get>,
+                    Parameters<typeof scenarioStateLedger.get>
+                >;
+                const infoLines = () => jest.mocked(logger.withCategory('settings').info);
+
+                beforeEach(() => {
+                    withRule('Post', ['postClose']);
+                    settings.rememberOpenChallengeIds([]);
+                    settings.rememberUpcomingChallenges([]);
+                    infoLines().mockClear();
+                    states.clear();
+                    ledgerRead = jest.spyOn(scenarioStateLedger, 'get').mockImplementation((id) => {
+                        const found = states.get(String(id));
+                        const epoch = { all: 0, gen: 0 };
+                        return found === 'unreadable'
+                            ? { state: null, corrupt: 'record', epoch }
+                            : { state: found ?? null, corrupt: false, epoch };
+                    });
+                });
+                afterEach(() => ledgerRead.mockRestore());
+
+                test('is kept after the challenge left the active list, whatever its age, while the completed listing is not known', () => {
+                    assign('300', 'Post');
+                    progress('300', 40);
+                    expect(settings.cleanupStaleChallengeSetting([])).toBe(true);
+                    expect(keys()).toEqual(['300']);
+                });
+
+                test('is kept while it is in the completed listing with work left, however old', () => {
+                    assign('300', 'Post');
+                    progress('300', 40);
+                    settings.rememberPostCloseListing({ listed: ['300'], settled: [] });
+                    expect(settings.cleanupStaleChallengeSetting([])).toBe(true);
+                    expect(keys()).toEqual(['300']);
+                });
+
+                test('is released when the completed listing finds nothing left under the scenario it has now, and says so', () => {
+                    assign('300', 'Post');
+                    assign('301', 'Post');
+                    progress('300', 1);
+                    progress('301', 1);
+                    // 301 is settled under another name: an assignment that changed since is not read as settled
+                    settings.rememberPostCloseListing({
+                        listed: ['300', '301'],
+                        settled: [
+                            ['300', 'post'],
+                            ['301', 'other'],
+                        ],
+                    });
+                    expect(settings.cleanupStaleChallengeSetting([])).toBe(true);
+                    expect(keys()).toEqual(['301']);
+                    expect(infoLines()).toHaveBeenCalledTimes(1);
+                    expect(infoLines()).toHaveBeenCalledWith(
+                        expect.stringContaining('released the post-close assignment of challenge 300'),
+                        null,
+                    );
+                });
+
+                test('that is not in the completed listing is kept before 14 days since it was last seen active, and released after', () => {
+                    assign('300', 'Post');
+                    assign('301', 'Post');
+                    progress('300', 13);
+                    progress('301', 15);
+                    settings.rememberPostCloseListing({ listed: [], settled: [] });
+                    expect(settings.cleanupStaleChallengeSetting([])).toBe(true);
+                    expect(keys()).toEqual(['300']);
+                    // one line, for the one released
+                    expect(infoLines()).toHaveBeenCalledTimes(1);
+                    expect(infoLines()).toHaveBeenCalledWith(
+                        expect.stringContaining('released the post-close assignment of challenge 301'),
+                        null,
+                    );
+                });
+
+                test.each([
+                    ['a pending spend', { inFlight: { ruleId: 'r', actionIndex: 0, pending: 'swap' as const } }],
+                    ['an unclear spend', { inFlight: { ruleId: 'r', actionIndex: 0, unclear: ['swap' as const] } }],
+                    ['a rule in progress', { inFlight: { ruleId: 'r', actionIndex: 1 } }],
+                    ['a handoff intent', { handoff: { from: 'Post', to: null, generation: 0, at: 1 } }],
+                    [
+                        'a rule that stopped after a spend with no answer',
+                        { fired: { r: { at: 1, day: 1, phaseEnteredAt: 1, unclearHalt: 'swap' as const } } },
+                    ],
+                ])('is never released with %s, however old and whatever the listing says', (_name, over) => {
+                    assign('300', 'Post');
+                    progress('300', 90, over);
+                    settings.rememberPostCloseListing({ listed: [], settled: [['300', 'post']] });
+                    expect(settings.cleanupStaleChallengeSetting([])).toBe(true);
+                    expect(keys()).toEqual(['300']);
+                    expect(infoLines()).not.toHaveBeenCalled();
+                });
+
+                test('is kept when its progress cannot be read, or there is none to date it by', () => {
+                    assign('300', 'Post');
+                    assign('301', 'Post');
+                    settings.rememberPostCloseListing({ listed: [], settled: [] });
+                    // 300's progress cannot be read; 301 has none
+                    states.set('300', 'unreadable');
+                    expect(settings.cleanupStaleChallengeSetting([])).toBe(true);
+                    expect(keys()).toEqual(['300', '301']);
+                });
+
+                test('is dated by the last write, then the phase entry, when there are no vote samples', () => {
+                    assign('300', 'Post');
+                    assign('301', 'Post');
+                    assign('302', 'Post');
+                    settings.rememberPostCloseListing({ listed: [], settled: [] });
+                    const at = (daysAgo: number) => nowSec() - daysAgo * DAY;
+                    // written 20 days ago, no samples
+                    states.set('300', {
+                        ...initialState('Post', 'main', at(1)),
+                        history: {},
+                        updatedAt: at(20) * 1000,
+                    });
+                    // written 2 days ago, entered the phase 30 days ago: the write is the later fact
+                    states.set('301', {
+                        ...initialState('Post', 'main', at(30)),
+                        history: undefined,
+                        updatedAt: at(2) * 1000,
+                    });
+                    // never written: the phase entry, 20 days ago
+                    states.set('302', {
+                        ...initialState('Post', 'main', at(20)),
+                        history: undefined,
+                        updatedAt: undefined,
+                    });
+                    expect(settings.cleanupStaleChallengeSetting([])).toBe(true);
+                    expect(keys()).toEqual(['301']);
+                });
+            });
+
+            test('a listing a pass did not complete is forgotten: nothing is settled by it', () => {
+                withRule('Post', ['postClose']);
+                assign('300', 'Post');
+                settings.rememberOpenChallengeIds([]);
+                settings.rememberUpcomingChallenges([]);
+                settings.rememberPostCloseListing({ listed: ['300'], settled: [['300', 'post']] });
+                settings.rememberPostCloseListing(null);
+                expect(settings.cleanupStaleChallengeSetting([])).toBe(true);
+                expect(keys()).toEqual(['300']);
+            });
+
+            test('an assignment of a scenario with no such rule, an installation scenario, or one that does not exist is pruned as before', () => {
+                settings.saveScenario({
+                    name: 'Live',
+                    version: 1,
+                    start: 'main',
+                    phases: { main: { rules: [{ do: [{ type: 'notify', message: 'x' }] }] } },
+                });
+                assign('400', 'Live');
+                assign('401', 'Nowhere');
+                settings.saveScenario({ name: 'Bare', version: 1, start: 'main', phases: { main: {} } });
+                assign('402', 'Bare');
+                settings.rememberOpenChallengeIds([400, 401, 402]);
+                settings.rememberUpcomingChallenges([]);
+                expect(settings.cleanupStaleChallengeSetting([])).toBe(true);
+                expect(keys()).toEqual([]);
+            });
+
+            test('an assignment of an installation scenario is never kept for a challenge', () => {
+                settings.saveScenario({
+                    name: 'Account',
+                    version: 1,
+                    scope: 'installation',
+                    start: 'main',
+                    phases: { main: { rules: [{ do: [{ type: 'notify', message: 'x' }] }] } },
+                });
+                // however it got there (a hand edit of the file), its stored name does not keep the entry
+                settings.setChallengeOverride('exposure', '500', 40);
+                const stored = blob();
+                stored.challenges['500'] = {
+                    ...stored.challenges['500'],
+                    values: { exposure: 40, scenario: 'Account' },
+                };
+                store.value = JSON.stringify(stored);
+                expect(settings.cleanupStaleChallengeSetting([])).toBe(true);
+                expect(keys()).toEqual([]);
+            });
         });
 
         test('with no active list of its own the main process prunes nothing, whatever it is told', () => {
