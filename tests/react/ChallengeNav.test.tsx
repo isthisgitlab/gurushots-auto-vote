@@ -33,6 +33,8 @@ const lowExposureChallenge = (id: number, title: string) => {
 };
 
 describe('ChallengeNav', () => {
+    const defaultTranslate = jest.mocked(rendererTranslator.t).getMockImplementation()!;
+
     beforeEach(() => {
         jest.mocked(window.api.getChallengeOverrides).mockReset();
         jest.mocked(window.api.getChallengeOverrides).mockResolvedValue({});
@@ -40,7 +42,10 @@ describe('ChallengeNav', () => {
         jest.mocked(window.api.getTitleProfile).mockResolvedValue(null);
     });
 
-    afterEach(() => jest.restoreAllMocks());
+    afterEach(() => {
+        jest.restoreAllMocks();
+        jest.mocked(rendererTranslator.t).mockImplementation(defaultTranslate);
+    });
 
     test('renders nothing when there are no challenges', () => {
         render(<ChallengeNav challenges={[]} />);
@@ -125,7 +130,6 @@ describe('ChallengeNav', () => {
         ['lv', 'Izstāde', 'Žurnāls', 'Maksimālais foto skaits: 4'],
     ])('renders translated format labels in %s', (language, exhibition, magazine, limit) => {
         const translator = createTranslator();
-        const previous = jest.mocked(rendererTranslator.t).getMockImplementation()!;
         jest.mocked(rendererTranslator.t).mockImplementation((key, vars) => translator.t(key, vars, language));
         render(
             <ChallengeNav
@@ -146,7 +150,6 @@ describe('ChallengeNav', () => {
             const chip = screen.getByRole('button', { name: `${title} (${label})` });
             expect(chip.querySelector('.truncate')!.getAttribute('title')).toBe(`${title} — ${label}`);
         }
-        jest.mocked(rendererTranslator.t).mockImplementation(previous);
     });
 
     test.each([{}, { max_photo_submits: 0 }, { max_photo_submits: 1.5 }, { max_photo_submits: '4' }])(
