@@ -261,6 +261,24 @@ beforeEach(() => {
     jest.restoreAllMocks();
 });
 
+test('Three Of A Kind submits only an explicitly chosen eligible photo', async () => {
+    const challenge = makeChallenge({ title: 'Three Of A Kind' });
+    const library = [photo('apples', ['Apples']), photo('stool', ['Three-legged stool'])];
+    const log = makeLog();
+    const withoutChoice = makeDeps({ library, settings: { submitWithoutTagMatch: true }, logger: log.logger });
+    await maybeAutoFillChallenge(challenge, 'tok', NOW, withoutChoice);
+    expect(withoutChoice.submitToChallenge).not.toHaveBeenCalled();
+    expect(
+        log.lines.info.some((line) =>
+            line.includes('requires exactly three subjects of the same kind. Choose a photo for this challenge'),
+        ),
+    ).toBe(true);
+
+    const withChoice = makeDeps({ library, settings: { chosen: ['apples'], submitWithoutTagMatch: true } });
+    await maybeAutoFillChallenge(challenge, 'tok', NOW, withChoice);
+    expect(submittedIds(withChoice)).toEqual([['apples']]);
+});
+
 describe('chosen photos rank first', () => {
     test('a chosen off-theme photo is submitted ahead of better matches, and the log says who chose it', async () => {
         const { logger, lines } = makeLog();

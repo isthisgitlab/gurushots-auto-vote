@@ -85,7 +85,7 @@ const buildChallengeKeywords = (
     // An open theme has no subject, and matching its prose ("breathtaking",
     // "Turbo") against photo labels would only rank noise.
     const theme = readChallengeTheme(challenge, ignoreWords);
-    if (theme.kind === 'open') return [];
+    if (theme.kind === 'open' || theme.kind === 'three-of-a-kind') return [];
     if (theme.kind === 'eye-contact') return [...theme.subjects];
     // The WHOLE title, series prefix included — unlike buildThemeKeywords, which
     // pools its keywords into one vector and so must drop everything that is not
@@ -160,7 +160,7 @@ const buildChallengeKeywords = (
  */
 const buildThemeKeywords = (challenge: ChallengeText | null | undefined, ignoreWords: IgnoreWords = null): string[] => {
     const theme = readChallengeTheme(challenge, ignoreWords);
-    if (theme.kind === 'open') return [];
+    if (theme.kind === 'open' || theme.kind === 'three-of-a-kind') return [];
     if (theme.kind === 'eye-contact') return [...theme.subjects];
     const opts = { ignoreWords, compounds: 'replace' as const };
     // A negated subject must not become the theme (see parseNegation): pooling
@@ -214,7 +214,8 @@ const buildThemeAlternatives = (
 const visualSubjectWords = (challenge: ChallengeText | null | undefined, ignoreWords: IgnoreWords = null): string[] => {
     // "10 Hours" is the challenge's length: judging photos against "hours"
     // moved an unrelated clock photo ahead of the ranking's own pick.
-    if (readChallengeTheme(challenge, ignoreWords).kind === 'open') return [];
+    const theme = readChallengeTheme(challenge, ignoreWords);
+    if (theme.kind === 'open' || theme.kind === 'three-of-a-kind') return [];
     const negation = parseNegation(challenge?.title, ignoreWords);
     const title = negation.active ? negation.positiveTitle : challenge?.title;
     const negated = new Set(negation.stems);
@@ -277,7 +278,12 @@ const buildSearchTerms = (challenge: ChallengeText | null | undefined, opts: Tag
     // non-letter title tokenises normally.
     const theme = readChallengeTheme(challenge, ignoreWords);
     if (terms.length === 0 && theme.kind === 'eye-contact') return [...theme.subjects];
-    if (terms.length === 0 && !readChallengeLetter(challenge) && theme.kind !== 'open') {
+    if (
+        terms.length === 0 &&
+        !readChallengeLetter(challenge) &&
+        theme.kind !== 'open' &&
+        theme.kind !== 'three-of-a-kind'
+    ) {
         // Subject segment only: on a series title the prefix ("Color Hunt") is
         // never a tag, so searching it spends a round-trip to find nothing and
         // burns one of the SEARCH_TERMS_CAP slots the real subject needs.

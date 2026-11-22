@@ -5,7 +5,7 @@
  */
 
 import { MIN_USER_TAG_STEM_LENGTH, tokeniseTagList } from './stemming';
-import { readChallengeLetter, excludedSubjectOf, photoShowsExcluded } from './title';
+import { readChallengeLetter, excludedSubjectOf, photoShowsExcluded, isThreeOfAKind } from './title';
 import { buildChallengeKeywords } from './keywords';
 import { wholeLabelStems, labelWordStems, photoMatchesAllStems, countShouldMatches, scorePhoto } from './labels';
 import {
@@ -193,7 +193,12 @@ const buildScoredCandidates = (
 ): ScoredCandidate[] => {
     if (!Array.isArray(eligiblePhotos) || eligiblePhotos.length === 0) return [];
 
-    const allowed = eligiblePhotos.filter((p) => p && p.permission && p.permission.allowed === true && p.id);
+    const requiresChoice = isThreeOfAKind(challenge?.title);
+    const chosenIds = requiresChoice ? new Set((opts.chosen?.ids ?? []).map(String)) : null;
+    const allowed = eligiblePhotos.filter(
+        (p) =>
+            p && p.permission && p.permission.allowed === true && p.id && (!chosenIds || chosenIds.has(String(p.id))),
+    );
     if (allowed.length === 0) return [];
 
     const mustStems = tokeniseTagList(opts.mustIncludeTags);
@@ -226,7 +231,7 @@ const buildScoredCandidates = (
     // Optional semantic tiers — see semanticTiersOf. No map (the default) → both
     // are 0 for every photo → they are inert and the sort is identical to the
     // lexical-only behavior.
-    const semanticScores = opts.semanticScores instanceof Map ? opts.semanticScores : null;
+    const semanticScores = !requiresChoice && opts.semanticScores instanceof Map ? opts.semanticScores : null;
 
     const keywords = buildChallengeKeywords(challenge, opts.ignoreWords || null);
     // GuruShots' suggested library photos for this challenge — tier 5 in

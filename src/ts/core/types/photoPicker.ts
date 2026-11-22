@@ -30,10 +30,10 @@ export interface Negation {
 /**
  * What a challenge's title and description say about its theme (readChallengeTheme):
  * open (no subject to match), a subject the description confirms, an explicit
- * eye-contact theme, or unconfirmed.
+ * eye-contact theme, three-of-a-kind (requires a deliberate choice), or unconfirmed.
  */
 export interface ChallengeTheme {
-    kind: 'open' | 'subject' | 'eye-contact' | 'unconfirmed';
+    kind: 'open' | 'subject' | 'eye-contact' | 'three-of-a-kind' | 'unconfirmed';
     /** Confirmed title stems, or derived portrait label stems for eye contact; otherwise empty. */
     subjects: readonly string[];
 }
@@ -129,7 +129,7 @@ export interface PickOptions extends TagOptions {
     submitWithoutTagMatch?: boolean;
     semanticScores?: SemanticScoreMap | null;
     onFallback?: ((info: PickFallbackInfo) => void) | null;
-    /** Honoured by pickPhotosForChallenge and buildChosenCandidates; buildScoredCandidates ignores it. */
+    /** Chosen photos; also restricts scoring for themes that require a deliberate choice. */
     chosen?: ChosenPick | null;
     /**
      * The library photos GuruShots itself suggests for this challenge (join

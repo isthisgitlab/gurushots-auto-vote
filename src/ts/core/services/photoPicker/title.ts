@@ -302,10 +302,14 @@ const quotedPhraseRe = (phrase: string): RegExp => {
 const UNCONFIRMED: ChallengeTheme = Object.freeze({ kind: 'unconfirmed', subjects: Object.freeze([]) });
 const OPEN: ChallengeTheme = Object.freeze({ kind: 'open', subjects: Object.freeze([]) });
 
+const isThreeOfAKind = (title: string | null | undefined): boolean =>
+    typeof title === 'string' && /^\s*three\s+of\s+a\s+kind\s*$/i.test(title);
+
 /**
  * Whether a challenge has a subject to match, read from its title and its
  * description. Explicit camera-facing titles produce an eye-contact theme with
- * derived portrait labels. Open when the description says so, or when no
+ * derived portrait labels. Three Of A Kind requires a deliberate photo choice.
+ * Open when the description says so, or when no
  * title word (nor, for an all-boilerplate title, slug word) is left once
  * boilerplate (STOPWORDS), the user's ignore words and format words are
  * removed. Otherwise a title word the description repeats is
@@ -322,6 +326,7 @@ const readChallengeTheme = (
     challenge: ChallengeText | null | undefined,
     ignoreWords: IgnoreWords = null,
 ): ChallengeTheme => {
+    if (isThreeOfAKind(challenge?.title)) return { kind: 'three-of-a-kind', subjects: [] };
     const title = typeof challenge?.title === 'string' ? challenge.title.slice(0, MAX_TOKENISE_CHARS) : '';
     if (title.trim() === '' || readChallengeLetter(challenge) || parseNegation(title, ignoreWords).active)
         return UNCONFIRMED;
@@ -362,6 +367,7 @@ export {
     withoutLetterPhrases,
     withoutDescriptionLetterPhrases,
     readChallengeTheme,
+    isThreeOfAKind,
 };
 
 export { NEGATION_MARKER_STEMS, parseNegation, dropNegated } from './titleNegation';

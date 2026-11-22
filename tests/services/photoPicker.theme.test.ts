@@ -33,6 +33,83 @@ const ROADS = {
     welcome_message: 'Show photos of the different kinds of roads found all around the world.',
 };
 
+describe('Three Of A Kind', () => {
+    const challenge = {
+        title: 'Three Of A Kind',
+        url: 'three-of-a-kind',
+        welcome_message: 'Show Three Of A Kind in your photos.',
+    };
+    const photos = [
+        { id: 'apples', labels: ['Apples'], votes: 100, permission: { allowed: true, message: null } },
+        { id: 'stool', labels: ['Three-legged stool'], votes: 1, permission: { allowed: true, message: null } },
+    ];
+    test('does not derive search or scoring words from the title', () => {
+        expect(buildSearchTerms(challenge)).toEqual([]);
+        expect(buildChallengeKeywords(challenge)).toEqual([]);
+        expect(buildThemeKeywords(challenge)).toEqual([]);
+        expect(visualSubjectWords(challenge)).toEqual([]);
+        expect(buildSearchTerms(challenge, { mustIncludeTags: ['apple'] })).toEqual(['apple']);
+        expect(buildSearchTerms(challenge, { shouldIncludeTags: ['apple'] })).toEqual(['apple']);
+    });
+    test('requires a chosen eligible photo even when fallback and semantic scores are supplied', () => {
+        expect(pickPhotosForChallenge({ title: 'Three Of A Kind' }, photos, 1)).toEqual([]);
+        const chosen = { ids: ['apples'], only: false, inOrder: false };
+        expect(
+            pickPhotosForChallenge(challenge, photos, 2, {
+                chosen,
+                mustIncludeTags: ['missing'],
+                submitWithoutTagMatch: true,
+                semanticScores: new Map([['stool', 1]]),
+            }),
+        ).toEqual(['apples']);
+        expect(
+            buildScoredCandidates(challenge, photos, {
+                chosen: { ...chosen, ids: ['apples', 'stool'] },
+                semanticScores: new Map([['stool', 1]]),
+            }).map(({ id, score, semantic }) => ({ id, score, semantic })),
+        ).toEqual([
+            { id: 'apples', score: 0, semantic: 0 },
+            { id: 'stool', score: 0, semantic: 0 },
+        ]);
+        expect(pickPhotosForChallenge(challenge, photos, 1, { chosen: { ...chosen, ids: [] } })).toEqual([]);
+        expect(
+            pickPhotosForChallenge(challenge, photos, 1, {
+                chosen: { ...chosen, ids: ['missing'] },
+                submitWithoutTagMatch: true,
+            }),
+        ).toEqual([]);
+        expect(
+            pickPhotosForChallenge(challenge, photos, 1, { chosen: { ...chosen, excludeIds: new Set(['apples']) } }),
+        ).toEqual([]);
+        expect(
+            pickPhotosForChallenge(
+                challenge,
+                [{ ...photos[0], permission: { allowed: false, message: null } }, photos[1]],
+                1,
+                { chosen },
+            ),
+        ).toEqual([]);
+    });
+    test('matches the full title ignoring case and whitespace', () => {
+        expect(readChallengeTheme({ title: '  tHree  OF\tA kind  ', welcome_message: 'Open theme' })).toEqual({
+            kind: 'three-of-a-kind',
+            subjects: [],
+        });
+        expect(readChallengeTheme({ title: 'Three Of A Kind in Nature' }).kind).not.toBe('three-of-a-kind');
+        expect(buildSearchTerms({ title: 'Three Trees' })).toContain('three');
+    });
+    test('keeps an explicit letter rule from the description', () => {
+        expect(
+            pickPhotosForChallenge(
+                { ...challenge, welcome_message: 'Photos must start with the letter A.' },
+                photos,
+                2,
+                { chosen: { ids: ['apples', 'stool'], only: false, inOrder: false }, submitWithoutTagMatch: false },
+            ),
+        ).toEqual(['apples']);
+    });
+});
+
 const EYE_CONTACT = {
     title: 'Facing The Camera',
     url: 'facing-the-camera2',
