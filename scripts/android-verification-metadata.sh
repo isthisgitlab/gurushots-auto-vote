@@ -21,7 +21,7 @@
 # checksum is computed from a fresh download, never from a cache that something else may have written.
 #
 # What is covered is the task list below, the tasks CI runs (.github/workflows/test.yml and build.yml) plus `lint`.
-# Robolectric's own downloads of its android-all runtime jars happen at test time, outside Gradle, and are not covered.
+# Robolectric SDK JARs are resolved by Gradle before testDebugUnitTest and are covered by dependency verification.
 
 set -euo pipefail
 
