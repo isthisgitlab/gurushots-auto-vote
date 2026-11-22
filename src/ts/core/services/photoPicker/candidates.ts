@@ -263,11 +263,9 @@ const buildScoredCandidates = (
  * The hard filters, the negated-subject filter and the submitWithoutTagMatch
  * relaxation still apply to chosen photos like to every photo: they are about
  * the challenge, not the photo's owner. Ids already entered are removed from
- * the pool as a set. Without `only` the whole pool is scored once and the
- * result is split afterwards, so a relaxation is judged on the whole pool the
- * way it always was. With `only` just the chosen photos are scored, so the
- * relaxation is judged on them alone — whether a chosen photo is used must
- * never depend on unrelated photos in the library.
+ * the pool as a set. The eligible pool is scored once and split afterwards.
+ * With `only` or for Three Of A Kind, the filters and their relaxation apply
+ * only to chosen photos.
  *
  * @returns the scored pool; `chosenIds` names the chosen block inside it, or is
  *   null when none was asked for or none is in the pool (then nothing differs
