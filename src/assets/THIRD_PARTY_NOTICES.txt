@@ -387,7 +387,7 @@ get-proto 1.0.1
   License: MIT
   Copyright (c) 2025 Jordan Harband
 
-global-agent 4.1.7
+global-agent 4.1.8
   License: BSD-3-Clause
   Copyright (c) 2026, Gajus Kuizinas (https://gajus.com/)
 

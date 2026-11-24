@@ -72,6 +72,22 @@ afterEach(() => {
 });
 
 describe('an upcoming row', () => {
+    test('opens the GuruShots page from the upcoming challenge URL', async () => {
+        const openExternalUrl: jest.MockedFunction<WindowApi['openExternalUrl']> = jest.fn();
+        window.api.openExternalUrl = openExternalUrl;
+        renderSection([
+            open(1, 'Open One', { url: 'open-one' }),
+            upcoming(2, 'Soon', 3600, { url: 'soon' }),
+            upcoming(3, 'No URL', 3600),
+        ]);
+        await settle();
+
+        const link = screen.getByRole('button', { name: 'gurushots.com/challenge/soon' });
+        expect(screen.getAllByRole('button', { name: /^gurushots\.com\// })).toEqual([link]);
+        fireEvent.click(link);
+        expect(openExternalUrl).toHaveBeenCalledWith('https://gurushots.com/challenge/soon');
+    });
+
     test('says in text when the challenge starts, and that joining opens then', async () => {
         renderSection([open(1, 'Open One'), upcoming(2, 'Soon', 2 * 3600 + 15 * 60)]);
         await settle();

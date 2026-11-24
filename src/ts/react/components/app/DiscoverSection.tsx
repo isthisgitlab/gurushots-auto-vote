@@ -21,6 +21,7 @@ import type { DiscoverSort } from '../../../core/discoverDates';
 // module, so the renderer bundle does not pull the whole voting-decision barrel in for one function.
 import { joinFreshRefusal } from '../../../core/services/decisions/joinDecision';
 import { ChallengeKindBadges, ChallengeTagBadges } from './ChallengeKindBadges';
+import { ChallengePageLink } from './ChallengePageLink';
 import { prizeItemsText } from '@/utils/prizeText';
 import { PhotoChooserModal } from './PhotoChooserModal';
 import { ForgetPaymentModal } from './ForgetPaymentModal';
@@ -418,6 +419,7 @@ function DiscoverRow({
                 )}
                 <StartLine c={c} nowSec={nowSec} />
                 <DiscoverDates c={c} timezone={timezone} />
+                {c.status === 'upcoming' && <ChallengePageLink slug={c.url} />}
                 <ChosenMarks c={c} name={name} onChoose={onChoose} />
                 {waiting !== null && c.chosenEffectiveCount > 0 && (
                     <div className="text-xs text-base-content/70 mt-0.5">{t('app.discoverUpcomingChosenHint')}</div>

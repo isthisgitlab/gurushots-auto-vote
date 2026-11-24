@@ -12,13 +12,12 @@ import { ScenarioStatusPanel } from './ScenarioStatusPanel';
 import { EntryDetails } from './EntryDetails';
 import { ChallengeBadgeRow } from './ChallengeBadgeRow';
 import { ChallengeTagBadges } from './ChallengeKindBadges';
+import { ChallengePageLink } from './ChallengePageLink';
 import { stringTags } from '../../../core/format/challengeListing';
 import { benchmarkGap, parseBenchmarkScores } from '../../../core/format/benchmark';
 import { CardDensityToggle } from './CardDensityToggle';
 import { FillButtons } from './ChallengeCardActions';
 import { InlineError } from '@/components/ui/InlineError';
-import * as ipc from '@/api/ipc';
-import { challengePageUrl } from '@/utils/challengePageUrl';
 
 import type { ComponentChildren } from 'preact';
 import type { Bankroll, Challenge, PrizeTier, RankingTotal } from '../../../core/types/gurushots';
@@ -72,12 +71,6 @@ function DetailHeader({
         [challenge.welcome_message],
     );
 
-    // Only reachable from the URL row, which renders only when challenge.url is set. The slug comes off the network
-    // and goes into a URL path: anything but word characters and hyphens opens the generic challenges page instead.
-    const handleOpenUrl = () => {
-        void ipc.callOrNull(() => ipc.openExternalUrl(challengePageUrl(challenge.url)));
-    };
-
     return (
         <div className="flex flex-col gap-2">
             <div className="min-w-0">
@@ -91,16 +84,7 @@ function DetailHeader({
                     />
                 )}
                 <ChallengeBadgeRow {...badgeRowProps} />
-                {challenge.url && (
-                    <div className="text-xs text-base-content/70 mt-1">
-                        <button
-                            onClick={handleOpenUrl}
-                            className="font-mono hover:text-info hover:underline text-left min-h-6 py-1"
-                        >
-                            {challengePageUrl(challenge.url).replace('https://', '')}
-                        </button>
-                    </div>
-                )}
+                <ChallengePageLink slug={challenge.url} />
             </div>
             <div className="flex flex-wrap gap-1 shrink-0">
                 {actions.voteButton}
