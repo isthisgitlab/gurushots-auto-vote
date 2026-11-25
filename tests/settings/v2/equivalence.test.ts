@@ -147,10 +147,16 @@ const equivalence = (c: Case) => {
     );
     totals.comparisons += counter.calls;
     totals.leaves += compared;
-    expect(Object.fromEntries(mismatches.map(({ path, live }) => [path, live]))).toEqual(expectedDifferences);
+    expect(Object.fromEntries(mismatches.map(({ path, live }) => [path, live]))).toStrictEqual(expectedDifferences);
 };
 
 describe('the live resolver against the frozen oracle', () => {
+    test('the tree comparison reports a missing key even when its value was undefined', () => {
+        expect(diffTrees({ field: undefined }, {})).toStrictEqual({
+            mismatches: [{ path: 'field', oracle: undefined, live: undefined }],
+            compared: 1,
+        });
+    });
     afterAll(() => {
         releaseLive();
         process.stdout.write(

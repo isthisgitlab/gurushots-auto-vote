@@ -248,19 +248,24 @@ type Mismatch = { path: string; oracle: unknown; live: unknown };
 const diffTrees = (expected: unknown, actual: unknown, limit = 8): { mismatches: Mismatch[]; compared: number } => {
     const mismatches: Mismatch[] = [];
     let compared = 0;
-    const walk = (path: string, a: unknown, b: unknown) => {
+    const walk = (path: string, a: unknown, b: unknown, samePresence = true) => {
         if (mismatches.length >= limit) return;
-        const bothObjects = typeof a === 'object' && a !== null && typeof b === 'object' && b !== null;
+        const bothObjects = samePresence && typeof a === 'object' && a !== null && typeof b === 'object' && b !== null;
         if (bothObjects && Array.isArray(a) === Array.isArray(b) && !Array.isArray(a)) {
             const left = a as Tree;
             const right = b as Tree;
             for (const key of new Set([...Object.keys(left), ...Object.keys(right)])) {
-                walk(path ? `${path}.${key}` : key, left[key], right[key]);
+                walk(
+                    path ? `${path}.${key}` : key,
+                    left[key],
+                    right[key],
+                    Object.hasOwn(left, key) === Object.hasOwn(right, key),
+                );
             }
             return;
         }
         compared += 1;
-        if (!isEqual(a, b)) mismatches.push({ path, oracle: a, live: b });
+        if (!samePresence || !isEqual(a, b)) mismatches.push({ path, oracle: a, live: b });
     };
     walk('', expected, actual);
     return { mismatches, compared };

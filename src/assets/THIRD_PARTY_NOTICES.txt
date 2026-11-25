@@ -266,7 +266,7 @@ Shipped in the desktop app, the CLI binaries and the Android app, or compiled in
   License: MIT
   Copyright (c) 2021 Dan Motzenbecker
 
-@types/node 26.6.6
+@types/node 26.6.10
   License: MIT
   Copyright (c) Microsoft Corporation.
 
