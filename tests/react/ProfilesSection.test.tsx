@@ -38,6 +38,24 @@ const SCHEMA = invalid<RendererSchema>({
         label: 'app.exposureTarget',
         description: 'Exposure Target',
     },
+    finalWindowExposure: {
+        type: 'number',
+        perChallenge: true,
+        group: 'g',
+        default: 60,
+        min: 1,
+        max: 100,
+        label: 'app.finalWindowExposure',
+    },
+    finalWindowExposureTarget: {
+        type: 'number',
+        perChallenge: true,
+        group: 'g',
+        default: 0,
+        min: 0,
+        max: 100,
+        label: 'app.finalWindowExposureTarget',
+    },
     manualPhotosOnly: {
         type: 'boolean',
         perChallenge: true,
@@ -135,6 +153,13 @@ test('changing exposure raises an inherited target without storing an override f
     changeSelect(selectEl(), 'tactic');
     fireEvent.change(exposureInput(), { target: { value: '90' } });
     expect(targetInput().value).toBe('90');
+    expect(screen.getByText('app.usingGlobal (70)')).toBeTruthy();
+    const announcement = screen.getByText('app.exposureTarget: 90');
+    expect(announcement.getAttribute('role')).toBe('status');
+    fireEvent.change(exposureInput(), { target: { value: '65' } });
+    expect(targetInput().value).toBe('70');
+    expect(screen.getByText('app.exposureTarget: 70')).toBe(announcement);
+    fireEvent.change(exposureInput(), { target: { value: '90' } });
 
     fireEvent.change(targetInput(), { target: { value: '' } });
     expect(targetInput().value).toBe('');
@@ -162,22 +187,90 @@ test('typing a manual target adjusts the trigger from the values present when ed
 });
 
 test.each([
-    ['exposure', '0', 1],
-    ['exposure', '101', 100],
-    ['exposureTarget', '-1', 0],
-    ['exposureTarget', '101', 100],
-] as const)('%s with draft %s saves %s inside its bounds', async (key, value, expected) => {
+    ['exposure', '0', 1, 1, 1],
+    ['exposure', '101', 100, 100, 100],
+    ['exposure', '1e3', 100, 100, 100],
+    ['exposureTarget', '-1', 0, 80, 0],
+    ['exposureTarget', '101', 100, 80, 100],
+    ['exposureTarget', '79.5', 79.5, 79.5, 79.5],
+    ['exposureTarget', '0.5', 0.5, 1, 1],
+] as const)('%s with draft %s saves %s inside its bounds', async (key, value, stored, exposure, displayed) => {
     await renderSection({ tactic: TACTIC });
     changeSelect(selectEl(), 'tactic');
     const input = key === 'exposure' ? exposureInput() : targetInput();
     fireEvent.change(input, { target: { value } });
     if (value === '0' || value === '-1') {
         fireEvent.blur(input);
-        expect(input.value).toBe(String(expected));
+        expect(input.value).toBe(String(displayed));
     }
     fireEvent.click(saveButton());
     await waitFor(() =>
-        expect(mockApi.saveChallengeProfile).toHaveBeenCalledWith('tactic', { ...TACTIC, [key]: expected }),
+        expect(mockApi.saveChallengeProfile).toHaveBeenCalledWith('tactic', { ...TACTIC, [key]: stored, exposure }),
+    );
+    expect(input.value).toBe(String(displayed));
+});
+
+test.each(['blur', 'save'])('clearing a staged target before %s preserves inheritance', async (finish) => {
+    await renderSection({ tactic: TACTIC });
+    changeSelect(selectEl(), 'tactic');
+    fireEvent.change(exposureInput(), { target: { value: '85' } });
+    fireEvent.change(targetInput(), { target: { value: '-1' } });
+    fireEvent.change(targetInput(), { target: { value: '' } });
+    if (finish === 'blur') {
+        fireEvent.blur(targetInput());
+        expect(targetInput().value).toBe('85');
+    }
+    fireEvent.click(saveButton());
+    await waitFor(() =>
+        expect(mockApi.saveChallengeProfile).toHaveBeenCalledWith('tactic', { exposure: 85, extra: true }),
+    );
+});
+
+test('clearing a staged trigger preserves the last valid explicit pair', async () => {
+    await renderSection({ tactic: { exposure: 80, exposureTarget: 95 } });
+    changeSelect(selectEl(), 'tactic');
+    fireEvent.change(exposureInput(), { target: { value: '90' } });
+    fireEvent.change(exposureInput(), { target: { value: '101' } });
+    expect(targetInput().value).toBe('95');
+    fireEvent.change(exposureInput(), { target: { value: '' } });
+    fireEvent.click(saveButton());
+    await waitFor(() =>
+        expect(mockApi.saveChallengeProfile).toHaveBeenCalledWith('tactic', { exposure: 90, exposureTarget: 95 }),
+    );
+});
+
+test('editing the dormant window preserves an unrelated raw exposure target', async () => {
+    const original = { exposure: 90, exposureTarget: 50, finalWindowExposureTarget: 55 };
+    await renderSection({ tactic: original });
+    changeSelect(selectEl(), 'tactic');
+    expect(targetInput().value).toBe('90');
+    fireEvent.change(exposureInput(/^app\.finalWindowExposureTarget/), { target: { value: '60' } });
+    fireEvent.click(saveButton());
+    await waitFor(() =>
+        expect(mockApi.saveChallengeProfile).toHaveBeenCalledWith('tactic', {
+            ...original,
+            finalWindowExposureTarget: 60,
+        }),
+    );
+});
+
+test('editing a normal target preserves an already adjusted final-window target', async () => {
+    const original = {
+        exposure: 90,
+        exposureTarget: 95,
+        useFinalWindowExposure: true,
+        finalWindowExposure: 80,
+        finalWindowExposureTarget: 70,
+    };
+    await renderSection({ tactic: original });
+    changeSelect(selectEl(), 'tactic');
+    const finalTarget = exposureInput(/^app\.finalWindowExposureTarget/);
+    expect(finalTarget.value).toBe('80');
+    fireEvent.change(targetInput(), { target: { value: '96' } });
+    expect(finalTarget.value).toBe('80');
+    fireEvent.click(saveButton());
+    await waitFor(() =>
+        expect(mockApi.saveChallengeProfile).toHaveBeenCalledWith('tactic', { ...original, exposureTarget: 96 }),
     );
 });
 

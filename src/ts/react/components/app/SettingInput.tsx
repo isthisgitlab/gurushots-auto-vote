@@ -234,32 +234,37 @@ export function parseNumberInput(raw: string): number | '' {
 }
 
 function useNumberDraft({ settingKey, config, value, onChange, boundedEdit }: SettingFieldProps) {
-    const [draft, setDraft] = useState<number | '' | null>(null);
-    const editSession = useRef<object | undefined>(undefined);
+    const [input, setInput] = useState<{ base: unknown; draft: number | '' } | null>(null);
+    const editSession = useRef<object>({});
+    const draft = input && input.base === value ? input.draft : null;
+    if (input && draft === null) setInput(null);
     const displayed = draft ?? value;
+    const clamp = (number: number) => Math.min(config.max ?? Infinity, Math.max(config.min ?? -Infinity, number));
     const changeNumber = (raw: string) => {
-        const number = parseNumberInput(raw);
         if (!boundedEdit) {
-            onChange(settingKey, number);
+            onChange(settingKey, parseNumberInput(raw));
             return;
         }
-        if (number === '') {
-            setDraft('');
+        if (raw === '') {
+            setInput({ base: value, draft: '' });
+            onChange(settingKey, undefined, { session: editSession.current, kind: 'clear' });
             return;
         }
-        const bounded = Math.min(config.max ?? Infinity, Math.max(config.min ?? -Infinity, number));
-        setDraft(bounded === number ? null : number);
-        onChange(settingKey, bounded, editSession.current);
+        const number = Number(raw);
+        const bounded = clamp(number);
+        const withinBounds = number === bounded;
+        setInput(withinBounds ? null : { base: value, draft: number });
+        onChange(settingKey, bounded, { session: editSession.current, kind: withinBounds ? 'commit' : 'stage' });
     };
     return {
         displayed,
         changeNumber,
-        beginNumber: () => {
-            editSession.current = {};
-        },
         finishNumber: () => {
-            editSession.current = undefined;
-            setDraft(null);
+            if (typeof draft === 'number') {
+                onChange(settingKey, clamp(draft), { session: editSession.current, kind: 'commit' });
+            }
+            editSession.current = {};
+            setInput(null);
         },
     };
 }
@@ -267,7 +272,7 @@ function useNumberDraft({ settingKey, config, value, onChange, boundedEdit }: Se
 function NumberField(props: SettingFieldProps) {
     const { id, settingKey, config, value, onChange, onReset, disabled, rejected } = props;
     const { t } = useTranslation();
-    const { displayed, changeNumber, beginNumber, finishNumber } = useNumberDraft(props);
+    const { displayed, changeNumber, finishNumber } = useNumberDraft(props);
     const invalid = isNumberInvalid(displayed, config);
     const errorId = `${id}-error`;
     return (
@@ -299,10 +304,10 @@ function NumberField(props: SettingFieldProps) {
                             aria-describedby={invalid ? errorId : undefined}
                             min={config.min}
                             max={config.max}
+                            step={props.boundedEdit ? 'any' : undefined}
                             // A number or '' (SettingInput's normalisation); the DOM coerces either.
                             value={displayed as number | string}
                             onChange={(e) => changeNumber(e.currentTarget.value)}
-                            onFocus={beginNumber}
                             onBlur={finishNumber}
                             disabled={disabled}
                         />

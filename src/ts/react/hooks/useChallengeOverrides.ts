@@ -10,7 +10,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import type { ChallengeValues, RuleSource, TitleRuleInfo } from '../../core/types/settings';
 import type { RendererSchema, SettingChangeHandler, SettingResetHandler } from '../../core/types/settingsEditor';
 import { errorMessage } from '../../core/errorMessage';
-import { exposureDefaultsFrom, isExposureKey, resolveLinkedExposure } from '../../core/linkedExposure';
+import { exposureDefaultsFrom, isExposureKey } from '../../core/linkedExposure';
 import { ON_ONLY_KEYS } from '../../core/settings/ruleBehaviour';
 
 /**
@@ -121,7 +121,7 @@ function useOverridesSave({
     isOpen,
     challengeId,
     schema,
-    overrides,
+    commitForSave,
     suppressed,
     loadFailed,
     rearmSchedule,
@@ -130,7 +130,7 @@ function useOverridesSave({
     isOpen: boolean;
     challengeId: string | number | null | undefined;
     schema: RendererSchema | null | undefined;
-    overrides: ChallengeValues;
+    commitForSave: () => ChallengeValues;
     suppressed: boolean;
     loadFailed: boolean;
     rearmSchedule: () => Promise<unknown>;
@@ -153,7 +153,7 @@ function useOverridesSave({
 
         setSaving(true);
         try {
-            const saved = await ipc.replaceChallengeOverrides(challengeId.toString(), overrides, suppressed);
+            const saved = await ipc.replaceChallengeOverrides(challengeId.toString(), commitForSave(), suppressed);
             if (saved === false) {
                 setSaveError(true);
                 return;
@@ -172,7 +172,7 @@ function useOverridesSave({
         } finally {
             setSaving(false);
         }
-    }, [challengeId, overrides, schema, loadFailed, suppressed, rearmSchedule, onClose]);
+    }, [challengeId, commitForSave, schema, loadFailed, suppressed, rearmSchedule, onClose]);
 
     return { saving, saveError, save };
 }
@@ -280,8 +280,12 @@ function useTitleRules({
     const inheritedOf = (key: string) =>
         hasOwn(ruleLayer, key) ? ruleLayer[key] : (defaults?.[key] ?? schema?.[key]?.default);
     const globalExposure = exposureDefaultsFrom((key) => defaults?.[key] ?? schema?.[key]?.default);
-    const editExposure = useLinkedExposureChange(overrides, setOverrides, [ruleLayer, globalExposure]);
-    const effectiveExposure = resolveLinkedExposure([overrides, ruleLayer, globalExposure]);
+    const {
+        change: editExposure,
+        effectiveExposure,
+        valuesForSave,
+        commitForSave,
+    } = useLinkedExposureChange(overrides, setOverrides, [ruleLayer, globalExposure]);
     const effectiveOf = (key: string) => {
         if (isExposureKey(key) && effectiveExposure[key] !== undefined) return effectiveExposure[key];
         return key in overrides ? overrides[key] : inheritedOf(key);
@@ -319,6 +323,8 @@ function useTitleRules({
         inheritedOf,
         effectiveOf,
         editExposure,
+        valuesForSave,
+        commitForSave,
         ruleSourceOf,
         profileReplacesWarning,
         applyProfile,
@@ -380,7 +386,7 @@ export function useChallengeOverrides({
         if (isOpen) void refetchSchema();
     }, [isOpen, refetchSchema]);
 
-    const { setTitleRules, editExposure, ...profile } = useTitleRules({
+    const { setTitleRules, editExposure, valuesForSave, commitForSave, ...profile } = useTitleRules({
         isOpen,
         challengeId,
         challengeTitle,
@@ -403,7 +409,7 @@ export function useChallengeOverrides({
         isOpen,
         challengeId,
         schema,
-        overrides,
+        commitForSave,
         suppressed: profile.titleRules?.suppressed === true,
         loadFailed,
         rearmSchedule,
@@ -419,9 +425,12 @@ export function useChallengeOverrides({
         const baseline = baselineRef.current;
         return (
             baseline !== null &&
-            (!valuesEqual(overrides, baseline.overrides) ||
+            (!valuesEqual(valuesForSave, baseline.overrides) ||
                 (profile.titleRules?.suppressed === true) !== baseline.suppressed)
         );
+    };
+    const updateOverride: SettingChangeHandler = (key, value, edit) => {
+        if (!editExposure(key, value, edit)) changeOverride(key, value);
     };
 
     return {
@@ -432,9 +441,7 @@ export function useChallengeOverrides({
         loadFailed,
         saving,
         saveError,
-        changeOverride: (key: string, value: unknown, editSession?: object) => {
-            if (!editExposure(key, value, editSession)) changeOverride(key, value);
-        },
+        changeOverride: updateOverride,
         clearOverride,
         clearAll,
         save,

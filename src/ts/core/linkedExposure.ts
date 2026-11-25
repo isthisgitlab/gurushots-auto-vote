@@ -23,10 +23,11 @@ const constrainExposure = (
     finalWindow: boolean,
 ): number => {
     if (value === 0 || (!finalWindow && key.startsWith('finalWindow'))) return value;
-    let adjusted = value;
+    // A nonzero target below 1% would force its trigger below the trigger's minimum.
+    let adjusted = Math.max(value, 1);
     for (const earlier of limits[key].min) {
         if (!finalWindow && earlier === 'finalWindowExposure') continue;
-        adjusted = Math.max(adjusted, chosen[earlier] ?? value);
+        adjusted = Math.max(adjusted, chosen[earlier] ?? 1);
     }
     for (const earlier of limits[key].max) {
         const ceiling = chosen[earlier];
@@ -62,11 +63,15 @@ const editLinkedExposure = (
     inherited: readonly ChallengeValues[],
 ): ChallengeValues => {
     const next = { ...draft, [key]: value };
+    const previous = resolveLinkedExposure([draft, ...inherited]);
     const resolved = resolveLinkedExposure([{ [key]: value }, next, ...inherited]);
     for (const related of EXPOSURE_KEYS) {
-        if (typeof next[related] === 'number') next[related] = resolved[related];
+        if (related !== key && typeof next[related] === 'number' && resolved[related] !== previous[related]) {
+            next[related] = resolved[related];
+        }
     }
     return next;
 };
 
 export { EXPOSURE_KEYS, isExposureKey, exposureDefaultsFrom, resolveLinkedExposure, editLinkedExposure };
+export type { ExposureKey };

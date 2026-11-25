@@ -74,9 +74,13 @@ const keepsEqualValue = (
     if (!isExposureKey(settingKey)) return false;
     const remaining = { ...overrides };
     delete remaining[settingKey];
-    const explicit = resolveLinkedExposure([overrides, ...inherited]);
-    const implicit = resolveLinkedExposure([remaining, ...inherited]);
-    return EXPOSURE_KEYS.some((key) => explicit[key] !== implicit[key]);
+    // A dormant value can still control the pair when the final window is enabled later.
+    return [false, true].some((useFinalWindowExposure) => {
+        const toggle = { useFinalWindowExposure };
+        const explicit = resolveLinkedExposure([toggle, overrides, ...inherited]);
+        const implicit = resolveLinkedExposure([toggle, remaining, ...inherited]);
+        return EXPOSURE_KEYS.some((key) => explicit[key] !== implicit[key]);
+    });
 };
 
 /**

@@ -14,8 +14,11 @@ export type RendererSchema = Record<string, SerializableSchemaEntry>;
 /** Translation lookup handed to the pure helpers (the `t` of useTranslation). */
 export type { Translate };
 
+/** One numeric edit, which can stage a bounded value for Save before blur. */
+export type NumberEdit = { session: object; kind: 'commit' | 'stage' | 'clear' };
+
 /** A settings field's change callback: the setting key and its new value. */
-export type SettingChangeHandler = (key: string, value: unknown, editSession?: object) => void;
+export type SettingChangeHandler = (key: string, value: unknown, edit?: NumberEdit) => void;
 
 /** A settings field's per-key reset. */
 export type SettingResetHandler = (key: string) => void;

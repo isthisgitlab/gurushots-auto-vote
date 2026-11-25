@@ -339,6 +339,14 @@ describe('editing and saving', () => {
 });
 
 describe('profiles bar interplay', () => {
+    const addExposureFields = () =>
+        Object.assign(mockSchemaState.schema ?? {}, {
+            exposure: { ...field('boost', 'number', 70), label: 'app.exposure', min: 1, max: 100 },
+            exposureTarget: { ...field('boost', 'number', 70), label: 'app.exposureTarget', min: 0, max: 100 },
+        });
+    const exposureField = (key: 'exposure' | 'exposureTarget') =>
+        screen.getByRole<HTMLInputElement>('spinbutton', { name: new RegExp(`^app\\.${key}(?: |$)`) });
+
     const select = async (name: string) => {
         const el = screen.getByRole<HTMLSelectElement>('combobox');
         await act(async () => {
@@ -348,16 +356,13 @@ describe('profiles bar interplay', () => {
     };
 
     test('Apply previews the adjusted target and Save sends only the profile override', async () => {
-        Object.assign(mockSchemaState.schema ?? {}, {
-            exposure: { ...field('boost', 'number', 70), label: 'app.exposure', min: 1, max: 100 },
-            exposureTarget: { ...field('boost', 'number', 70), label: 'app.exposureTarget', min: 0, max: 100 },
-        });
+        addExposureFields();
         mockApi.getChallengeProfiles.mockResolvedValue({ High: { exposure: 90 } });
         renderModal();
         await loaded();
         await waitFor(() => expect(body()).toContain('High (1)'));
         await select('High');
-        const target = () => screen.getByRole<HTMLInputElement>('spinbutton', { name: /^app\.exposureTarget/ });
+        const target = () => exposureField('exposureTarget');
         fireEvent.click(screen.getByRole('button', { name: 'app.applyProfile' }));
         await waitFor(() => expect(target().value).toBe('90'));
         fireEvent.click(screen.getByRole('button', { name: 'app.clearAll' }));
@@ -368,6 +373,45 @@ describe('profiles bar interplay', () => {
         await waitFor(() =>
             expect(mockApi.replaceChallengeOverrides).toHaveBeenCalledWith('1', { exposure: 90 }, true),
         );
+    });
+
+    test.each([
+        ['clamped', '101', { exposure: 100 }],
+        ['cleared', '', {}],
+    ])('Save sends the %s exposure edit while the field is still active', async (_label, draft, expected) => {
+        addExposureFields();
+        renderModal();
+        await loaded();
+        const exposure = exposureField('exposure');
+        const target = exposureField('exposureTarget');
+        fireEvent.input(exposure, { target: { value: '101' } });
+        expect(target.value).toBe('70');
+        fireEvent.input(exposure, { target: { value: draft } });
+        fireEvent.click(screen.getByRole('button', { name: 'app.save' }));
+        await waitFor(() => expect(mockApi.replaceChallengeOverrides).toHaveBeenCalledWith('1', expected, false));
+    });
+
+    test.each(['directly', 'after blur'])('Save drops a draft hidden by a refreshed default %s', async (path) => {
+        addExposureFields();
+        const { rerender, onClose } = renderModal();
+        await loaded();
+        const input = () => exposureField('exposure');
+        fireEvent.input(input(), { target: { value: '101' } });
+        expect(input().value).toBe('101');
+
+        mockSchemaState.defaults = { ...mockSchemaState.defaults, exposure: 80 };
+        rerender(
+            <ChallengeSettingsModal isOpen={true} onClose={onClose} challengeId="1" challengeTitle="Challenge 1" />,
+        );
+        expect(input().value).toBe('80');
+        mockSchemaState.defaults = { ...mockSchemaState.defaults, exposure: 70 };
+        rerender(
+            <ChallengeSettingsModal isOpen={true} onClose={onClose} challengeId="1" challengeTitle="Challenge 1" />,
+        );
+        expect(input().value).toBe('70');
+        if (path === 'after blur') fireEvent.blur(input());
+        fireEvent.click(screen.getByRole('button', { name: 'app.save' }));
+        await waitFor(() => expect(mockApi.replaceChallengeOverrides).toHaveBeenCalledWith('1', {}, false));
     });
 
     test('saving the assigned title profile refreshes the inherited values', async () => {

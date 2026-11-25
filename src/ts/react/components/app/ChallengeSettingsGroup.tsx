@@ -4,6 +4,7 @@ import { getGroupApplicability } from '@/utils/challengeApplicability';
 import { formatSettingDefault } from '@/utils/formatters';
 import { sourceBadgeTone } from '@/utils/customizationTone';
 import type { CustomizationSource } from '@/utils/customizationTone';
+import { isExposureKey } from '../../../core/linkedExposure';
 import { getScheduleShift } from '../../../core/services/scheduleRemap';
 import { SettingHelp } from '@/components/ui/SettingHelp';
 import { ToneNote } from '@/components/ui/ToneNote';
@@ -69,18 +70,22 @@ function ValueSourceBadge({
     hasOverride,
     ruleSource,
     hasProfileValue,
+    sourceValue,
     overriddenLabelKey = 'app.overridden',
 }: {
     hasOverride: boolean;
     ruleSource: RuleSource | undefined;
     hasProfileValue: boolean;
+    sourceValue?: string;
     overriddenLabelKey?: string;
 }) {
     const { t } = useTranslation();
+    const suffix = sourceValue === undefined ? '' : ` (${sourceValue})`;
     if (hasOverride)
         return (
             <SourceBadge source="manual" icon="⚙️">
                 {t(overriddenLabelKey)}
+                {suffix}
             </SourceBadge>
         );
     if (ruleSource !== undefined) {
@@ -89,6 +94,7 @@ function ValueSourceBadge({
         return (
             <SourceBadge source="rule" icon="📏">
                 {t('app.fromRule', { title })}
+                {suffix}
             </SourceBadge>
         );
     }
@@ -96,9 +102,15 @@ function ValueSourceBadge({
         return (
             <SourceBadge source="profile" icon="🔄">
                 {t('app.usingProfile')}
+                {suffix}
             </SourceBadge>
         );
-    return <span className="badge badge-ghost badge-sm">{t('app.usingGlobal')}</span>;
+    return (
+        <span className="badge badge-ghost badge-sm">
+            {t('app.usingGlobal')}
+            {suffix}
+        </span>
+    );
 }
 
 /**
@@ -144,6 +156,9 @@ function ChallengeSettingCell({
     const hasOverride = key in form.overrides;
     const hasProfileValue = Object.prototype.hasOwnProperty.call(form.profileValues, key);
     const currentValue = form.effectiveOf(key);
+    const linked = isExposureKey(key);
+    const rawValue = hasOverride ? form.overrides[key] : form.inheritedOf(key);
+    const adjusted = linked && rawValue !== currentValue;
     const scheduleShift = scheduleShiftOf(key, currentValue, challenge);
     const inputId = `challenge-setting-${key}`;
     // The remote page keeps the view preferences on the device, so the compact row says so. A
@@ -166,6 +181,7 @@ function ChallengeSettingCell({
                         hasOverride={hasOverride}
                         ruleSource={form.ruleSourceOf(key)}
                         hasProfileValue={hasProfileValue}
+                        sourceValue={adjusted ? formatSettingDefault(rawValue, config, t) : undefined}
                         overriddenLabelKey={overriddenLabelKey}
                     />
                 </span>
@@ -180,9 +196,14 @@ function ChallengeSettingCell({
                 onChange={form.changeOverride}
                 onReset={applicable && hasOverride ? form.clearOverride : null}
                 disabled={!applicable}
-                boundedEdit={isExposureKey(key)}
+                boundedEdit={linked}
                 describedBy={deviceHint}
             />
+            {linked && (
+                <span role="status" className="sr-only">
+                    {`${t(config.label)}: ${formatSettingDefault(currentValue, config, t)}`}
+                </span>
+            )}
             {deviceHint && <LocalOnlyHint id={deviceHint} />}
             {scheduleShift > 0 && (
                 <ToneNote tone="info" className="text-xs mt-1">
@@ -278,4 +299,3 @@ export function ChallengeSettingsGroup({
         </div>
     );
 }
-import { isExposureKey } from '../../../core/linkedExposure';

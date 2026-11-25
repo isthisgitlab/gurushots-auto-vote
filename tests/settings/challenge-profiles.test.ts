@@ -221,6 +221,38 @@ describe('settings facade — challenge profiles', () => {
     });
 
     describe('applyChallengeProfile', () => {
+        test('fractional targets retain their stored values and respect both trigger minimums', () => {
+            expect(settings.setGlobalDefault('exposure', 70)).toBe(true);
+            expect(settings.setGlobalDefault('useFinalWindowExposure', true)).toBe(true);
+            const targets = { exposureTarget: 0.5, finalWindowExposureTarget: 0.25 };
+            expect(settings.saveChallengeProfile('Fractional', targets)).toBe(true);
+            expect(settings.applyChallengeProfile('Fractional', '123')).toBe(true);
+            expect(settings.getChallengeOverrides('123')).toEqual(targets);
+            for (const key of ['exposure', 'exposureTarget', 'finalWindowExposure', 'finalWindowExposureTarget']) {
+                expect(settings.getEffectiveSetting(key, '123')).toBe(1);
+            }
+        });
+
+        test.each(['single', 'replace'])('a %s write keeps an equal dormant target with priority on enable', (path) => {
+            expect(settings.setGlobalDefault('exposure', 90)).toBe(true);
+            expect(settings.setGlobalDefault('finalWindowExposure', 60)).toBe(true);
+            expect(settings.setGlobalDefault('finalWindowExposureTarget', 75)).toBe(true);
+            expect(settings.saveChallengeProfile('Final window', { finalWindowExposure: 80 })).toBe(true);
+            expect(settings.setTitleRules([{ title: 'A Window', profile: 'Final window' }])).toBe(true);
+            settings.rememberChallengeTitles([{ id: 123, title: 'A Window' }]);
+
+            expect(settings.getEffectiveSetting('useFinalWindowExposure', '123')).toBe(false);
+            expect(
+                path === 'single'
+                    ? settings.setChallengeOverride('finalWindowExposureTarget', '123', 75)
+                    : settings.replaceChallengeOverrides('123', { finalWindowExposureTarget: 75 }),
+            ).toBe(true);
+            expect(settings.getChallengeOverrides('123')).toEqual({ finalWindowExposureTarget: 75 });
+            expect(settings.setChallengeOverride('useFinalWindowExposure', '123', true)).toBe(true);
+            expect(settings.getEffectiveSetting('finalWindowExposure', '123')).toBe(75);
+            expect(settings.getEffectiveSetting('finalWindowExposureTarget', '123')).toBe(75);
+        });
+
         const voteAt = (exposure: number, closeIn: number) => {
             const now = Math.floor(Date.now() / 1000);
             const challenge = buildChallenge({
@@ -489,6 +521,7 @@ describe('settings facade — challenge profiles', () => {
 
             expect(settings.setChallengeOverride('useFinalWindowExposure', '123', true)).toBe(true);
             expect(settings.getEffectiveSetting('useFinalWindowExposure', '123')).toBe(true);
+            expect(settings.getEffectiveSetting('finalWindowExposure', '123')).toBe(70);
             expect(settings.getEffectiveSetting('finalWindowExposureTarget', '123')).toBe(70);
             expect(settings.getChallengeProfiles()['Final Window Off']).toEqual(profile);
         });

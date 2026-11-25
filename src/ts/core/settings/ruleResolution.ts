@@ -1,9 +1,8 @@
 /**
  * Read-side resolution of challenge rules against a loaded settings object:
  * which rules match a challenge, the one profile they apply, the sparse value
- * map they contribute, per-challenge profile suppression, and whether a rule's
- * profile composes with the stored manual overrides. Pure over its `settings`
- * argument — no persistence.
+ * map they contribute and per-challenge profile suppression. Pure over its
+ * `settings` argument.
  */
 
 import { matchingRules } from './challengeRules';
@@ -23,9 +22,8 @@ type RuleProfile = { name: string; values: ChallengeValues; rule: TitleRule };
 /**
  * The profile a matching rule list contributes: the one named by the FIRST
  * matching rule that names a profile. Only one profile ever applies to a
- * challenge, because a profile is validated as a whole value set (cross-field
- * rules like exposureTarget >= exposure) and mixing keys from two profiles
- * could assemble a combination neither one allows. A stale/corrupt reference
+ * challenge. This keeps the settings from the chosen profile together, with
+ * unset fields falling through to other sources. A stale/corrupt reference
  * fails closed as a whole: automation never executes a partially sanitized
  * profile.
  */

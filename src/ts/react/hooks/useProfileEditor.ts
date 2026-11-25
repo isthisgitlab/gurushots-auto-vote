@@ -7,7 +7,7 @@ import { valuesEqual } from '@/utils/valuesEqual';
 import { normalizeProfileName } from '@/utils/profileName';
 import { ON_ONLY_KEYS } from '../../core/settings/ruleBehaviour';
 import { errorMessage } from '../../core/errorMessage';
-import { exposureDefaultsFrom, isExposureKey, resolveLinkedExposure } from '../../core/linkedExposure';
+import { exposureDefaultsFrom, isExposureKey } from '../../core/linkedExposure';
 
 import type { IpcQueryTools } from '@/api/useIpcQuery';
 import type { ChallengeValues, RuleSource } from '../../core/types/settings';
@@ -81,7 +81,14 @@ export function useProfileEditor({
     // Read at a settled load's and a save's call time, not render time: the
     // callbacks below stay referentially stable across edits and loads.
     const selectedRef = useLatestRef(selected);
-    const overridesRef = useLatestRef(overrides);
+    const globalExposure = exposureDefaultsFrom((key) => defaults?.[key] ?? schema?.[key]?.default);
+    const {
+        change: editExposure,
+        effectiveExposure,
+        valuesForSave,
+        commitForSave,
+    } = useLinkedExposureChange(overrides, setOverrides, [globalExposure]);
+    const overridesRef = useLatestRef(valuesForSave);
     const isOpenRef = useLatestRef(isOpen);
 
     useEffect(() => {
@@ -156,8 +163,6 @@ export function useProfileEditor({
     // The on-only keys' `false` is stored nowhere but a challenge's own
     // override (the profile sanitizer drops it), so setting one "off" here
     // clears the key instead of writing a `false` that would vanish on save.
-    const globalExposure = exposureDefaultsFrom((key) => defaults?.[key] ?? schema?.[key]?.default);
-    const editExposure = useLinkedExposureChange(overrides, setOverrides, [globalExposure]);
     const changeOverride = useCallback<SettingChangeHandler>(
         (key, value, editSession) => {
             // An edit after a landed save retires its note.
@@ -191,9 +196,8 @@ export function useProfileEditor({
         },
         [schema, defaults],
     );
-    const exposure = resolveLinkedExposure([overrides, globalExposure]);
     const effectiveOf = (key: string) => {
-        if (isExposureKey(key) && exposure[key] !== undefined) return exposure[key];
+        if (isExposureKey(key) && effectiveExposure[key] !== undefined) return effectiveExposure[key];
         return key in overrides ? overrides[key] : inheritedOf(key);
     };
 
@@ -211,7 +215,7 @@ export function useProfileEditor({
         if (!name) return false;
         // One copy of what this save sends: an edit made while the write is
         // out belongs to the next save, not to this one's baseline.
-        const values = { ...overridesRef.current };
+        const values = { ...commitForSave() };
         const id = ++saveIdRef.current;
         setSaving(true);
         setSaveError(false);
@@ -244,7 +248,7 @@ export function useProfileEditor({
         } finally {
             if (saveIdRef.current === id) setSaving(false);
         }
-    }, [isOpenRef, saveIdRef, selectedRef, overridesRef, setProfiles]);
+    }, [isOpenRef, saveIdRef, selectedRef, commitForSave, setProfiles]);
 
     /**
      * Save the current draft under another name (also the case-only rename,
@@ -260,7 +264,7 @@ export function useProfileEditor({
             const startedFrom = selectedRef.current;
             // One copy of what this save sends: an edit made while the write
             // is out belongs to the next save, not to this one's baseline.
-            const values = { ...overridesRef.current };
+            const values = { ...commitForSave() };
             const id = ++saveIdRef.current;
             setSaving(true);
             try {
@@ -333,7 +337,7 @@ export function useProfileEditor({
                 if (saveIdRef.current === id) setSaving(false);
             }
         },
-        [isOpenRef, saveIdRef, selectedRef, overridesRef, setProfiles],
+        [isOpenRef, saveIdRef, selectedRef, commitForSave, setProfiles],
     );
 
     return {
