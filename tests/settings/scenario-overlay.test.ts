@@ -11,6 +11,7 @@ import settings = require('../../src/ts/core/settings');
 import type * as scenarioStateStoreModule from '../../src/ts/core/scenarioStateStore';
 import { isNumber, isRecordOf, isShape, isUnknown, parseJsonAs } from '../helpers/parseJson';
 import { invalid } from '../helpers/invalid';
+import { phaseFingerprint } from '../../src/ts/core/settings/scenarioOverlay';
 import type * as expressionsModule from '../../src/ts/core/scenarios/expressions';
 import type { ExpressionContext } from '../../src/ts/core/scenarios/expressions';
 import type { Challenge } from '../../src/ts/core/types/gurushots';
@@ -315,6 +316,7 @@ describe('scenario phase bindings and profile', () => {
         expect(base).toEqual({ state: 'known', value: { kind: 'number', value: 40, quantity: 'percent' } });
         expect(effective).toEqual({ state: 'known', value: { kind: 'number', value: 60, quantity: 'percent' } });
         expect(settings.getScenarioBaseSettings('7').exposure).toEqual(base);
+        expect(settings.getScenarioBaseSettings().exposure).toMatchObject({ value: { value: 30 } });
         expect(settings.getChallengeOverrides('7')).toEqual({ scenario: 'Plan', exposure: 40 });
         expect(settings.getEffectiveSetting('exposure')).toBe(30);
         // The published record holds only the resolved binding; the literal is read from the document.
@@ -662,7 +664,7 @@ describe('scenario phase bindings and profile', () => {
             expect(result).toEqual({ ok: false, key: 'exposure', reason });
         });
 
-        test('an absent binding, a binding that fails with its pair, and a conflict between values', () => {
+        test('an absent binding blocks the phase and an in-range binding raises a same-source target', () => {
             assign();
             const scenario = settings.getScenario('Plan') as ScenarioDocument;
             const state = scenarioStateLedger.get(7).state as ScenarioState;
@@ -679,14 +681,11 @@ describe('scenario phase bindings and profile', () => {
                 key: 'exposure',
                 reason: 'absent: not-present',
             });
-            // exposure above the literal target 90: each value is valid, the set is not
-            expect(
-                run({ exposure: { state: 'known', value: { kind: 'number', value: 95, quantity: 'percent' } } }),
-            ).toEqual({
-                ok: false,
-                key: 'exposure',
-                reason: 'these values conflict with each other or with the settings they combine with',
+            const result = run({
+                exposure: { state: 'known', value: { kind: 'number', value: 95, quantity: 'percent' } },
             });
+            if (!result.ok) throw new Error('phase did not prepare');
+            expect(result.snapshot.readSetting('exposureTarget', 'effective')).toMatchObject({ value: { value: 95 } });
         });
     });
 
@@ -738,8 +737,14 @@ describe('scenario phase bindings and profile', () => {
         test('a profile alone is a bound phase and is published', () => {
             withProfile({ profile: 'tactic' });
             expect(settings.scenarioSubjectAvailable('7')).toBe(false);
+            const { result } = prepare();
+            if (!result.ok) throw new Error('phase did not prepare');
+            expect(result.snapshot.readSetting('boostTime', 'effective')).toMatchObject({ value: { value: 120 } });
             publish();
             expect(settings.getEffectiveSetting('boostTime', '7')).toBe(120);
+            expect(settings.readScenarioSetting('boostTime', 'effective', '7')).toMatchObject({
+                value: { value: 120 },
+            });
             expect(scenarioStateLedger.get(7).state?.published?.profile).toBe('Tactic');
         });
 
@@ -798,37 +803,84 @@ describe('scenario phase bindings and profile', () => {
             expect(prepare().result).toEqual({ ok: false, key: null, reason: 'profile-unavailable: Tactic' });
         });
 
-        test('a profile that conflicts with the challenge’s own value blocks the phase, naming no setting', () => {
-            // valid against the defaults (exposure 30), but the challenge's own exposure is 40
-            settings.saveChallengeProfile('Low', { exposureTarget: 35 });
-            withProfile({ profile: 'Low' });
-            expect(prepare().result).toEqual({
-                ok: false,
-                key: null,
-                reason: 'these values conflict with each other or with the settings they combine with',
-            });
+        test('a matching publication fingerprint does not make an invalid profile usable', () => {
+            withProfile({ profile: 'Tactic' });
+            publish();
+            const { scenario, state } = prepare();
+            if (!state.published) throw new Error('missing publication');
+            const config = settings.loadSettings();
+            config.profiles.Tactic = { exposure: 101 };
+            expect(settings.saveSettings(config)).toBe(true);
+            expect(
+                scenarioStateLedger.set(7, {
+                    ...state,
+                    published: {
+                        ...state.published,
+                        documentFingerprint: phaseFingerprint(config, scenario, 'push', state),
+                    },
+                }),
+            ).toBe('saved');
+            expect(settings.scenarioSubjectReason('7')).toBe('profile-unavailable: Tactic');
         });
 
-        test('a profile that stops being valid after publishing makes the publication unavailable, naming it', () => {
+        test('a phase profile target wins over the challenge trigger', () => {
+            settings.saveChallengeProfile('Low', { exposureTarget: 35 });
+            withProfile({ profile: 'Low' });
+            publish();
+            expect(settings.getEffectiveSetting('exposure', '7')).toBe(35);
+            expect(settings.getEffectiveSetting('exposureTarget', '7')).toBe(35);
+            expect(settings.getChallengeOverride('exposure', '7')).toBe(40);
+        });
+
+        test('a changed default flows into the published phase and respects its profile target', () => {
             settings.saveChallengeProfile('Low', { exposureTarget: 50 });
             withProfile({ profile: 'Low' });
             publish();
             expect(settings.scenarioSubjectAvailable('7')).toBe(true);
-            // the stored profile is the same, but it no longer fits the defaults it is checked against
             settings.setGlobalDefault('exposure', 60);
-            expect(settings.scenarioSubjectReason('7')).toBe('profile-unavailable: Low');
+            settings.removeChallengeOverride('exposure', '7');
+            expect(settings.scenarioSubjectAvailable('7')).toBe(true);
+            expect(settings.getEffectiveSetting('exposure', '7')).toBe(50);
+            expect(settings.getEffectiveSetting('exposureTarget', '7')).toBe(50);
         });
 
-        test('the profiles a phase may apply are the ones the runner’s own check accepts, now — not a cleaned-up view of them', () => {
+        test('valid sparse profiles stay available despite changes to global exposure', () => {
             settings.saveChallengeProfile('Low', { exposureTarget: 50 });
             settings.saveChallengeProfile('Tactic', { autoBoost: true, boostTime: 120 });
             settings.saveChallengeProfile('Manual', { manualPhotosOnly: true });
             expect(settings.listPhaseProfiles().sort()).toEqual(['Low', 'Tactic']);
-            // `Low` no longer fits the defaults it is checked against: the display view would drop the bad value and still show
-            // it, but the check that publication and `useProfile` make refuses it, so it is no longer listed.
             settings.setGlobalDefault('exposure', 60);
-            expect(settings.listPhaseProfiles()).toEqual(['Tactic']);
-            expect(settings.checkPhaseProfile('Low')).toMatchObject({ ok: false });
+            expect(settings.listPhaseProfiles().sort()).toEqual(['Low', 'Tactic']);
+            expect(settings.checkPhaseProfile('Low')).toMatchObject({ ok: true });
+        });
+
+        test.each([70, 95])('resolves the original base target %s against a replacement trigger', (target) => {
+            settings.setGlobalDefault('exposureTarget', target);
+            settings.setChallengeOverride('exposure', '7', 90);
+            expect(settings.getEffectiveSetting('exposureTarget', '7')).toBe(Math.max(target, 90));
+            settings.saveChallengeProfile('Phase trigger', { exposure: 80 });
+            assign({
+                name: 'Plan',
+                version: 1,
+                start: 'push',
+                phases: { push: { profile: 'Phase trigger' }, rest: {} },
+            });
+            const { state, result } = prepare();
+            if (!result.ok || !result.snapshot.publication) throw new Error('nothing to publish');
+            expect(result.snapshot.readSetting('exposure', 'effective')).toMatchObject({ value: { value: 80 } });
+            expect(result.snapshot.readSetting('exposureTarget', 'effective')).toMatchObject({
+                value: { value: Math.max(target, 80) },
+            });
+            expect(scenarioStateLedger.set(7, { ...state, published: result.snapshot.publication })).toBe('saved');
+            expect(settings.getEffectiveSetting('exposure', '7')).toBe(80);
+            expect(settings.getEffectiveSetting('exposureTarget', '7')).toBe(Math.max(target, 80));
+            expect(settings.readScenarioSetting('exposureTarget', 'effective', '7')).toMatchObject({
+                value: { value: Math.max(target, 80) },
+            });
+
+            scenarioStateLedger.set(7, initialState('Plan', 'rest', 1500));
+            expect(settings.getEffectiveSetting('exposure', '7')).toBe(90);
+            expect(settings.getEffectiveSetting('exposureTarget', '7')).toBe(Math.max(target, 90));
         });
 
         describe('grouped auto-join timing', () => {
@@ -972,12 +1024,6 @@ describe('scenario phase bindings and profile', () => {
             ],
             ['an unknown key', { nonsense: 1 }, 'nonsense', 'not a setting a phase may change'],
             ['a value its setting refuses', { autoExposureFillBelow: 5000 }, 'autoExposureFillBelow', undefined],
-            [
-                'a pair that does not hold with the phase literal beside it',
-                { exposure: 95 },
-                'exposure',
-                'these values conflict',
-            ],
         ])('%s refuses the whole phase, naming the key', (_label, phasePatch, key, reason) => {
             assign({
                 name: 'Plan',
@@ -989,6 +1035,27 @@ describe('scenario phase bindings and profile', () => {
             const { result } = prepare();
             expect(result).toMatchObject({ ok: false, key });
             if (reason !== undefined) expect(result).toMatchObject({ reason: expect.stringContaining(reason) });
+        });
+
+        test('a runtime target adjusts the lower-priority phase trigger', () => {
+            settings.saveChallengeProfile('High exposure', { exposure: 90 });
+            assign({
+                name: 'Plan',
+                version: 1,
+                start: 'push',
+                phases: { push: { profile: 'High exposure', settings: { exposure: 80, exposureTarget: 95 } } },
+            });
+            publish();
+            expect(settings.getEffectiveSetting('exposure', '7')).toBe(80);
+            expect(settings.getEffectiveSetting('exposureTarget', '7')).toBe(95);
+            change({ phasePatch: { exposureTarget: 75 } });
+            const { result } = prepare();
+            if (!result.ok) throw new Error('phase did not prepare');
+            expect(result.snapshot.readSetting('exposure', 'effective')).toMatchObject({ value: { value: 75 } });
+            expect(result.snapshot.readSetting('exposureTarget', 'effective')).toMatchObject({ value: { value: 75 } });
+            publish();
+            expect(settings.getEffectiveSetting('exposure', '7')).toBe(75);
+            expect(settings.getEffectiveSetting('exposureTarget', '7')).toBe(75);
         });
 
         test('owns a group of settings as the first source that sets any member: the others read 0', () => {

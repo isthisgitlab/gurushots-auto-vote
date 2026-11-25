@@ -23,10 +23,20 @@ const SCHEMA = invalid<RendererSchema>({
         perChallenge: true,
         group: 'g',
         default: 70,
-        min: 0,
+        min: 1,
         max: 100,
         label: 'app.exposure',
         description: 'Exposure',
+    },
+    exposureTarget: {
+        type: 'number',
+        perChallenge: true,
+        group: 'g',
+        default: 70,
+        min: 0,
+        max: 100,
+        label: 'app.exposureTarget',
+        description: 'Exposure Target',
     },
     manualPhotosOnly: {
         type: 'boolean',
@@ -104,7 +114,8 @@ const renderSection = async (
 };
 
 const selectEl = () => screen.getByRole<HTMLSelectElement>('combobox', { name: 'app.challengeProfiles' });
-const exposureInput = () => screen.getByLabelText<HTMLInputElement>(/^app\.exposure/);
+const exposureInput = (name = /^app\.exposure(?!Target)/) => screen.getByRole<HTMLInputElement>('spinbutton', { name });
+const targetInput = () => exposureInput(/^app\.exposureTarget/);
 const saveButton = () => screen.getByRole<HTMLButtonElement>('button', { name: 'app.saveProfile' });
 const discardButton = () => screen.getByRole<HTMLButtonElement>('button', { name: 'app.discardProfileChanges' });
 const saveAsInput = () => screen.getByLabelText<HTMLInputElement>('app.saveAsNewLabel');
@@ -118,6 +129,78 @@ const changeSelect = (sel: HTMLSelectElement, value: string) =>
         sel.value = value;
         sel.dispatchEvent(new window.Event('change', { bubbles: true }));
     });
+
+test('changing exposure raises an inherited target without storing an override for it', async () => {
+    await renderSection({ tactic: TACTIC });
+    changeSelect(selectEl(), 'tactic');
+    fireEvent.change(exposureInput(), { target: { value: '90' } });
+    expect(targetInput().value).toBe('90');
+
+    fireEvent.change(targetInput(), { target: { value: '' } });
+    expect(targetInput().value).toBe('');
+    fireEvent.blur(targetInput());
+    expect(targetInput().value).toBe('90');
+    fireEvent.click(saveButton());
+    await waitFor(() =>
+        expect(mockApi.saveChallengeProfile).toHaveBeenCalledWith('tactic', { exposure: 90, extra: true }),
+    );
+});
+
+test('typing a manual target adjusts the trigger from the values present when editing started', async () => {
+    await renderSection({ tactic: { exposure: 90, exposureTarget: 95 } });
+    changeSelect(selectEl(), 'tactic');
+    fireEvent.focus(targetInput());
+    fireEvent.change(targetInput(), { target: { value: '8' } });
+    expect(exposureInput().value).toBe('8');
+    fireEvent.change(targetInput(), { target: { value: '80' } });
+    expect(exposureInput().value).toBe('80');
+    fireEvent.blur(targetInput());
+    fireEvent.click(saveButton());
+    await waitFor(() =>
+        expect(mockApi.saveChallengeProfile).toHaveBeenCalledWith('tactic', { exposure: 80, exposureTarget: 80 }),
+    );
+});
+
+test.each([
+    ['exposure', '0', 1],
+    ['exposure', '101', 100],
+    ['exposureTarget', '-1', 0],
+    ['exposureTarget', '101', 100],
+] as const)('%s with draft %s saves %s inside its bounds', async (key, value, expected) => {
+    await renderSection({ tactic: TACTIC });
+    changeSelect(selectEl(), 'tactic');
+    const input = key === 'exposure' ? exposureInput() : targetInput();
+    fireEvent.change(input, { target: { value } });
+    if (value === '0' || value === '-1') {
+        fireEvent.blur(input);
+        expect(input.value).toBe(String(expected));
+    }
+    fireEvent.click(saveButton());
+    await waitFor(() =>
+        expect(mockApi.saveChallengeProfile).toHaveBeenCalledWith('tactic', { ...TACTIC, [key]: expected }),
+    );
+});
+
+test('saving a blank explicit target preserves its last value', async () => {
+    await renderSection({ tactic: { exposure: 80, exposureTarget: 95 } });
+    changeSelect(selectEl(), 'tactic');
+    fireEvent.change(exposureInput(), { target: { value: '85' } });
+    fireEvent.change(targetInput(), { target: { value: '' } });
+    fireEvent.click(saveButton());
+    await waitFor(() =>
+        expect(mockApi.saveChallengeProfile).toHaveBeenCalledWith('tactic', { exposure: 85, exposureTarget: 95 }),
+    );
+});
+
+test('the profile editor still saves a boolean edit', async () => {
+    await renderSection({ tactic: TACTIC });
+    changeSelect(selectEl(), 'tactic');
+    fireEvent.click(screen.getByRole('checkbox', { name: /^app\.manualPhotosOnly/ }));
+    fireEvent.click(saveButton());
+    await waitFor(() =>
+        expect(mockApi.saveChallengeProfile).toHaveBeenCalledWith('tactic', { ...TACTIC, manualPhotosOnly: true }),
+    );
+});
 
 beforeEach(() => {
     window.api = invalid(mockApi);

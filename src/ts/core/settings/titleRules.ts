@@ -8,15 +8,10 @@
 import * as logger from '../logger';
 import { ruleConditions, matchingRules } from './challengeRules';
 import { loadSettings, saveSettings } from './persistence';
-import { profileNameForLog } from './profileStore';
+import { profileNameForLog, sanitizeProfileValues } from './profileStore';
 import { factsForChallengeId } from './challengeFacts';
 import { MAX_TITLE_RULES, sanitizeTitleRule, titleRuleKey, ruleLogLabel } from './titleRuleSanitize';
-import {
-    ruleTimeZone,
-    ruleValuesFor,
-    isTitleProfileSuppressed,
-    titleProfileComposesWithKnownOverrides,
-} from './ruleResolution';
+import { ruleTimeZone, ruleValuesFor, isTitleProfileSuppressed } from './ruleResolution';
 import { getEffectiveSetting } from './challengeOverrides';
 import { ruleAssignments, runGated } from './scenarioMutationGate';
 
@@ -196,7 +191,7 @@ const _sanitizedUniqueRules = (rules: unknown[], storedProfiles: Record<string, 
 /**
  * Everything setTitleRules checks before saving, as one pipeline the write and
  * the dry-run share: the array check, the cap, the sanitize pass and the
- * profile-conflict check. Returns the loaded settings with the rules that
+ * profile validation. Returns the loaded settings with the rules that
  * would be stored, or the rejection reason.
  */
 const _checkedRules = (
@@ -218,10 +213,10 @@ const _checkedRules = (
     if (!sanitized.ok) return sanitized;
 
     for (const rule of sanitized.rules) {
-        if (rule.profile && !titleProfileComposesWithKnownOverrides(settings, rule, storedProfiles[rule.profile])) {
+        if (rule.profile && sanitizeProfileValues(storedProfiles[rule.profile], true) === null) {
             return {
                 ok: false,
-                error: `Title profile conflicts with manual overrides for "${_titleForLog(ruleLogLabel(rule, rule.title, rule.name))}"`,
+                error: `Invalid title profile for "${_titleForLog(ruleLogLabel(rule, rule.title, rule.name))}"`,
             };
         }
     }

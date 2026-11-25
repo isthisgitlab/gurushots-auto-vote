@@ -1,3 +1,4 @@
+import { useRef, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { ToneNote } from '@/components/ui/ToneNote';
 import { SAVE_ERROR_ID } from '@/components/ui/ModalActionRow';
@@ -232,9 +233,42 @@ export function parseNumberInput(raw: string): number | '' {
     return Number.isNaN(parsed) ? '' : parsed;
 }
 
-function NumberField({ id, settingKey, config, value, onChange, onReset, disabled, rejected }: SettingFieldProps) {
+function useNumberDraft({ settingKey, config, value, onChange, boundedEdit }: SettingFieldProps) {
+    const [draft, setDraft] = useState<number | '' | null>(null);
+    const editSession = useRef<object | undefined>(undefined);
+    const displayed = draft ?? value;
+    const changeNumber = (raw: string) => {
+        const number = parseNumberInput(raw);
+        if (!boundedEdit) {
+            onChange(settingKey, number);
+            return;
+        }
+        if (number === '') {
+            setDraft('');
+            return;
+        }
+        const bounded = Math.min(config.max ?? Infinity, Math.max(config.min ?? -Infinity, number));
+        setDraft(bounded === number ? null : number);
+        onChange(settingKey, bounded, editSession.current);
+    };
+    return {
+        displayed,
+        changeNumber,
+        beginNumber: () => {
+            editSession.current = {};
+        },
+        finishNumber: () => {
+            editSession.current = undefined;
+            setDraft(null);
+        },
+    };
+}
+
+function NumberField(props: SettingFieldProps) {
+    const { id, settingKey, config, value, onChange, onReset, disabled, rejected } = props;
     const { t } = useTranslation();
-    const invalid = isNumberInvalid(value, config);
+    const { displayed, changeNumber, beginNumber, finishNumber } = useNumberDraft(props);
+    const invalid = isNumberInvalid(displayed, config);
     const errorId = `${id}-error`;
     return (
         <div className="flex flex-col gap-1">
@@ -266,8 +300,10 @@ function NumberField({ id, settingKey, config, value, onChange, onReset, disable
                             min={config.min}
                             max={config.max}
                             // A number or '' (SettingInput's normalisation); the DOM coerces either.
-                            value={value as number | string}
-                            onChange={(e) => onChange(settingKey, parseNumberInput(e.currentTarget.value))}
+                            value={displayed as number | string}
+                            onChange={(e) => changeNumber(e.currentTarget.value)}
+                            onFocus={beginNumber}
+                            onBlur={finishNumber}
                             disabled={disabled}
                         />
                         {config.unit && <span className="text-sm">{t(config.unit)}</span>}
@@ -398,6 +434,7 @@ export function SettingInput({
     onReset,
     disabled = false,
     rejected = false,
+    boundedEdit = false,
     id = `setting-${settingKey}`,
     describedBy,
 }: {
@@ -409,6 +446,7 @@ export function SettingInput({
     disabled?: boolean;
     /** The last Save refused this setting's value (see SettingFieldProps.rejected). */
     rejected?: boolean;
+    boundedEdit?: boolean;
     id?: string;
     /** An element id the control points at with aria-describedby (a hint beside it). */
     describedBy?: string;
@@ -430,6 +468,7 @@ export function SettingInput({
             onReset={onReset}
             disabled={disabled}
             rejected={rejected}
+            boundedEdit={boundedEdit}
             describedBy={describedBy}
         />
     );

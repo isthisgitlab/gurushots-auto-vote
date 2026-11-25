@@ -20,6 +20,8 @@ import type { MemoryStore } from '../helpers/headlessStore';
 import settings = require('../../src/ts/core/settings');
 import loggerModule = require('../../src/ts/core/logger');
 import { isPlainObject } from '../../src/ts/core/plainObject';
+import { evaluateVotingDecision } from '../../src/ts/core/services/VotingLogic';
+import { buildChallenge } from '../helpers/challengeFixtures';
 const logger = jest.mocked(loggerModule);
 
 /** One stored profile of a loaded configuration, to edit it behind the facade's back. */
@@ -73,6 +75,14 @@ describe('settings facade — challenge profiles', () => {
             expect(settings.getChallengeProfiles()).toEqual({
                 '2-pic tactic': { exposure: 80, autoSubmit: true },
             });
+        });
+
+        test('saves a sparse trigger above the inherited target', () => {
+            expect(settings.setGlobalDefault('exposure', 70)).toBe(true);
+            expect(settings.setGlobalDefault('exposureTarget', 70)).toBe(true);
+            expect(settings.saveChallengeProfile('Higher exposure', { exposure: 90 })).toBe(true);
+            expect(settings.getChallengeProfiles()['Higher exposure']).toEqual({ exposure: 90 });
+            expect(settings.getGlobalDefault('exposureTarget')).toBe(70);
         });
 
         test('round-trips Auto-Submit clock settings in a profile', () => {
@@ -157,10 +167,12 @@ describe('settings facade — challenge profiles', () => {
             expect(settings.getChallengeProfiles()).toEqual({});
         });
 
-        test('fails closed on a cross-field violation (exposureTarget < exposure)', () => {
-            expect(settings.saveChallengeProfile('p', { exposure: 90, exposureTarget: 50 })).toBe(false);
-            // The same pair in a satisfying order is accepted.
-            expect(settings.saveChallengeProfile('p', { exposure: 60, exposureTarget: 80 })).toBe(true);
+        test('keeps the raw profile pair and raises the target when applied', () => {
+            expect(settings.saveChallengeProfile('p', { exposure: 90, exposureTarget: 50 })).toBe(true);
+            expect(settings.getChallengeProfiles().p).toEqual({ exposure: 90, exposureTarget: 50 });
+            expect(settings.applyChallengeProfile('p', '123')).toBe(true);
+            expect(settings.getEffectiveSetting('exposure', '123')).toBe(90);
+            expect(settings.getEffectiveSetting('exposureTarget', '123')).toBe(90);
         });
 
         test('strips a hand-injected stale key from the read view without rewriting storage', () => {
@@ -209,6 +221,105 @@ describe('settings facade — challenge profiles', () => {
     });
 
     describe('applyChallengeProfile', () => {
+        const voteAt = (exposure: number, closeIn: number) => {
+            const now = Math.floor(Date.now() / 1000);
+            const challenge = buildChallenge({
+                id: '123',
+                type: 'regular',
+                start_time: now - 3600,
+                close_time: now + closeIn,
+                member: { ranking: { exposure: { exposure_factor: exposure } } },
+            });
+            return evaluateVotingDecision(challenge, now);
+        };
+
+        test('voting uses the resolved trigger for eligibility and the target for its ceiling', () => {
+            expect(settings.setGlobalDefault('exposure', 70)).toBe(true);
+            expect(settings.setGlobalDefault('exposureTarget', 95)).toBe(true);
+            expect(settings.saveChallengeProfile('Normal', { exposure: 80 })).toBe(true);
+            expect(settings.applyChallengeProfile('Normal', '123')).toBe(true);
+            expect(voteAt(79, 7200)).toMatchObject({ shouldVote: true, targetExposure: 95 });
+            expect(voteAt(80, 7200).shouldVote).toBe(false);
+
+            expect(
+                settings.setChallengeOverrides('123', {
+                    finalWindowExposure: 65,
+                    finalWindowExposureTarget: 50,
+                }),
+            ).toBe(true);
+            expect(settings.getChallengeOverrides('123')).toMatchObject({
+                finalWindowExposure: 65,
+                finalWindowExposureTarget: 50,
+            });
+            expect(voteAt(79, 1800)).toMatchObject({ shouldVote: true, targetExposure: 95 });
+            expect(settings.setChallengeOverride('useFinalWindowExposure', '123', true)).toBe(true);
+            expect(voteAt(64, 1800)).toMatchObject({ shouldVote: true, targetExposure: 65 });
+            expect(voteAt(65, 1800).shouldVote).toBe(false);
+        });
+
+        test('zero targets remain stored on the profile and follow each trigger in voting', () => {
+            expect(
+                settings.saveChallengeProfile('Follow', {
+                    exposure: 85,
+                    exposureTarget: 0,
+                    useFinalWindowExposure: true,
+                    finalWindowExposure: 60,
+                    finalWindowExposureTarget: 0,
+                }),
+            ).toBe(true);
+            expect(settings.getChallengeProfiles().Follow).toMatchObject({
+                exposureTarget: 0,
+                finalWindowExposureTarget: 0,
+            });
+            expect(settings.applyChallengeProfile('Follow', '123')).toBe(true);
+            expect(voteAt(40, 7200).targetExposure).toBe(85);
+            expect(voteAt(40, 1800).targetExposure).toBe(60);
+        });
+
+        test('applies a stored profile after the inherited target falls below its trigger', () => {
+            expect(settings.setGlobalDefault('exposure', 70)).toBe(true);
+            expect(settings.setGlobalDefault('exposureTarget', 95)).toBe(true);
+            expect(settings.saveChallengeProfile('Higher exposure', { exposure: 90 })).toBe(true);
+            expect(settings.setGlobalDefault('exposureTarget', 70)).toBe(true);
+
+            expect(settings.applyChallengeProfile('Higher exposure', '123')).toBe(true);
+            expect(settings.getEffectiveSetting('exposure', '123')).toBe(90);
+            expect(settings.getEffectiveSetting('exposureTarget', '123')).toBe(90);
+            expect(settings.getChallengeOverrides('123')).toEqual({ exposure: 90 });
+            expect(settings.getChallengeProfiles()['Higher exposure']).toEqual({ exposure: 90 });
+            expect(settings.getGlobalDefault('exposureTarget')).toBe(70);
+        });
+
+        test('saves a challenge draft with a trigger above the inherited target', () => {
+            expect(settings.setGlobalDefault('exposure', 70)).toBe(true);
+            expect(settings.setGlobalDefault('exposureTarget', 70)).toBe(true);
+
+            expect(settings.replaceChallengeOverrides('123', { exposure: 90 }, true)).toBe(true);
+            expect(settings.getEffectiveSetting('exposure', '123')).toBe(90);
+            expect(settings.getEffectiveSetting('exposureTarget', '123')).toBe(90);
+            expect(settings.getChallengeOverrides('123')).toEqual({ exposure: 90 });
+            expect(settings.getGlobalDefault('exposureTarget')).toBe(70);
+            expect(settings.setChallengeOverride('exposureTarget', '123', -1)).toBe(false);
+            expect(settings.getChallengeOverrides('123')).toEqual({ exposure: 90 });
+        });
+
+        test('a higher-priority final-window trigger raises inherited normal exposure and both targets', () => {
+            expect(settings.setGlobalDefault('exposure', 70)).toBe(true);
+            expect(settings.setGlobalDefault('exposureTarget', 75)).toBe(true);
+            expect(settings.setGlobalDefault('finalWindowExposure', 40)).toBe(true);
+            expect(settings.setGlobalDefault('finalWindowExposureTarget', 60)).toBe(true);
+            expect(
+                settings.saveChallengeProfile('High final window', {
+                    useFinalWindowExposure: true,
+                    finalWindowExposure: 90,
+                }),
+            ).toBe(true);
+            expect(settings.applyChallengeProfile('High final window', '123')).toBe(true);
+            for (const key of ['exposure', 'exposureTarget', 'finalWindowExposure', 'finalWindowExposureTarget']) {
+                expect(settings.getEffectiveSetting(key, '123')).toBe(90);
+            }
+        });
+
         test('requires a challenge id and an existing profile', () => {
             settings.saveChallengeProfile('p', { exposure: 80 });
             expect(settings.applyChallengeProfile('p', '')).toBe(false);
@@ -363,6 +474,25 @@ describe('settings facade — challenge profiles', () => {
             ]);
         });
 
+        test('a challenge can enable final-window adjustment over an explicitly disabled title profile', () => {
+            const profile = {
+                exposure: 80,
+                useFinalWindowExposure: false,
+                finalWindowExposure: 70,
+                finalWindowExposureTarget: 60,
+            };
+            expect(settings.saveChallengeProfile('Final Window Off', profile)).toBe(true);
+            expect(settings.setTitleRules([{ title: 'A Window', profile: 'Final Window Off' }])).toBe(true);
+            settings.rememberChallengeTitles([{ id: 123, title: 'A Window' }]);
+            expect(settings.getEffectiveSetting('useFinalWindowExposure', '123')).toBe(false);
+            expect(settings.getEffectiveSetting('finalWindowExposureTarget', '123')).toBe(60);
+
+            expect(settings.setChallengeOverride('useFinalWindowExposure', '123', true)).toBe(true);
+            expect(settings.getEffectiveSetting('useFinalWindowExposure', '123')).toBe(true);
+            expect(settings.getEffectiveSetting('finalWindowExposureTarget', '123')).toBe(70);
+            expect(settings.getChallengeProfiles()['Final Window Off']).toEqual(profile);
+        });
+
         test('inherits profile values for the current id and a rotated id with the same title', () => {
             settings.rememberChallengeTitles([{ id: 100, title: 'Weekly Theme' }]);
             expect(settings.getEffectiveSetting('exposure', '100')).toBe(80);
@@ -388,43 +518,63 @@ describe('settings facade — challenge profiles', () => {
             expect(settings.getEffectiveSetting('exposure', '100')).toBe(80);
         });
 
-        test('validates a manual override against the inherited profile as a complete setting set', () => {
+        test('preserves a manual target and lowers the inherited profile trigger', () => {
             settings.saveChallengeProfile('Strict', { exposure: 90, exposureTarget: 100 });
             settings.setTitleRules([
                 { title: 'Strict Theme', profile: 'Strict', mustIncludeTags: [], shouldIncludeTags: [] },
             ]);
             settings.rememberChallengeTitles([{ id: 123, title: 'Strict Theme' }]);
 
-            expect(settings.setChallengeOverride('exposureTarget', '123', 80)).toBe(false);
-            expect(settings.getChallengeOverrides('123')).toEqual({});
-            expect(settings.getEffectiveSetting('exposureTarget', '123')).toBe(100);
+            expect(settings.setChallengeOverride('exposureTarget', '123', 80)).toBe(true);
+            expect(settings.getChallengeOverrides('123')).toEqual({ exposureTarget: 80 });
+            expect(settings.getEffectiveSetting('exposureTarget', '123')).toBe(80);
+            expect(settings.getEffectiveSetting('exposure', '123')).toBe(80);
         });
 
-        test('rejects a trigger override that would invalidate the inherited profile target', () => {
+        test('an explicit target equal to the global target still outranks the title profile', () => {
+            expect(settings.setGlobalDefault('exposure', 70)).toBe(true);
+            expect(settings.setGlobalDefault('exposureTarget', 80)).toBe(true);
+            expect(settings.saveChallengeProfile('High', { exposure: 90 })).toBe(true);
+            expect(settings.saveChallengeProfile('Later', { exposureTarget: 95 })).toBe(true);
+            expect(
+                settings.setTitleRules([
+                    { title: 'Strict Theme', profile: 'High' },
+                    { title: 'Strict', match: 'starts', profile: 'Later' },
+                ]),
+            ).toBe(true);
+            settings.rememberChallengeTitles([{ id: 123, title: 'Strict Theme' }]);
+            expect(settings.getEffectiveSetting('exposureTarget', '123')).toBe(90);
+            expect(settings.setChallengeOverride('exposureTarget', '123', 80)).toBe(true);
+            expect(settings.getChallengeOverrides('123')).toEqual({ exposureTarget: 80 });
+            expect(settings.getEffectiveSetting('exposure', '123')).toBe(80);
+        });
+
+        test('preserves a manual trigger and raises the inherited profile target', () => {
             settings.saveChallengeProfile('Strict', { exposure: 50, exposureTarget: 80 });
             settings.setTitleRules([
                 { title: 'Strict Theme', profile: 'Strict', mustIncludeTags: [], shouldIncludeTags: [] },
             ]);
             settings.rememberChallengeTitles([{ id: 123, title: 'Strict Theme' }]);
 
-            expect(settings.setChallengeOverride('exposure', '123', 90)).toBe(false);
-            expect(settings.getChallengeOverrides('123')).toEqual({});
-            expect(settings.getEffectiveSetting('exposure', '123')).toBe(50);
+            expect(settings.setChallengeOverride('exposure', '123', 90)).toBe(true);
+            expect(settings.getChallengeOverrides('123')).toEqual({ exposure: 90 });
+            expect(settings.getEffectiveSetting('exposure', '123')).toBe(90);
+            expect(settings.getEffectiveSetting('exposureTarget', '123')).toBe(90);
         });
 
-        test('batch override rejects an invalid composition without partially saving sibling values', () => {
+        test('batch override rejects an out-of-range field without partially saving sibling values', () => {
             settings.saveChallengeProfile('Strict', { exposure: 50, exposureTarget: 80, autoSubmit: true });
             settings.setTitleRules([
                 { title: 'Strict Theme', profile: 'Strict', mustIncludeTags: [], shouldIncludeTags: [] },
             ]);
             settings.rememberChallengeTitles([{ id: 123, title: 'Strict Theme' }]);
 
-            expect(settings.setChallengeOverrides('123', { exposure: 90, autoSubmit: false })).toBe(false);
+            expect(settings.setChallengeOverrides('123', { exposure: 101, autoSubmit: false })).toBe(false);
             expect(settings.getChallengeOverrides('123')).toEqual({});
             expect(settings.getEffectiveSetting('autoSubmit', '123')).toBe(true);
         });
 
-        test('rejects removing an override when the inherited trigger would exceed the remaining target', () => {
+        test('clears the trigger and resolves the inherited trigger against the remaining target', () => {
             settings.saveChallengeProfile('Strict', { exposure: 90, exposureTarget: 100 });
             settings.setTitleRules([
                 { title: 'Strict Theme', profile: 'Strict', mustIncludeTags: [], shouldIncludeTags: [] },
@@ -433,8 +583,12 @@ describe('settings facade — challenge profiles', () => {
             settings.setChallengeOverride('exposure', '123', 70);
             settings.setChallengeOverride('exposureTarget', '123', 80);
 
-            expect(settings.removeChallengeOverride('exposure', '123')).toBe(false);
-            expect(settings.getChallengeOverrides('123')).toEqual({ exposure: 70, exposureTarget: 80 });
+            expect(settings.removeChallengeOverride('exposure', '123')).toBe(true);
+            expect(settings.getChallengeOverrides('123')).toEqual({ exposureTarget: 80 });
+            expect(settings.getEffectiveSetting('exposure', '123')).toBe(80);
+            expect(settings.removeChallengeOverride('exposureTarget', '123')).toBe(true);
+            expect(settings.getEffectiveSetting('exposure', '123')).toBe(90);
+            expect(settings.getEffectiveSetting('exposureTarget', '123')).toBe(100);
         });
 
         test('manual profile Apply replaces the automatic profile baseline', () => {
@@ -462,7 +616,7 @@ describe('settings facade — challenge profiles', () => {
             expect(settings.getEffectiveSetting('autoSubmit', '100')).toBe(true);
         });
 
-        test('rejects an automatic profile assignment that conflicts with existing manual values', () => {
+        test('assigns a profile and preserves higher-priority manual exposure values', () => {
             settings.setGlobalDefault('exposure', 50);
             settings.saveChallengeProfile('Strict', { exposure: 90, exposureTarget: 100 });
             settings.rememberChallengeTitles([{ id: 123, title: 'Strict Theme' }]);
@@ -472,20 +626,14 @@ describe('settings facade — challenge profiles', () => {
                 settings.setTitleRules([
                     { title: 'Strict Theme', profile: 'Strict', mustIncludeTags: [], shouldIncludeTags: [] },
                 ]),
-            ).toBe(false);
-            expect(settings.getTitleRules().some((rule) => rule.title === 'Strict Theme')).toBe(false);
-            expect(settings.getEffectiveSetting('exposure', '123')).toBe(50);
+            ).toBe(true);
+            expect(settings.getEffectiveSetting('exposure', '123')).toBe(80);
+            expect(settings.getEffectiveSetting('exposureTarget', '123')).toBe(80);
+            expect(settings.getChallengeOverrides('123')).toEqual({ exposureTarget: 80 });
+            expect(settings.getChallengeProfiles().Strict).toEqual({ exposure: 90, exposureTarget: 100 });
         });
 
-        test('rejects a sparse profile when it invalidates an inherited dependent value', () => {
-            settings.setGlobalDefault('exposure', 50);
-            settings.setGlobalDefault('exposureTarget', 80);
-
-            expect(settings.saveChallengeProfile('Too High', { exposure: 90 })).toBe(false);
-            expect(settings.getChallengeProfiles()['Too High']).toBeUndefined();
-        });
-
-        test('rejects an assigned profile overwrite that would conflict with manual values', () => {
+        test('overwrites an assigned profile while preserving higher-priority manual exposure values', () => {
             settings.setGlobalDefault('exposure', 50);
             settings.saveChallengeProfile('Strict', { exposure: 50, exposureTarget: 100 });
             settings.setTitleRules([
@@ -494,9 +642,11 @@ describe('settings facade — challenge profiles', () => {
             settings.rememberChallengeTitles([{ id: 123, title: 'Strict Theme' }]);
             settings.setChallengeOverride('exposureTarget', '123', 80);
 
-            expect(settings.saveChallengeProfile('STRICT', { exposure: 90, exposureTarget: 100 })).toBe(false);
-            expect(settings.getChallengeProfiles().Strict).toEqual({ exposure: 50, exposureTarget: 100 });
-            expect(settings.getEffectiveSetting('exposure', '123')).toBe(50);
+            expect(settings.saveChallengeProfile('STRICT', { exposure: 90, exposureTarget: 100 })).toBe(true);
+            expect(settings.getChallengeProfiles().STRICT).toEqual({ exposure: 90, exposureTarget: 100 });
+            expect(settings.getChallengeOverrides('123')).toEqual({ exposureTarget: 80 });
+            expect(settings.getEffectiveSetting('exposure', '123')).toBe(80);
+            expect(settings.getEffectiveSetting('exposureTarget', '123')).toBe(80);
         });
 
         test('fails closed when an assigned profile is corrupt instead of applying a valid subset', () => {

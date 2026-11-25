@@ -347,6 +347,29 @@ describe('profiles bar interplay', () => {
         });
     };
 
+    test('Apply previews the adjusted target and Save sends only the profile override', async () => {
+        Object.assign(mockSchemaState.schema ?? {}, {
+            exposure: { ...field('boost', 'number', 70), label: 'app.exposure', min: 1, max: 100 },
+            exposureTarget: { ...field('boost', 'number', 70), label: 'app.exposureTarget', min: 0, max: 100 },
+        });
+        mockApi.getChallengeProfiles.mockResolvedValue({ High: { exposure: 90 } });
+        renderModal();
+        await loaded();
+        await waitFor(() => expect(body()).toContain('High (1)'));
+        await select('High');
+        const target = () => screen.getByRole<HTMLInputElement>('spinbutton', { name: /^app\.exposureTarget/ });
+        fireEvent.click(screen.getByRole('button', { name: 'app.applyProfile' }));
+        await waitFor(() => expect(target().value).toBe('90'));
+        fireEvent.click(screen.getByRole('button', { name: 'app.clearAll' }));
+        expect(target().value).toBe('70');
+        fireEvent.click(screen.getByRole('button', { name: 'app.applyProfile' }));
+        expect(target().value).toBe('90');
+        fireEvent.click(screen.getByRole('button', { name: 'app.save' }));
+        await waitFor(() =>
+            expect(mockApi.replaceChallengeOverrides).toHaveBeenCalledWith('1', { exposure: 90 }, true),
+        );
+    });
+
     test('saving the assigned title profile refreshes the inherited values', async () => {
         mockApi.getTitleProfile.mockResolvedValue(
             titleRuleInfo({ profile: { name: 'Auto', values: { boostTime: 17 } } }),

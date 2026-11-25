@@ -231,15 +231,16 @@ describe('previewTitleRules — the dry-run of setTitleRules', () => {
         });
     });
 
-    test('a rule whose profile conflicts with a stored override is rejected, before any save', () => {
+    test('a rule with linked exposure changes can be previewed without saving', () => {
         seed({ profiles: { P: { exposure: 70 } }, challenges: { c1: { exposureTarget: 60 } } });
         settings.rememberChallengeTitles([challenge()]);
         const input = [{ pics: 4, profile: 'P' }];
-        expect(settings.previewTitleRules(input)).toEqual({
-            ok: false,
-            error: 'Title profile conflicts with manual overrides for "(untitled rule)"',
+        expect(settings.previewTitleRules(input)).toMatchObject({
+            ok: true,
+            rules: [expect.objectContaining(input[0])],
         });
         expect(store.write).not.toHaveBeenCalled();
-        expect(settings.setTitleRules(input)).toBe(false);
+        expect(settings.setTitleRules(input)).toBe(true);
+        expect(settings.getEffectiveSetting('exposure', 'c1')).toBe(60);
     });
 });

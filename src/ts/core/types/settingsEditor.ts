@@ -15,7 +15,7 @@ export type RendererSchema = Record<string, SerializableSchemaEntry>;
 export type { Translate };
 
 /** A settings field's change callback: the setting key and its new value. */
-export type SettingChangeHandler = (key: string, value: unknown) => void;
+export type SettingChangeHandler = (key: string, value: unknown, editSession?: object) => void;
 
 /** A settings field's per-key reset. */
 export type SettingResetHandler = (key: string) => void;
@@ -38,6 +38,7 @@ export type HintsFor = (key: string) => SettingHint[];
  * `onReset` null/absent = the field has no reset button.
  */
 export interface SettingFieldProps {
+    boundedEdit?: boolean;
     id: string;
     settingKey: string;
     config: SerializableSchemaEntry;

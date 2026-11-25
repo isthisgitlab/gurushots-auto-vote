@@ -6,7 +6,8 @@
  * join decisions for every challenge and candidate, the photo tags, the customization badges, the scenario status and
  * the pins. The live code upgrades from the file the way the app does (`liveFromV1Raw`: the format-1 file where
  * `settings.json` lives, no `config.json`, the one-time import on the first read), which proves the import loses
- * nothing resolution depends on.
+ * nothing resolution depends on. Linked exposure is a current resolver policy change. The exact differences for
+ * these fixtures are checked separately against the frozen resolver.
  *
  * `V2_SEEDS` overrides the random files for local exploration: a comma list of seeds and ranges, e.g.
  * `V2_SEEDS=7,100-140 pnpm jest tests/settings/v2/equivalence`. A failure names the seed.
@@ -72,6 +73,64 @@ const environment = (c: Case): OracleEnv => ({ now: NOW, challenges: c.challenge
 
 const totals = { comparisons: 0, leaves: 0, startedAt: Date.now() };
 
+const linkedProfileDifferences = (): Tree => {
+    const differences: Tree = {
+        'global.profiles.BadPair.exposureTarget': 50,
+        'challenges.101.values.exposure': 90,
+        'challenges.101.values.exposureTarget': 90,
+        'challenges.102.values.exposure': 80,
+    };
+    const profiles = [
+        { name: 'Conflict', title: 'Macro World', index: 1, challenge: 101, candidate: 901, values: { exposure: 90 } },
+        {
+            name: 'BadPair',
+            title: 'Night Sky',
+            index: 2,
+            challenge: 102,
+            candidate: 903,
+            values: { exposure: 80, exposureTarget: 50 },
+        },
+    ];
+    for (const { name, title, index, challenge, candidate, values } of profiles) {
+        const profile = { name, values };
+        const source = { title, index, viaProfile: true };
+        const challengePath = `challenges.${challenge}`;
+        differences[`${challengePath}.customization`] = 'profile';
+        differences[`${challengePath}.titleProfile.profile`] = profile;
+        for (const [key, value] of Object.entries(values)) {
+            differences[`${challengePath}.titleProfile.ruleValues.${key}`] = value;
+            differences[`${challengePath}.titleProfile.ruleSources.${key}`] = source;
+        }
+        const targets = [`challenge ${challenge}`, `candidate ${candidate}`];
+        for (const target of [...targets, `title "${title}"`, ...(index === 2 ? ['title "night sky"'] : [])]) {
+            const targetPath = `targets.${target}`;
+            differences[`${targetPath}.ruleValues.profile`] = profile;
+            for (const [key, value] of Object.entries(values)) {
+                differences[`${targetPath}.ruleValues.values.${key}`] = value;
+                differences[`${targetPath}.ruleValues.sources.${key}`] = source;
+            }
+        }
+        for (const target of targets) {
+            differences[`targets.${target}.ruleProfile`] = profile;
+            differences[`targets.${target}.joinOptIn`] = true;
+            for (const [key, value] of Object.entries(values)) differences[`targets.${target}.join.${key}`] = value;
+        }
+    }
+    return differences;
+};
+
+const linkedExposureDifferences: Record<string, Tree> = {
+    'both sentinel families': { 'challenges.104.values.finalWindowExposure': 30 },
+    'profiles that fail as a whole: a conflict with an inherited value, a bad pair, a bad value, a big one':
+        linkedProfileDifferences(),
+    'seed 9': { 'challenges.201.values.exposure': 79 },
+    'seed 13': Object.fromEntries(
+        [200, 201, 202, 203, 290, 291, 299].map((id) => [`challenges.${id}.values.exposureTarget`, 100]),
+    ),
+    'seed 21': { 'global.profiles.day.exposureTarget': 22 },
+    'seed 30': { 'challenges.202.values.exposure': 6 },
+};
+
 const equivalence = (c: Case) => {
     const oracleEnv = environment(c);
     const oracle = createV1Oracle(c.oracleRaw ?? c.raw, oracleEnv);
@@ -80,16 +139,15 @@ const equivalence = (c: Case) => {
     const liveEnv = environment(c);
     const counter: Counter = { calls: 0 };
     const actual = snapshot(liveFromV1Raw(c.raw, liveEnv), c, liveEnv, variants, LIVE_NAMES, counter);
-    const { mismatches, compared } = diffTrees(withoutAppState(expected), withoutAppState(actual));
+    const expectedDifferences = linkedExposureDifferences[c.name] ?? {};
+    const { mismatches, compared } = diffTrees(
+        withoutAppState(expected),
+        withoutAppState(actual),
+        Object.keys(expectedDifferences).length + 8,
+    );
     totals.comparisons += counter.calls;
     totals.leaves += compared;
-    if (mismatches.length > 0) {
-        const lines = mismatches.map(
-            ({ path, oracle: want, live }) =>
-                `  ${path}\n    oracle ${JSON.stringify(want)}\n    live   ${JSON.stringify(live)}`,
-        );
-        throw new Error(`${c.name} differs from the oracle:\n${lines.join('\n')}\nfile: ${c.raw.slice(0, 600)}`);
-    }
+    expect(Object.fromEntries(mismatches.map(({ path, live }) => [path, live]))).toEqual(expectedDifferences);
 };
 
 describe('the live resolver against the frozen oracle', () => {

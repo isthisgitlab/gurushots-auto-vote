@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIpcQuery } from '@/api/useIpcQuery';
 import { useLatestRef } from './useLatestRef';
+import { useLinkedExposureChange } from './useLinkedExposureChange';
 import * as ipc from '@/api/ipc';
 import { valuesEqual } from '@/utils/valuesEqual';
 import { normalizeProfileName } from '@/utils/profileName';
 import { ON_ONLY_KEYS } from '../../core/settings/ruleBehaviour';
 import { errorMessage } from '../../core/errorMessage';
+import { exposureDefaultsFrom, isExposureKey, resolveLinkedExposure } from '../../core/linkedExposure';
 
 import type { IpcQueryTools } from '@/api/useIpcQuery';
 import type { ChallengeValues, RuleSource } from '../../core/types/settings';
@@ -154,18 +156,24 @@ export function useProfileEditor({
     // The on-only keys' `false` is stored nowhere but a challenge's own
     // override (the profile sanitizer drops it), so setting one "off" here
     // clears the key instead of writing a `false` that would vanish on save.
-    const changeOverride = useCallback<SettingChangeHandler>((key, value) => {
-        // An edit after a landed save retires its note.
-        setSavedNote(false);
-        setOverrides((prev) => {
-            if (value === false && ON_ONLY_KEYS.includes(key)) {
-                const next = { ...prev };
-                delete next[key];
-                return next;
-            }
-            return { ...prev, [key]: value };
-        });
-    }, []);
+    const globalExposure = exposureDefaultsFrom((key) => defaults?.[key] ?? schema?.[key]?.default);
+    const editExposure = useLinkedExposureChange(overrides, setOverrides, [globalExposure]);
+    const changeOverride = useCallback<SettingChangeHandler>(
+        (key, value, editSession) => {
+            // An edit after a landed save retires its note.
+            setSavedNote(false);
+            if (editExposure(key, value, editSession)) return;
+            setOverrides((prev) => {
+                if (value === false && ON_ONLY_KEYS.includes(key)) {
+                    const next = { ...prev };
+                    delete next[key];
+                    return next;
+                }
+                return { ...prev, [key]: value };
+            });
+        },
+        [editExposure],
+    );
 
     const clearOverride = useCallback<SettingResetHandler>((key) => {
         setSavedNote(false);
@@ -183,10 +191,11 @@ export function useProfileEditor({
         },
         [schema, defaults],
     );
-    const effectiveOf = useCallback(
-        (key: string) => (key in overrides ? overrides[key] : inheritedOf(key)),
-        [overrides, inheritedOf],
-    );
+    const exposure = resolveLinkedExposure([overrides, globalExposure]);
+    const effectiveOf = (key: string) => {
+        if (isExposureKey(key) && exposure[key] !== undefined) return exposure[key];
+        return key in overrides ? overrides[key] : inheritedOf(key);
+    };
 
     const discard = useCallback(async () => {
         setSaveError(false);

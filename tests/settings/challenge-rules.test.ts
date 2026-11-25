@@ -419,20 +419,11 @@ describe('settings facade — class conditions and the rule cascade', () => {
             expect(settings.getTitleRules().map((rule) => rule.autoJoinWithinHoursOfEnd)).toEqual([4, 2, 3]);
         });
 
-        test('a title-profile conflict on an untitled rule is logged by its generic name', () => {
-            seed(
-                base({
-                    profiles: { P: { exposure: 70 } },
-                    // A manual target below the profile's trigger: the pair is invalid.
-                    challenges: { c1: { exposureTarget: 60 } },
-                }),
-            );
+        test('an invalid profile on an untitled rule is logged by its generic name', () => {
+            seed(base({ profiles: { P: { exposure: 101 } } }));
             settings.rememberChallengeTitles([{ id: 'c1', ...challenge() }]);
             expect(settings.setTitleRules([{ pics: 4, profile: 'P' }])).toBe(false);
-            expect(cat.error).toHaveBeenCalledWith(
-                'Title profile conflicts with manual overrides for "(untitled rule)"',
-                null,
-            );
+            expect(cat.error).toHaveBeenCalledWith('Invalid title profile for "(untitled rule)"', null);
         });
     });
 

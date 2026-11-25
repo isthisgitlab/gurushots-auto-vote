@@ -8,7 +8,6 @@
 
 import { matchingRules } from './challengeRules';
 import { challengeTargetForId } from './challengeFacts';
-import { globalChallengeValues, challengeValueSetIsValid } from './defaults';
 import { RESERVED_PROFILE_NAMES, normalizeProfileName, findProfileKey, sanitizeProfileValues } from './profileStore';
 import { sanitizeTitleRuleInline } from './titleRuleSanitize';
 import { effectiveTimezone } from './uiDefaults';
@@ -39,7 +38,7 @@ const profileFromMatches = (settings: ConfigV2, matches: TitleRule[]): RuleProfi
     const stored = settings.profiles;
     const storedKey = findProfileKey(stored, normalizedProfile);
     if (storedKey === null) return null;
-    const values = sanitizeProfileValues(stored[storedKey], true, globalChallengeValues(settings), false);
+    const values = sanitizeProfileValues(stored[storedKey], true, false);
     if (values === null) return null;
     return { name: storedKey, values, rule };
 };
@@ -110,33 +109,4 @@ const ruleValuesForChallengeId = (
     suppressProfile: boolean = isTitleProfileSuppressed(settings, challengeId),
 ): ChallengeValues => ruleValuesFor(settings, challengeTargetForId(challengeId), suppressProfile).values;
 
-const titleProfileComposesWithKnownOverrides = (
-    settings: ConfigV2,
-    rule: TitleRule,
-    rawProfileValues: unknown,
-): boolean => {
-    const globalValues = globalChallengeValues(settings);
-    const profileValues = sanitizeProfileValues(rawProfileValues, true, globalValues);
-    if (profileValues === null) return false;
-
-    return Object.entries(settings.challenges).every(([challengeId, { values: overrides }]) => {
-        // Only a challenge with values of its own has a combination to check.
-        if (!overrides || isTitleProfileSuppressed(settings, challengeId)) return true;
-        // Applicability must use the REAL matcher, not an exact title compare:
-        // a contains/starts or class-keyed rule reaches challenges whose title
-        // is not the rule's own, and skipping those would let a conflicting
-        // profile+override combination save unvalidated.
-        if (matchingRules([rule], challengeTargetForId(challengeId), ruleTimeZone(settings)).length === 0) return true;
-        const effective = { ...globalValues, ...profileValues, ...overrides };
-        return challengeValueSetIsValid(effective, { ...profileValues, ...overrides }, challengeId);
-    });
-};
-
-export {
-    ruleTimeZone,
-    profileFromMatches,
-    ruleValuesFor,
-    ruleValuesForChallengeId,
-    isTitleProfileSuppressed,
-    titleProfileComposesWithKnownOverrides,
-};
+export { ruleTimeZone, profileFromMatches, ruleValuesFor, ruleValuesForChallengeId, isTitleProfileSuppressed };

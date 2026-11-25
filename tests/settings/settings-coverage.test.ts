@@ -246,13 +246,12 @@ describe('settings facade — edge cases', () => {
             expect(store.write).not.toHaveBeenCalled();
         });
 
-        test('setChallengeOverrides rebuilds a null container and rejects an invalid combination', () => {
+        test('setChallengeOverrides rebuilds a null container and rejects an out-of-range value', () => {
             seed({ challenges: null });
             expect(settings.setChallengeOverrides(' c1 ', { exposure: 70 })).toBe(true);
             expect(saved().challenges.c1.values).toEqual({ exposure: 70 });
 
-            // exposureTarget must be 0 or >= exposure.
-            expect(settings.setChallengeOverrides('c1', { exposureTarget: 50 })).toBe(false);
+            expect(settings.setChallengeOverrides('c1', { exposureTarget: -1 })).toBe(false);
             expect(saved().challenges.c1.values).toEqual({ exposure: 70 });
         });
 
@@ -264,17 +263,16 @@ describe('settings facade — edge cases', () => {
             expect(store.write).not.toHaveBeenCalled();
         });
 
-        test('removeChallengeOverride refuses a removal that would leave an invalid combination', () => {
+        test('removeChallengeOverride resolves the remaining target against the inherited trigger', () => {
             seed({
                 defaults: { exposure: 50, exposureTarget: 60 },
                 challenges: { c1: { values: { exposure: 40, exposureTarget: 45 } } },
             });
-            // Dropping exposure would inherit 50 with the override target 45 < 50.
-            expect(settings.removeChallengeOverride('exposure', 'c1')).toBe(false);
-            expect(store.write).not.toHaveBeenCalled();
-            // Dropping the target inherits 60 >= 40 — fine.
+            expect(settings.removeChallengeOverride('exposure', 'c1')).toBe(true);
+            expect(saved().challenges.c1.values).toEqual({ exposureTarget: 45 });
+            expect(settings.getEffectiveSetting('exposure', 'c1')).toBe(45);
             expect(settings.removeChallengeOverride('exposureTarget', 'c1')).toBe(true);
-            expect(saved().challenges.c1.values).toEqual({ exposure: 40 });
+            expect(settings.getEffectiveSetting('exposure', 'c1')).toBe(50);
         });
 
         test('getEffectiveSetting guards unknown keys and missing containers', () => {
@@ -304,7 +302,7 @@ describe('settings facade — edge cases', () => {
             expect(settings.replaceChallengeOverrides('c1', { exposure: 70 }, 'yes')).toBe(false);
             expect(settings.replaceChallengeOverrides('c1', [70])).toBe(false);
             expect(settings.replaceChallengeOverrides('c1', { bogus: 1 })).toBe(false);
-            expect(settings.replaceChallengeOverrides('c1', { exposure: 50, exposureTarget: 40 })).toBe(false);
+            expect(settings.replaceChallengeOverrides('c1', { exposure: 50, exposureTarget: 101 })).toBe(false);
             expect(store.write).not.toHaveBeenCalled();
         });
 
@@ -468,16 +466,17 @@ describe('settings facade — edge cases', () => {
             seed({ ...base, challenges: null }, pins);
             expect(settings.setTitleRules([{ title: 'Alpha', profile: 'P' }])).toBe(true);
 
-            // A conflicting override on a challenge the rule applies to fails closed.
+            // The manual target wins when the profile would exceed it.
             const conflicting = { exposureTarget: 60 };
             seed({ ...base, challenges: { c1: { values: conflicting } } }, pins);
-            expect(settings.setTitleRules([{ title: 'Alpha', profile: 'P' }])).toBe(false);
+            expect(settings.setTitleRules([{ title: 'Alpha', profile: 'P' }])).toBe(true);
+            expect(settings.getEffectiveSetting('exposure', 'c1')).toBe(60);
 
             // ...unless that challenge suppresses its title profile.
             seed({ ...base, challenges: { c1: { values: conflicting, suppressRuleProfile: true } } }, pins);
             expect(settings.setTitleRules([{ title: 'Alpha', profile: 'P' }])).toBe(true);
 
-            // Overrides on a challenge the rule does not reach are not checked.
+            // A challenge the rule does not reach still applies its manual value.
             seed({ ...base, challenges: { c9: { values: conflicting } } }, pins);
             expect(settings.setTitleRules([{ title: 'Alpha', profile: 'P' }])).toBe(true);
 
@@ -569,7 +568,7 @@ describe('settings facade — edge cases', () => {
             const huge: Record<string, number> = {};
             for (let i = 0; i < 101; i++) huge[`k${i}`] = i;
             seed({
-                profiles: { constructor: { exposure: 70 }, Good: { exposure: 70, exposureTarget: 5 }, Huge: huge },
+                profiles: { constructor: { exposure: 70 }, Good: { exposure: 70, exposureTarget: 101 }, Huge: huge },
             });
             expect(settings.getChallengeProfiles()).toEqual({ Good: { exposure: 70 }, Huge: {} });
         });
@@ -634,9 +633,7 @@ describe('settings facade — edge cases', () => {
             expect(cat.error).toHaveBeenCalledWith('Invalid profile name: "__proto__"', null);
         });
 
-        test('seedIntentProfiles marks an intent that cannot be saved on this install as seeded', () => {
-            // Global final-window settings that are self-inconsistent make the one
-            // intent that inherits them (Just Participate) fail validation.
+        test('all stock presets seed and apply with conflicting inherited final-window settings', () => {
             seed({
                 defaults: {
                     useFinalWindowExposure: true,
@@ -646,12 +643,10 @@ describe('settings facade — edge cases', () => {
             });
             expect(settings.seedIntentProfiles()).toBe(true);
             const config = saved();
-            expect(config.profiles['Just Participate']).toBeUndefined();
-            expect(config.profiles['Finish Strong']).toBeDefined();
-            expect(config.seededProfiles).toContain('just participate');
-            expect(cat.warning).toHaveBeenCalledWith(
-                expect.stringContaining('Skipped seeding intent profile "Just Participate"'),
-            );
+            expect(config.seededProfiles).toEqual(['just participate', 'finish strong', 'max exposure']);
+            for (const name of ['Just Participate', 'Finish Strong', 'Max Exposure']) {
+                expect(settings.applyChallengeProfile(name, 'c1')).toBe(true);
+            }
         });
     });
 

@@ -31,7 +31,13 @@ export interface ChallengeGroupContext {
     defaults: Record<string, unknown> | null | undefined;
     form: Pick<
         ReturnType<typeof useChallengeOverrides>,
-        'overrides' | 'profileValues' | 'inheritedOf' | 'ruleSourceOf' | 'changeOverride' | 'clearOverride'
+        | 'overrides'
+        | 'profileValues'
+        | 'inheritedOf'
+        | 'effectiveOf'
+        | 'ruleSourceOf'
+        | 'changeOverride'
+        | 'clearOverride'
     >;
     hintsFor: HintsFor;
 }
@@ -137,7 +143,7 @@ function ChallengeSettingCell({
     const { viewPrefsLocal } = usePlatformCapabilities();
     const hasOverride = key in form.overrides;
     const hasProfileValue = Object.prototype.hasOwnProperty.call(form.profileValues, key);
-    const currentValue = hasOverride ? form.overrides[key] : form.inheritedOf(key);
+    const currentValue = form.effectiveOf(key);
     const scheduleShift = scheduleShiftOf(key, currentValue, challenge);
     const inputId = `challenge-setting-${key}`;
     // The remote page keeps the view preferences on the device, so the compact row says so. A
@@ -174,6 +180,7 @@ function ChallengeSettingCell({
                 onChange={form.changeOverride}
                 onReset={applicable && hasOverride ? form.clearOverride : null}
                 disabled={!applicable}
+                boundedEdit={isExposureKey(key)}
                 describedBy={deviceHint}
             />
             {deviceHint && <LocalOnlyHint id={deviceHint} />}
@@ -271,3 +278,4 @@ export function ChallengeSettingsGroup({
         </div>
     );
 }
+import { isExposureKey } from '../../../core/linkedExposure';

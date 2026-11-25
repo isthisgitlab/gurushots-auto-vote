@@ -35,7 +35,6 @@ import { INSTALLATION_KEY, ledgerFor as modeLedger } from '../scenarioStateStore
 import { isPlainObject } from '../plainObject';
 import { storedSettingValue } from '../scenarios/expressions';
 import { withPoolEvents } from '../scenarios/runtime';
-import { challengeValueSetIsValid, globalChallengeValues } from './defaults';
 import { appValueAllowed } from './loadValidation';
 import { findProfileKey, normalizeProfileName, sanitizeProfileValues } from './profileStore';
 import { findStoredScenario, hasStoredScenarios } from './scenarios';
@@ -235,7 +234,7 @@ const resolvePhaseProfile = (
     const unavailable = { ok: false as const, reason: `profile-unavailable: ${name}` };
     const key = findProfileKey(settings.profiles, normalizeProfileName(name));
     if (key === null) return unavailable;
-    const values = sanitizeProfileValues(settings.profiles[key], true, globalChallengeValues(settings), false);
+    const values = sanitizeProfileValues(settings.profiles[key], true, false);
     if (values === null) return unavailable;
     if (Object.keys(values).some((settingKey) => !scenarioCapability(settingKey)?.phaseWrite.includes('challenge'))) {
         return unavailable;
@@ -253,7 +252,7 @@ const checkPhaseProfileIn = (
 ): { ok: true; name: string } | { ok: false; reason: string } => {
     const key = findProfileKey(settings.profiles, normalizeProfileName(name));
     if (key === null) return { ok: false, reason: `there is no profile named "${name}"` };
-    const values = sanitizeProfileValues(settings.profiles[key], true, globalChallengeValues(settings), false);
+    const values = sanitizeProfileValues(settings.profiles[key], true, false);
     if (values === null) return { ok: false, reason: `the profile "${key}" is not valid` };
     const forbidden = Object.keys(values).find(
         (settingKey) => !scenarioCapability(settingKey)?.phaseWrite.includes('challenge'),
@@ -412,11 +411,10 @@ const overlaySources = (
 
 /**
  * Prepares the overlay of a phase from the binding values its owner resolved: converts each to the setting's stored
- * form, and validates every value (each setting's own validation, then the set as a whole against the base values it
- * combines with). A binding that is not known, does not fit its setting or fails validation, or a profile that cannot
- * be used, makes the whole phase unprepared: it is never a partial overlay.
+ * form, and validates each value. The challenge settings reader resolves linked exposure values with the base layers.
+ * A binding that is not known, does not fit its setting or fails validation, or a profile that cannot be used makes
+ * the whole phase unprepared.
  *
- * @param base - the raw base values of every setting (what the overlay sits on)
  * @param bound - the resolved value of each binding of the phase
  * @param now - unix seconds
  */
@@ -424,9 +422,7 @@ const prepareOverlay = (
     settings: ConfigV2,
     scenario: ScenarioDocument,
     state: Pick<ScenarioState, 'phase' | 'phaseEnteredAt' | 'published' | 'phasePatch' | 'phaseProfile'>,
-    base: Record<string, unknown>,
     bound: Record<string, ValueState<ExprValue>>,
-    challengeId: string,
     validUntil: number | null,
     now: number,
     schedules?: ResolvedSchedules,
@@ -458,23 +454,14 @@ const prepareOverlay = (
     }
     const literals = phase.settings ?? {};
     const patch = { ...state.phasePatch };
-    const candidates: ChallengeValues = { ...profile?.values, ...literals, ...bindings, ...patch };
-    const context = { ...base, ...candidates };
     // A patch is the top tier: a key a phase may not write, or a value that does not hold, is refused like a binding.
     for (const key of Object.keys(patch)) {
         if (!scenarioCapability(key)?.phaseWrite.includes('challenge')) {
             return refuse(key, 'not a setting a phase may change');
         }
     }
-    for (const key of [...Object.keys(bindings), ...Object.keys(patch)]) {
-        const value = hasOwn(patch, key) ? patch[key] : bindings[key];
-        if (!validateSetting(key, value, context)) return refuse(key, String(getValidationError(key, value, context)));
-    }
-    if (!challengeValueSetIsValid(context, candidates, challengeId)) {
-        return refuse(
-            Object.keys(patch)[0] ?? Object.keys(bindings)[0] ?? null,
-            'these values conflict with each other or with the settings they combine with',
-        );
+    for (const [key, value] of Object.entries({ ...bindings, ...literals, ...patch })) {
+        if (!validateSetting(key, value)) return refuse(key, String(getValidationError(key, value)));
     }
     return {
         ok: true,

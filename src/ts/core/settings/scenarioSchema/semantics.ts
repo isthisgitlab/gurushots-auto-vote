@@ -501,7 +501,6 @@ const settingActionIssues = (
     stepPath: string,
     scope: ScenarioScope,
     stages: readonly ScenarioStage[],
-    globalDefaults: Record<string, unknown>,
 ): ScenarioIssue[] => {
     const refusal = phaseRefusal(step.key, scope);
     if (refusal !== undefined) return [{ path: `${stepPath}.key`, message: refusal }];
@@ -525,9 +524,8 @@ const settingActionIssues = (
         return [...checked.issues, ...mismatch];
     }
     if (!descriptorAccepts(descriptor, step.value)) return [{ path, message: `${step.key} does not take this value` }];
-    const context = { ...globalDefaults, [step.key]: step.value };
-    return schemaEntry(step.key) && !validateSetting(step.key, step.value, context)
-        ? [{ path, message: String(getValidationError(step.key, step.value, context)) }]
+    return schemaEntry(step.key) && !validateSetting(step.key, step.value)
+        ? [{ path, message: String(getValidationError(step.key, step.value)) }]
         : [];
 };
 
@@ -688,7 +686,7 @@ export const semanticIssues = (
                     issues.push(...priceLimitIssues(step.maxCoins, stepPath, stages));
                 if (step.type === 'runAutomation') issues.push(...automationIssues(step.operation, stepPath, stages));
                 if (step.type === 'setSetting' || step.type === 'clearSetting') {
-                    issues.push(...settingActionIssues(step, stepPath, scope, stages, globalDefaults));
+                    issues.push(...settingActionIssues(step, stepPath, scope, stages));
                 }
                 if (step.type === 'useProfile' && step.name !== null && profiles) {
                     const refused = profileIssue(step.name, `${stepPath}.name`, profiles);

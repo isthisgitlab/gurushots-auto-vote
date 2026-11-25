@@ -8,7 +8,6 @@
 import * as logger from '../logger';
 import { INTENT_PROFILES } from './intentProfiles';
 import { loadSettings, saveSettings } from './persistence';
-import { globalChallengeValues } from './defaults';
 import {
     MAX_CHALLENGE_PROFILES,
     MAX_PROFILE_NAME_LENGTH,
@@ -19,7 +18,6 @@ import {
     sanitizeProfileValues,
 } from './profileStore';
 import { sanitizeTitleRuleInline } from './titleRuleSanitize';
-import { titleProfileComposesWithKnownOverrides } from './ruleResolution';
 import {
     ownChallengeValues,
     replaceChallengeOverridesInSettings,
@@ -44,39 +42,19 @@ const _isReservedName = (name: unknown): boolean => RESERVED_PROFILE_NAMES.has(n
 const getChallengeProfiles = (): Record<string, ChallengeValues> => {
     const settings = loadSettings();
     const stored = settings.profiles;
-    const globalDefaults = globalChallengeValues(settings);
     const profiles: Record<string, ChallengeValues> = {};
     for (const name of Object.keys(stored)) {
         if (_isReservedName(name)) continue;
         // failClosed=false drops invalid values instead of rejecting, so it never yields null.
-        profiles[name] = sanitizeProfileValues(stored[name], false, globalDefaults) as ChallengeValues;
+        profiles[name] = sanitizeProfileValues(stored[name], false) as ChallengeValues;
     }
     return profiles;
 };
 
-const _updateAssignedProfileRules = (
-    settings: ConfigV2,
-    normalizedName: string,
-    displayName: string,
-    values: ChallengeValues,
-): boolean => {
-    const rules = settings.rules;
-    const assigned = rules.filter((rule) => normalizeProfileName(rule?.profile) === normalizedName);
-    if (assigned.some((rule) => !titleProfileComposesWithKnownOverrides(settings, rule, values))) {
-        logger
-            .withCategory('settings')
-            .error(
-                `Profile overwrite conflicts with manual challenge overrides: "${profileNameForLog(displayName)}"`,
-                null,
-            );
-        return false;
-    }
-    if (assigned.length) {
-        settings.rules = rules.map((rule) =>
-            normalizeProfileName(rule?.profile) === normalizedName ? { ...rule, profile: displayName } : rule,
-        );
-    }
-    return true;
+const _updateAssignedProfileRules = (settings: ConfigV2, normalizedName: string, displayName: string): void => {
+    settings.rules = settings.rules.map((rule) =>
+        normalizeProfileName(rule?.profile) === normalizedName ? { ...rule, profile: displayName } : rule,
+    );
 };
 
 /**
@@ -119,7 +97,7 @@ const saveChallengeProfile = (name: unknown, values: unknown): boolean => {
     // The scenario a profile holds is an assignment (a rule that uses the profile, and every challenge it was applied
     // to, runs it): moving it is gated like any other assignment (scenarioLifecycle.ts). Anything else is written as ever.
     const probe = loadSettings();
-    const sanitizedProbe = sanitizeProfileValues(values, true, globalChallengeValues(probe));
+    const sanitizedProbe = sanitizeProfileValues(values, true);
     if (sanitizedProbe === null) {
         return false;
     }
@@ -128,10 +106,7 @@ const saveChallengeProfile = (name: unknown, values: unknown): boolean => {
     if (before === after) return _writeProfile(probe, trimmed, normalized, sanitizedProbe);
     const gated = runGated(
         () => ({ names: [before, after] }),
-        (settings) => {
-            const sanitized = sanitizeProfileValues(values, true, globalChallengeValues(settings));
-            return sanitized !== null && _writeProfile(settings, trimmed, normalized, sanitized);
-        },
+        (settings) => _writeProfile(settings, trimmed, normalized, sanitizedProbe),
     );
     return gated.ok && gated.value;
 };
@@ -143,7 +118,7 @@ const _profileScenario = (settings: ConfigV2, normalized: string): string => {
     return isPlainObject(values) ? normalizeProfileName(values.scenario) : '';
 };
 
-/** Stores a sanitized profile on a loaded configuration (the profile cap and the rules that use it are checked). */
+/** Stores a sanitized profile on a loaded configuration, keeping its rule references in sync with its name. */
 const _writeProfile = (
     settings: ConfigV2,
     trimmed: string,
@@ -160,7 +135,7 @@ const _writeProfile = (
         return false;
     }
 
-    if (existed && !_updateAssignedProfileRules(settings, normalized, trimmed, sanitized)) return false;
+    if (existed) _updateAssignedProfileRules(settings, normalized, trimmed);
     profiles[trimmed] = sanitized;
     settings.profiles = profiles;
     return saveSettings(settings);
@@ -251,17 +226,13 @@ const applyChallengeProfile = (name: unknown, challengeId: ChallengeIdInput): bo
             return null;
         }
 
-        const globalDefaults = globalChallengeValues(settings);
         // Fail-closed: sanitizeProfileValues logs the failing key, so a
         // schema-drifted profile's failure is diagnosable from the log.
-        const sanitized = sanitizeProfileValues(stored[storedKey], true, globalDefaults);
+        const sanitized = sanitizeProfileValues(stored[storedKey], true);
         if (sanitized === null) {
             return null;
         }
 
-        // Safety net: sanitizeProfileValues already validated these values against
-        // the same {globals + profile} context, so this only fails if a schema rule
-        // starts depending on the challenge id. Kept so nothing invalid is persisted.
         // A profile never holds an on-only key's `false`, so replacing every override would silently
         // switch the challenge's own Manual Only off: that value stays, unless the profile sets the key itself
         // (a profile's "on" turns it on even over the challenge's own `false`).

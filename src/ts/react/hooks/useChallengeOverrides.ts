@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSessionLoad } from './useSessionLoad';
 import { useLatestRef } from './useLatestRef';
+import { useLinkedExposureChange } from './useLinkedExposureChange';
 import { perChallengeOnly } from './perChallengeOnly';
 import * as ipc from '@/api/ipc';
 import { valuesEqual } from '@/utils/valuesEqual';
@@ -9,6 +10,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import type { ChallengeValues, RuleSource, TitleRuleInfo } from '../../core/types/settings';
 import type { RendererSchema, SettingChangeHandler, SettingResetHandler } from '../../core/types/settingsEditor';
 import { errorMessage } from '../../core/errorMessage';
+import { exposureDefaultsFrom, isExposureKey, resolveLinkedExposure } from '../../core/linkedExposure';
 import { ON_ONLY_KEYS } from '../../core/settings/ruleBehaviour';
 
 /**
@@ -277,7 +279,13 @@ function useTitleRules({
     const ruleLayer: ChallengeValues = rules.suppressed ? rules.inlineValues : rules.ruleValues;
     const inheritedOf = (key: string) =>
         hasOwn(ruleLayer, key) ? ruleLayer[key] : (defaults?.[key] ?? schema?.[key]?.default);
-    const effectiveOf = (key: string) => (key in overrides ? overrides[key] : inheritedOf(key));
+    const globalExposure = exposureDefaultsFrom((key) => defaults?.[key] ?? schema?.[key]?.default);
+    const editExposure = useLinkedExposureChange(overrides, setOverrides, [ruleLayer, globalExposure]);
+    const effectiveExposure = resolveLinkedExposure([overrides, ruleLayer, globalExposure]);
+    const effectiveOf = (key: string) => {
+        if (isExposureKey(key) && effectiveExposure[key] !== undefined) return effectiveExposure[key];
+        return key in overrides ? overrides[key] : inheritedOf(key);
+    };
     const ruleSourceOf = (key: string) => ruleSourceFor(rules, ruleLayer, key);
 
     /**
@@ -310,6 +318,7 @@ function useTitleRules({
         profileValues,
         inheritedOf,
         effectiveOf,
+        editExposure,
         ruleSourceOf,
         profileReplacesWarning,
         applyProfile,
@@ -371,7 +380,7 @@ export function useChallengeOverrides({
         if (isOpen) void refetchSchema();
     }, [isOpen, refetchSchema]);
 
-    const { setTitleRules, ...profile } = useTitleRules({
+    const { setTitleRules, editExposure, ...profile } = useTitleRules({
         isOpen,
         challengeId,
         challengeTitle,
@@ -423,7 +432,9 @@ export function useChallengeOverrides({
         loadFailed,
         saving,
         saveError,
-        changeOverride,
+        changeOverride: (key: string, value: unknown, editSession?: object) => {
+            if (!editExposure(key, value, editSession)) changeOverride(key, value);
+        },
         clearOverride,
         clearAll,
         save,

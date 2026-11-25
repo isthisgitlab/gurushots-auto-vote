@@ -14,7 +14,6 @@
 import * as logger from '../logger';
 import { RESERVED_PROFILE_NAMES, normalizeProfileName } from './limits';
 import { schemaEntry, validateSetting } from './schema';
-import { challengeValueSetIsValid } from './defaults';
 import { loggableSettingValue } from './logValue';
 import { isDroppedOffValue } from './ruleBehaviour';
 
@@ -54,28 +53,23 @@ const _profileSchemaValues = (values: ChallengeValues): ChallengeValues => {
     return whitelisted;
 };
 
-const _logProfileValidationFailure = (logInvalid: boolean, message: string, value: unknown = null) => {
-    if (logInvalid) logger.withCategory('settings').error(message, value);
-};
-
 const _validatedProfileValues = (
     whitelisted: ChallengeValues,
-    contextSettings: ChallengeValues,
     failClosed: boolean,
     logInvalid: boolean,
 ): ChallengeValues | null => {
     const sanitized: ChallengeValues = {};
     for (const [key, value] of Object.entries(whitelisted)) {
-        if (validateSetting(key, value, contextSettings)) {
+        if (validateSetting(key, value)) {
             sanitized[key] = value;
             continue;
         }
         if (!failClosed) continue;
-        _logProfileValidationFailure(
-            logInvalid,
-            `Invalid profile value for setting ${key}:`,
-            loggableSettingValue(key, value),
-        );
+        if (logInvalid) {
+            logger
+                .withCategory('settings')
+                .error(`Invalid profile value for setting ${key}:`, loggableSettingValue(key, value));
+        }
         return null;
     }
     return sanitized;
@@ -84,8 +78,8 @@ const _validatedProfileValues = (
 /**
  * Sanitize a profile's values map. Keeps only keys that are perChallenge in
  * SETTINGS_SCHEMA (unknown keys validate as true in validateSetting, so the
- * whitelist is mandatory) and validates each value with the full batch as
- * context so cross-field rules (e.g. exposureTarget >= exposure) hold.
+ * whitelist is mandatory) and validates each raw field. Linked exposure
+ * values are resolved when the profile is composed with its other layers.
  *
  * failClosed=true (save/apply/automatic execution): returns null on any invalid
  * value. Mutation paths log the failing key; repeated automatic reads suppress
@@ -96,7 +90,6 @@ const _validatedProfileValues = (
 const sanitizeProfileValues = (
     values: unknown,
     failClosed: boolean,
-    globalDefaults: ChallengeValues,
     logInvalid: boolean = true,
 ): ChallengeValues | null => {
     const rejected = failClosed ? null : {};
@@ -110,19 +103,7 @@ const sanitizeProfileValues = (
         return rejected;
     }
 
-    const whitelisted = _profileSchemaValues(values as ChallengeValues);
-    const contextSettings = { ...globalDefaults, ...whitelisted };
-    const sanitized = _validatedProfileValues(whitelisted, contextSettings, failClosed, logInvalid);
-    if (sanitized === null) return null;
-    // A changed trigger can invalidate an inherited dependent field that is
-    // not itself present in the sparse profile (for example exposure=90 with
-    // a global exposureTarget=80). Validate the complete effective baseline,
-    // not only the keys contributed by the profile.
-    if (failClosed && !challengeValueSetIsValid(contextSettings, whitelisted)) {
-        _logProfileValidationFailure(logInvalid, 'Profile values conflict with inherited challenge settings');
-        return null;
-    }
-    return sanitized;
+    return _validatedProfileValues(_profileSchemaValues(values as ChallengeValues), failClosed, logInvalid);
 };
 
 export {

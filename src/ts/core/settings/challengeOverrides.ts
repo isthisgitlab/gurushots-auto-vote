@@ -8,11 +8,12 @@
 
 import * as logger from '../logger';
 import { clockSec } from '../simulationScope';
-import { schemaEntry, schemaDefault, getValidationError } from './schema';
+import { EXPOSURE_KEYS, exposureDefaultsFrom, isExposureKey, resolveLinkedExposure } from '../linkedExposure';
+import { schemaEntry, schemaDefault, getValidationError, validateSetting } from './schema';
 import type { SettingKey, SettingsSchemaEntry } from './schema';
 import { loadSettings, saveSettings } from './persistence';
 import { runGated } from './scenarioMutationGate';
-import { valuesEqual, globalChallengeValues, challengeValueSetIsValid } from './defaults';
+import { valuesEqual, globalChallengeValues } from './defaults';
 import { ruleValuesForChallengeId, isTitleProfileSuppressed } from './ruleResolution';
 import {
     ScenarioSettingUnavailableError,
@@ -60,11 +61,23 @@ import type { ScenarioDocument } from './scenarioSchema';
  * Whether an override equal to the inherited value is still stored. The join keys
  * are, for a challenge that is not joined yet: a rule cannot be resolved by id for
  * it, so an entry that merely equals what the global default or a rule gives today
- * would silently stop applying to it. A joined challenge resolves rules by id, so
- * it keeps the normal "equal to inherited means no override".
+ * would silently stop applying to it. Linked exposure values retain an equal
+ * override when its source priority affects the resolved values.
  */
-const keepsEqualValue = (settingKey: string, challengeId: string | number): boolean =>
-    JOIN_KEPT_KEYS.includes(settingKey) && !isActiveChallengeId(challengeId);
+const keepsEqualValue = (
+    settingKey: string,
+    challengeId: string | number,
+    overrides: ChallengeValues,
+    inherited: readonly ChallengeValues[],
+): boolean => {
+    if (JOIN_KEPT_KEYS.includes(settingKey) && !isActiveChallengeId(challengeId)) return true;
+    if (!isExposureKey(settingKey)) return false;
+    const remaining = { ...overrides };
+    delete remaining[settingKey];
+    const explicit = resolveLinkedExposure([overrides, ...inherited]);
+    const implicit = resolveLinkedExposure([remaining, ...inherited]);
+    return EXPOSURE_KEYS.some((key) => explicit[key] !== implicit[key]);
+};
 
 /**
  * Trimmed string form of a caller-supplied challenge id ('' when absent, or when it names an
@@ -206,11 +219,9 @@ const _applyChallengeOverride = (
     }
 
     const globalDefaults = globalChallengeValues(settings);
-    const inheritedDefaults = { ...globalDefaults, ...ruleValuesForChallengeId(settings, challengeId) };
-    const existingOverrides = ownChallengeValues(settings, challengeId) || {};
-    const contextSettings = { ...inheritedDefaults, ...existingOverrides, [settingKey]: value };
-
-    if (!challengeValueSetIsValid(contextSettings, { [settingKey]: value }, challengeId)) {
+    const ruleValues = ruleValuesForChallengeId(settings, challengeId);
+    const inheritedDefaults = { ...globalDefaults, ...ruleValues };
+    if (!validateSetting(settingKey, value)) {
         logger
             .withCategory('settings')
             .error(`Invalid value for setting ${settingKey}:`, loggableSettingValue(settingKey, value));
@@ -220,7 +231,10 @@ const _applyChallengeOverride = (
     const container = _ensureChallengeContainer(settings, challengeId);
     // inheritedDefaults always holds every schema key (globalChallengeValues
     // starts from the full schema defaults), and settingKey is schema-checked above.
-    if (keepsEqualValue(settingKey, challengeId) || !valuesEqual(value, inheritedDefaults[settingKey])) {
+    if (
+        !valuesEqual(value, inheritedDefaults[settingKey]) ||
+        keepsEqualValue(settingKey, challengeId, { ...container, [settingKey]: value }, [ruleValues, globalDefaults])
+    ) {
         container[settingKey] = value;
         return 'set';
     }
@@ -322,16 +336,18 @@ const replaceChallengeOverridesInSettings = (
     const globalValues = globalChallengeValues(settings);
     const ruleValues = ruleValuesForChallengeId(settings, challengeId, suppressTitleProfile);
     const inherited = { ...globalValues, ...ruleValues };
-    // Non-null plain object: _challengeOverrideEntries returned entries.
-    const overrideValues = overrides as ChallengeValues;
-    const effective = { ...inherited, ...overrideValues };
-    if (!challengeValueSetIsValid(effective, { ...ruleValues, ...overrideValues }, challengeId)) {
+    if (entries.some(([key, value]) => !validateSetting(key, value))) {
         return false;
     }
 
-    const container: ChallengeValues = {};
+    const container: ChallengeValues = Object.fromEntries(entries);
     for (const [key, value] of entries) {
-        if (keepsEqualValue(key, challengeId) || !valuesEqual(value, inherited[key])) container[key] = value;
+        if (
+            valuesEqual(value, inherited[key]) &&
+            !keepsEqualValue(key, challengeId, container, [ruleValues, globalValues])
+        ) {
+            delete container[key];
+        }
     }
     if (Object.keys(container).length) {
         if (!Object.hasOwn(settings.challenges, challengeId)) settings.challenges[challengeId] = {};
@@ -444,6 +460,9 @@ const _unavailableReason = (subject: SubjectLayer): string | null => {
 const _phaseWritesKey = (settingKey: string): boolean =>
     scenarioCapability(settingKey)?.phaseWrite.includes('challenge') === true;
 
+const _phaseOverlay = (subject: SubjectLayer): ResolvedOverlay | undefined =>
+    subject.kind === 'phase' && subject.layer.overlay.ok ? subject.layer.overlay.value : undefined;
+
 /**
  * Get the effective value for a setting: the active scenario phase's value,
  * then the per-challenge override, matching rules, and the global default. A setting the installation scenario
@@ -476,9 +495,13 @@ const getEffectiveSetting = <K extends string>(
     // assignment itself is never overlaid.
     if (challengeId && settingKey !== 'scenario' && entry.perChallenge) {
         const subject = _subjectLayer(settings, challengeId);
+        const overlay = _phaseOverlay(subject);
         const unavailable = _unavailableReason(subject);
         if (unavailable !== null && _phaseWritesKey(settingKey)) {
             throw new ScenarioSettingUnavailableError(settingKey, String(challengeId), unavailable);
+        }
+        if (isExposureKey(settingKey)) {
+            return _challengeExposure(settings, challengeId, overlay)[settingKey] as SettingValueOf<K>;
         }
         // A phase's photo pool stands in for its Chosen Photos settings; the runtime patch is above it.
         const found =
@@ -489,6 +512,19 @@ const getEffectiveSetting = <K extends string>(
     }
     return _resolveEffectiveSetting(settings, settingKey, challengeId) as SettingValueOf<K>;
 };
+
+const exposureDefaults = exposureDefaultsFrom(schemaDefault);
+
+/** Start from raw values so a new phase can replace the trigger that previously adjusted a target. */
+const _challengeExposure = (settings: ConfigV2, challengeId: string | number, overlay?: ResolvedOverlay) =>
+    resolveLinkedExposure([
+        ...(overlay
+            ? [overlay.patch, { ...overlay.bindings, ...overlay.literals }, overlay.profile?.values ?? {}]
+            : []),
+        ownChallengeValues(settings, challengeId) ?? {},
+        ruleValuesForChallengeId(settings, challengeId),
+        { ...exposureDefaults, ...settings.defaults },
+    ]);
 
 /**
  * The stored layers of getEffectiveSetting, over an already loaded settings
@@ -554,7 +590,10 @@ const _typedValue = (settingKey: string, raw: unknown): ValueState<ExprValue> =>
 
 const _baseStates = (settings: ConfigV2, challengeId: ChallengeIdInput): Record<string, ValueState<ExprValue>> =>
     Object.fromEntries(
-        Object.entries(_baseRawValues(settings, challengeId)).map(([key, raw]) => [key, _typedValue(key, raw)]),
+        Object.entries({
+            ..._baseRawValues(settings, challengeId),
+            ...(challengeId ? _challengeExposure(settings, challengeId) : {}),
+        }).map(([key, raw]) => [key, _typedValue(key, raw)]),
     );
 
 /**
@@ -574,11 +613,21 @@ const readScenarioSetting = (
     challengeId: ChallengeIdInput = null,
 ): ValueState<ExprValue> => {
     const settings = loadSettings();
-    const base = () => _typedValue(settingKey, _baseRawValues(settings, challengeId)[settingKey]);
+    const base = () =>
+        _typedValue(
+            settingKey,
+            challengeId && isExposureKey(settingKey)
+                ? _challengeExposure(settings, challengeId)[settingKey]
+                : _baseRawValue(settings, settingKey, challengeId),
+        );
     if (view === 'base' || !challengeId || !isOverlayKey(settingKey)) return base();
     const subject = _subjectLayer(settings, challengeId);
+    const overlay = _phaseOverlay(subject);
     const unavailable = _unavailableReason(subject);
     if (unavailable !== null && _phaseWritesKey(settingKey)) return unknownOf(unavailable, [`setting:${settingKey}`]);
+    if (isExposureKey(settingKey) && overlay) {
+        return _typedValue(settingKey, _challengeExposure(settings, challengeId, overlay)[settingKey]);
+    }
     const found = subject.kind === 'phase' ? readLayer(subject.layer, settingKey) : null;
     return found ? _typedValue(settingKey, found.value) : base();
 };
@@ -762,18 +811,19 @@ const prepareScenarioSnapshot = (
 ): { ok: true; snapshot: ScenarioSnapshot } | { ok: false; key: string | null; reason: string } => {
     const settings = loadSettings();
     const phase = scenario.phases[state.phase];
-    const baseRaw = _baseRawValues(settings, challengeId);
-    const baseStates = Object.fromEntries(Object.entries(baseRaw).map(([key, raw]) => [key, _typedValue(key, raw)]));
+    const baseStates = _baseStates(settings, challengeId);
     const baseOf = (settingKey: string): ValueState<ExprValue> =>
         Object.hasOwn(baseStates, settingKey)
             ? baseStates[settingKey]
             : unknownOf('setting-unknown', [`setting:${settingKey}`]);
-    const reader =
-        (overlay: ResolvedOverlay, boundPhase: boolean): ScenarioSnapshot['readSetting'] =>
-        (settingKey, view) => {
+    const reader = (overlay: ResolvedOverlay, boundPhase: boolean): ScenarioSnapshot['readSetting'] => {
+        const exposure = _challengeExposure(settings, challengeId, overlay);
+        return (settingKey, view) => {
+            if (view === 'effective' && isExposureKey(settingKey)) return _typedValue(settingKey, exposure[settingKey]);
             const found = view === 'effective' ? readOverlay(overlay, boundPhase, settingKey) : null;
             return found ? _typedValue(settingKey, found.value) : baseOf(settingKey);
         };
+    };
     // A phase with literals only is read straight from the document, as it always was: nothing to publish.
     if (!isBoundPhase(phase, state)) {
         const overlay: ResolvedOverlay = {
@@ -789,17 +839,7 @@ const prepareScenarioSnapshot = (
     const { bound, validUntil, schedules } = resolveBindings((settingKey, view) =>
         view === 'base' ? baseOf(settingKey) : unknownOf('binding-reads-base-only', [`setting:${settingKey}`]),
     );
-    const prepared = prepareOverlay(
-        settings,
-        scenario,
-        state,
-        baseRaw,
-        bound,
-        String(challengeId),
-        validUntil,
-        now,
-        schedules,
-    );
+    const prepared = prepareOverlay(settings, scenario, state, bound, validUntil, now, schedules);
     if (!prepared.ok) return prepared;
     return { ok: true, snapshot: { publication: prepared.publication, readSetting: reader(prepared.overlay, true) } };
 };

@@ -25,6 +25,7 @@ const emptyForm = (): Form =>
         overrides: {},
         profileValues: {},
         inheritedOf: () => false,
+        effectiveOf: () => false,
         ruleSourceOf: () => undefined,
         changeOverride: () => undefined,
         clearOverride: () => undefined,
