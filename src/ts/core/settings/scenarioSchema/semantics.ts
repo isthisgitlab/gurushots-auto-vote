@@ -13,7 +13,6 @@ import {
 } from '../../scenarios/expressions';
 import { FACTS, factStageIssues, stagePhrase } from '../../scenarios/facts';
 import * as vocabulary from '../../scenarios/vocabulary';
-import { challengeValueSetIsValid } from '../defaults';
 import { schemaEntry, validateSetting, getValidationError } from '../schema';
 import { findProfileKey, normalizeProfileName } from '../profileStore';
 import { isPlainObject } from '../../plainObject';
@@ -28,12 +27,7 @@ export type ScenarioIssue = { path: string; message: string };
 
 const { SCENARIO_CAPS } = vocabulary;
 
-/**
- * Cross-field pairs a phase must set together. getEffectiveSetting does not
- * re-validate combined values at read time, so a phase setting only one side
- * could meet a manual override of the other side and form a pair the settings
- * screen would reject (same rule the built-in intent profiles follow).
- */
+/** Both fields in each pair must be present across a phase's literals and bindings. */
 const SETTING_PAIRS = [
     ['exposure', 'exposureTarget'],
     ['finalWindowExposure', 'finalWindowExposureTarget'],
@@ -237,10 +231,8 @@ const conditionExpressionIssues = (
 };
 
 /**
- * Per-key validation of one phase's settings overlay, against the global
- * defaults as context. Mirrors a profile value set, with explicit errors
- * instead of silent drops. `boundKeys` are the keys the phase binds instead of
- * setting: they complete a pair but are not values to check here.
+ * Check phase literals before a binding can supply its value. The challenge
+ * resolver adjusts linked values after it combines all the sources.
  */
 const phaseSettingsIssues = (
     values: Record<string, unknown>,
@@ -250,7 +242,7 @@ const phaseSettingsIssues = (
     scope: ScenarioScope,
 ): ScenarioIssue[] => {
     const issues = [];
-    const context = { ...globalDefaults, ...values };
+    const context = scope === 'installation' ? { ...globalDefaults, ...values } : null;
     for (const [key, value] of Object.entries(values)) {
         const path = `${basePath}.${key}`;
         const refusal = phaseRefusal(key, scope);
@@ -273,9 +265,6 @@ const phaseSettingsIssues = (
             const missing = pair.find((key) => !present.includes(key));
             issues.push({ path: `${basePath}.${missing}`, message: `Set ${pair.join(' and ')} together` });
         }
-    }
-    if (issues.length === 0 && scope === 'challenge' && !challengeValueSetIsValid(context, values)) {
-        issues.push({ path: basePath, message: 'These values conflict with the global defaults they combine with' });
     }
     return issues;
 };

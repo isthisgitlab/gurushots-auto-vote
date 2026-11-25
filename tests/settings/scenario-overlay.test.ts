@@ -333,6 +333,38 @@ describe('scenario phase bindings and profile', () => {
         expect(published?.documentFingerprint).toMatch(/^[0-9a-f]{16}$/);
     });
 
+    test('a literal target and its bound trigger resolve independently of the global trigger', () => {
+        expect(settings.setGlobalDefault('exposure', 90)).toBe(true);
+        assign(bindingPlan({ settings: { exposureTarget: 80 }, bindings: { exposure: percent(70) } }));
+        const { result } = prepare();
+        if (!result.ok) throw new Error('phase did not prepare');
+        expect(result.snapshot.readSetting('exposure', 'effective')).toMatchObject({ value: { value: 70 } });
+        expect(result.snapshot.readSetting('exposureTarget', 'effective')).toMatchObject({ value: { value: 80 } });
+        publish();
+        expect(settings.getEffectiveSetting('exposure', '7')).toBe(70);
+        expect(settings.getEffectiveSetting('exposureTarget', '7')).toBe(80);
+    });
+
+    test('a published final window raises the inherited normal trigger', () => {
+        expect(settings.setGlobalDefault('exposure', 70)).toBe(true);
+        assign(
+            bindingPlan({
+                settings: { useFinalWindowExposure: true, finalWindowExposure: 90 },
+                bindings: { finalWindowExposureTarget: percent(95) },
+            }),
+        );
+        const { result } = prepare();
+        if (!result.ok) throw new Error('phase did not prepare');
+        const expected = { exposure: 90, finalWindowExposure: 90, finalWindowExposureTarget: 95 };
+        publish();
+        for (const [key, value] of Object.entries(expected)) {
+            expect(result.snapshot.readSetting(key, 'effective')).toMatchObject({ value: { value } });
+            expect(settings.getEffectiveSetting(key, '7')).toBe(value);
+        }
+        expect(settings.getGlobalDefault('exposure')).toBe(70);
+        expect(settings.getChallengeOverride('exposure', '7')).toBe(40);
+    });
+
     test('with nothing published its settings are unavailable, never inherited', () => {
         assign();
         expect(() => settings.getEffectiveSetting('exposure', '7')).toThrow(settings.ScenarioSettingUnavailableError);

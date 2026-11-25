@@ -683,16 +683,21 @@ describe('validateScenario — semantic checks', () => {
             );
         });
 
-        test('values that conflict with inherited defaults are rejected', () => {
+        test('accepts a phase pair that will adjust inherited final-window values', () => {
             const defaults = {
                 ...globalDefaults,
                 useFinalWindowExposure: true,
                 finalWindowExposure: 100,
                 finalWindowExposureTarget: 100,
             };
-            expect(withSettings({ exposure: 10, exposureTarget: 12 }, defaults)).toEqual([
-                { path: 'phases.main.settings', message: expect.stringContaining('conflict') },
-            ]);
+            const scenario = doc({ phases: { main: { settings: { exposure: 10, exposureTarget: 12 } } } });
+            expect(validate(scenario, defaults).ok).toBe(true);
+        });
+
+        test('accepts a final-window pair that will raise inherited normal exposure', () => {
+            const settings = { useFinalWindowExposure: true, finalWindowExposure: 90, finalWindowExposureTarget: 95 };
+            const scenario = doc({ phases: { main: { settings } } });
+            expect(validate(scenario, { ...globalDefaults, exposure: 70 }).ok).toBe(true);
         });
     });
 });
@@ -825,6 +830,16 @@ describe('validateScenario — phase bindings and profile', () => {
             phaseDoc({ bindings: { finalWindowExposureTarget: baseSetting('finalWindowExposureTarget') } }),
             'phases.main.settings.finalWindowExposure',
             'together',
+        );
+    });
+
+    test('checks a literal target against the bounds before its bound trigger is known', () => {
+        const phase = { settings: { exposureTarget: 80 }, bindings: { exposure: percent(70) } };
+        expect(validate(phaseDoc(phase), { ...globalDefaults, exposure: 90 }).ok).toBe(true);
+        expectIssue(
+            phaseDoc({ ...phase, settings: { exposureTarget: 101 } }),
+            'phases.main.settings.exposureTarget',
+            '100',
         );
     });
 

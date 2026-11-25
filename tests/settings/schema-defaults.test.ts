@@ -5,7 +5,6 @@
 
 import type * as schemaModule from '../../src/ts/core/settings/schema';
 import type { SettingKey } from '../../src/ts/core/settings/schema';
-import type * as defaultsModule from '../../src/ts/core/settings/defaults';
 
 const { SETTINGS_SCHEMA, schemaDefault } = require('../../src/ts/core/settings/schema') as typeof schemaModule;
 
@@ -27,15 +26,5 @@ describe('schema defaults', () => {
 
     test('an unknown key has no default', () => {
         expect(schemaDefault('noSuchSetting')).toBeUndefined();
-    });
-});
-
-describe('challengeValueSetIsValid', () => {
-    const { challengeValueSetIsValid, schemaDefaults } =
-        require('../../src/ts/core/settings/defaults') as typeof defaultsModule;
-
-    test('a candidate key the schema does not know is not validated', () => {
-        const values = schemaDefaults();
-        expect(challengeValueSetIsValid({ ...values, noSuchSetting: 'x' }, { noSuchSetting: 'x' })).toBe(true);
     });
 });

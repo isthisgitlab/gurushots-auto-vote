@@ -1,17 +1,15 @@
 /**
  * Default configuration and the small value helpers every settings submodule
  * shares: the environment-aware default configuration, the effective global
- * challenge values, JSON value equality, and the cross-field validation of a
- * challenge value set.
+ * challenge values, and JSON value equality.
  */
 
-import { SETTINGS_SCHEMA, schemaEntry, validateSetting } from './schema';
+import { SETTINGS_SCHEMA, schemaEntry } from './schema';
 import { getUiDefaultSettings } from './uiDefaults';
 import { getDefaultMockSetting } from './userDataPaths';
 
 import type { ConfigV2 } from '../types/config';
 import type { ChallengeValues } from '../types/settings';
-import type { SettingsSchemaEntry } from './schema';
 
 /**
  * The default configuration, with the environment-aware mock setting. The containers are empty: a global default that
@@ -82,47 +80,4 @@ const globalChallengeValues = (settings: ConfigV2): ChallengeValues => {
     return values;
 };
 
-/**
- * Validate the candidate keys of a challenge value set, plus every perChallenge
- * key that (transitively) depends on one of them, against the full effective
- * `values` as cross-field context.
- */
-const challengeValueSetIsValid = (
-    values: ChallengeValues,
-    candidates: ChallengeValues,
-    challengeId: string | number | null = null,
-): boolean => {
-    const affected = new Set(Object.keys(candidates));
-    let changed = true;
-    while (changed) {
-        changed = false;
-        for (const [key, config] of Object.entries(SETTINGS_SCHEMA as Record<string, SettingsSchemaEntry>)) {
-            if (affected.has(key) || !config.perChallenge || !config.dependsOn?.some((dep) => affected.has(dep))) {
-                continue;
-            }
-            affected.add(key);
-            changed = true;
-        }
-    }
-
-    // Enabling the final-window feature activates its inherited trigger and
-    // target even when the sparse candidate does not explicitly contain them.
-    if (values.useFinalWindowExposure === true) {
-        affected.add('finalWindowExposure');
-        affected.add('finalWindowExposureTarget');
-    }
-
-    return Array.from(affected).every((key) => {
-        const config = schemaEntry(key);
-        if (!config?.perChallenge) return true;
-        // A disabled inherited final-window setting is dormant. Explicitly
-        // supplied final-window values still validate before being stored.
-        const inheritedFinalWindowValue =
-            !Object.prototype.hasOwnProperty.call(candidates, key) &&
-            (key === 'finalWindowExposure' || key === 'finalWindowExposureTarget');
-        if (inheritedFinalWindowValue && values.useFinalWindowExposure !== true) return true;
-        return validateSetting(key, values[key], values, challengeId);
-    });
-};
-
-export { getDefaultSettings, schemaDefaults, valuesEqual, globalChallengeValues, challengeValueSetIsValid };
+export { getDefaultSettings, schemaDefaults, valuesEqual, globalChallengeValues };
