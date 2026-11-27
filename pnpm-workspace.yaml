@@ -107,4 +107,5 @@ auditConfig:
         - GHSA-vfj7-8cjw-p6xm
         - GHSA-gcqx-w48m-w2h4
 patchedDependencies:
+    '@capacitor/cli@8.6.3': patches/@capacitor__cli@8.6.3.patch
     preact@11.2.0: patches/preact@11.2.0.patch

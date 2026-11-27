@@ -1,5 +1,4 @@
 apply plugin: 'com.android.application'
-apply plugin: 'kotlin-android'
 apply plugin: 'jacoco'
 
 // Robolectric 4.17 SDKs for robolectric.properties and @Config(sdk = [30]).
@@ -18,20 +17,16 @@ def prepareRobolectricSdks = tasks.register('prepareRobolectricSdks', Sync) {
 android {
     namespace = "com.isthisgitlab.gurushotsautovote"
     compileSdk = rootProject.ext.compileSdkVersion
-    kotlinOptions {
-        jvmTarget = '21'
-    }
     defaultConfig {
         applicationId "com.isthisgitlab.gurushotsautovote"
-        minSdkVersion rootProject.ext.minSdkVersion
-        targetSdkVersion rootProject.ext.targetSdkVersion
+        minSdk = rootProject.ext.minSdkVersion
+        targetSdk = rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
-        aaptOptions {
-             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
-             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
-            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
-        }
+    }
+    androidResources {
+        // Files and directories to omit from the packaged web assets.
+        ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
     }
     buildTypes {
         debug {
@@ -81,22 +76,20 @@ jacoco {
 // Only first-party app code is measured; generated R / BuildConfig / Manifest
 // classes are excluded.
 def configureJacocoInputs = { task ->
-    task.dependsOn 'testDebugUnitTest'
+    def unitTests = tasks.named('testDebugUnitTest', Test)
+    task.dependsOn unitTests
     task.group = 'verification'
 
     def generated = [
         '**/R.class', '**/R$*.class',
         '**/BuildConfig.*', '**/Manifest*.*',
     ]
-    def buildDir = layout.buildDirectory
     task.classDirectories.setFrom(files(
-        buildDir.dir('tmp/kotlin-classes/debug').map { fileTree(it) { exclude generated } },
-        buildDir.dir('intermediates/javac/debug/compileDebugJavaWithJavac/classes').map { fileTree(it) { exclude generated } },
+        tasks.named('compileDebugKotlin').flatMap { it.destinationDirectory }.map { fileTree(it) { exclude generated } },
+        tasks.named('compileDebugJavaWithJavac', JavaCompile).flatMap { it.destinationDirectory }.map { fileTree(it) { exclude generated } },
     ))
     task.sourceDirectories.setFrom(files('src/main/java'))
-    task.executionData.setFrom(fileTree(buildDir) {
-        include 'outputs/unit_test_code_coverage/debugUnitTest/*.exec'
-    })
+    task.executionData(unitTests.get())
 }
 
 tasks.register('jacocoTestReport', JacocoReport) {
@@ -127,12 +120,6 @@ tasks.register('jacocoTestCoverageVerification', JacocoCoverageVerification) {
     }
 }
 
-repositories {
-    flatDir{
-        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
-    }
-}
-
 dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
@@ -158,7 +145,6 @@ dependencies {
     testImplementation "androidx.test:core:$androidxTestCoreVersion"
     testImplementation "io.mockk:mockk:$mockkVersion"
     testImplementation "com.squareup.okhttp3:mockwebserver3:$okhttpVersion"
-    implementation project(':capacitor-cordova-android-plugins')
 }
 
 apply from: 'capacitor.build.gradle'

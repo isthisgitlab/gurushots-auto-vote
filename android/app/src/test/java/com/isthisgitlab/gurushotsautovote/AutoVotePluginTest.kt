@@ -412,7 +412,7 @@ class AutoVotePluginTest {
         assertEquals(1L, stored.epoch)
         assertTrue(stored.blocked)
         assertEquals("stop-a", stored.lastStop!!.getString("requestId"))
-        assertEquals(1_700_000_000_000L, stored.lastStop!!.getLong("at"))
+        assertEquals(1_700_000_000_000L, stored.lastStop.getLong("at"))
     }
 
     @Test

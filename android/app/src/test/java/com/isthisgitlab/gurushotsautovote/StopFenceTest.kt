@@ -238,8 +238,8 @@ class StopFenceTest {
         assertEquals(1L, fence.epoch)
         assertTrue(fence.blocked)
         assertEquals("stop-a", fence.lastStop!!.getString("requestId"))
-        assertEquals(1_234L, fence.lastStop!!.getLong("at"))
-        assertTrue(fence.lastStop!!.getBoolean("durable"))
+        assertEquals(1_234L, fence.lastStop.getLong("at"))
+        assertTrue(fence.lastStop.getBoolean("durable"))
         assertNull(fence.lastArm)
         assertNull(StopFence.armEpoch(app))
     }
